@@ -1,0 +1,809 @@
+import { useEffect, useState } from 'react'
+import { supabase } from './supabase'
+import * as XLSX from 'xlsx'
+
+function App() {
+  const [datos, setDatos] = useState([])
+const [moduloSeleccionado, setModuloSeleccionado] = useState(null)
+const [historial, setHistorial] = useState([])
+
+const [estadoEditado, setEstadoEditado] = useState('')
+const [lineaEditada, setLineaEditada] = useState('')
+const [posicionEditada, setPosicionEditada] = useState('')
+const [serieBusqueda, setSerieBusqueda] = useState('')
+const [resultadoBusqueda, setResultadoBusqueda] = useState([])
+const [mostrarNuevoModulo, setMostrarNuevoModulo] = useState(false)
+const [posicionSeleccionada, setPosicionSeleccionada] = useState(null)
+const [serieNueva, setSerieNueva] = useState('')
+const [tipoNuevo, setTipoNuevo] = useState('')
+const [proyectoNuevo, setProyectoNuevo] = useState('')
+const [responsableNuevo, setResponsableNuevo] = useState('')
+const [fechaDesde, setFechaDesde] = useState('')
+const [fechaHasta, setFechaHasta] = useState('')
+  useEffect(() => {
+    cargarTablero()
+    cargarHistorial()
+    async function guardarCambios() {
+  const { error } = await supabase
+    .from('modulos')
+    .update({
+      estado: estadoEditado,
+      linea: lineaEditada,
+      posicion: posicionEditada,
+    })
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    alert(error.message)
+    return
+  }
+
+  await cargarTablero()
+
+  setModuloSeleccionado(null)
+
+  alert('Cambios guardados correctamente')
+}
+  }, [])
+
+  async function cargarTablero() {
+    const { data, error } = await supabase
+      .from('tablero')
+      .select('*')
+      .order('linea')
+      .order('posicion')
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setDatos(data)
+  }
+
+  async function cargarHistorial() {
+  const { data, error } = await supabase
+    .from('historial_modulos')
+    .select('*')
+
+  if (error) {
+    console.error('Error cargando historial:', error)
+    return
+  }
+
+  setHistorial(data || [])
+}
+
+async function buscarSerie() {
+  const { data, error } = await supabase
+    .from('historial_modulos')
+    .select('*')
+    .eq('serie', serieBusqueda)
+    .order('fecha_salida', { ascending: false })
+    .limit(5)
+
+  if (error) {
+    alert(error.message)
+    return
+  }
+
+  setResultadoBusqueda(data || [])
+}
+
+function exportarHistorialExcel() {
+  console.log('🔥 EXPORTACIÓN EJECUTADA')
+  
+  if (!historial || historial.length === 0) {
+    alert('No hay datos para exportar')
+    return
+  }
+
+  const filtrado = historial.filter((item) => {
+    const fecha = new Date(item.fecha_ingreso)
+
+    const desde = fechaDesde ? new Date(fechaDesde) : null
+    const hasta = fechaHasta ? new Date(fechaHasta) : null
+
+    if (desde && fecha < desde) return false
+    if (hasta && fecha > hasta) return false
+
+    return true
+  })
+
+  if (filtrado.length === 0) {
+    alert('No hay registros en ese rango de fechas')
+    return
+  }
+
+  const datosExcel = filtrado.map((item) => ({
+    Serie: item.serie,
+    Tipo: item.tipo,
+    Proyecto: item.proyecto,
+    Responsable: item.responsable,
+    Estado: item.estado,
+    Linea: item.linea,
+    Posicion: item.posicion,
+    FechaIngreso: item.fecha_ingreso,
+    FechaSalida: item.fecha_salida,
+  }))
+
+  const worksheet = XLSX.utils.json_to_sheet(datosExcel)
+  const workbook = XLSX.utils.book_new()
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Historial')
+
+  XLSX.writeFile(
+    workbook,
+    `Historial_${fechaDesde || 'inicio'}_${fechaHasta || 'actual'}.xlsx`
+  )
+}
+
+async function crearModulo() {
+
+  if (
+    !serieNueva.trim() ||
+    !tipoNuevo.trim() ||
+    !proyectoNuevo.trim() ||
+    !responsableNuevo.trim()
+  ) {
+    alert('Debe completar todos los campos')
+    return
+  }
+
+  const { error } = await supabase
+    .from('modulos')
+    .insert([
+      {
+        serie: serieNueva,
+        tipo: tipoNuevo,
+        proyecto: proyectoNuevo,
+        responsable: responsableNuevo,
+        linea: posicionSeleccionada.linea,
+        posicion: posicionSeleccionada.posicion,
+        estado: 'Sin iniciar',
+        fecha_ingreso: new Date(),
+      },
+    ])
+
+  if (error) {
+    alert(error.message)
+    return
+  }
+
+  await cargarTablero()
+
+  setMostrarNuevoModulo(false)
+
+  alert('Módulo creado correctamente')
+}
+
+  async function guardarCambios() {
+  const { error } = await supabase
+    .from('modulos')
+    .update({
+      estado: estadoEditado,
+      linea: lineaEditada,
+      posicion: posicionEditada,
+    })
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    alert(error.message)
+    return
+  }
+
+  await cargarTablero()
+
+  setModuloSeleccionado(null)
+
+  alert('Cambios guardados correctamente')
+}
+async function finalizarModulo() {
+  const modulo = moduloSeleccionado
+
+  const { data, error: errorHistorial } = await supabase
+    .from('historial_modulos')
+    .insert([
+      {
+  modulo_id: modulo.id,
+  serie: modulo.serie,
+  tipo: modulo.tipo,
+  proyecto: modulo.proyecto,
+  responsable: modulo.responsable,
+  fecha_ingreso: modulo.fecha_ingreso,
+  fecha_salida: new Date(),
+  estado: modulo.estado,
+  linea: modulo.linea,
+  posicion: modulo.posicion,
+},
+    ])
+    .select()
+
+
+
+  if (errorHistorial) {
+    alert(errorHistorial.message)
+    return
+  }
+
+  const { error: errorDelete } = await supabase
+    .from('modulos')
+    .delete()
+    .eq('id', modulo.id)
+
+  
+
+  if (errorDelete) {
+    alert(errorDelete.message)
+    return
+  }
+
+  await cargarTablero()
+  await cargarHistorial()
+
+  setModuloSeleccionado(null)
+
+  alert('Módulo finalizado correctamente')
+}
+
+  function colorEstado(estado) {
+    switch (estado) {
+      case 'sin iniciar':
+        return '#808080'
+
+      case 'canalizado':
+        return '#d32f2f'
+
+      case 'cableado':
+        return '#fbc02d'
+
+      case 'terminaciones':
+        return '#1976d2'
+
+      case 'prueba eléctrica':
+        return '#388e3c'
+
+      default:
+        return '#444'
+    }
+  }
+
+  const modulosActivos = datos.filter((x) => x.serie)
+
+  const ocupacion = modulosActivos.length
+
+  const canalizados = modulosActivos.filter(
+    (x) => x.estado?.toLowerCase() === 'canalizado'
+  ).length
+
+  const cableados = modulosActivos.filter(
+    (x) => x.estado?.toLowerCase() === 'cableado'
+  ).length
+
+  const terminaciones = modulosActivos.filter(
+    (x) => x.estado?.toLowerCase() === 'terminaciones'
+  ).length
+
+  const pruebas = modulosActivos.filter(
+    (x) =>
+      x.estado?.toLowerCase() === 'prueba eléctrica' ||
+      x.estado?.toLowerCase() === 'prueba electrica'
+  ).length
+const hoy = new Date().toISOString().slice(0, 10)
+
+const terminadosHoy = historial.filter(
+  (x) =>
+    x.fecha_salida &&
+    x.fecha_salida.slice(0, 10) === hoy
+).length
+
+const mesActual = new Date().getMonth()
+const anioActual = new Date().getFullYear()
+
+const terminadosMes = historial.filter((x) => {
+  const fecha = new Date(x.fecha_salida)
+
+  return (
+    fecha.getMonth() === mesActual &&
+    fecha.getFullYear() === anioActual
+  )
+}).length
+
+  
+
+  return (
+    <>
+      <div style={{ padding: '20px' }}>
+        <h1>Control de Módulos</h1>
+        <p>Modal nuevo módulo: {String(mostrarNuevoModulo)}</p>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '20px',
+            marginBottom: '30px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div
+            style={{
+              background: '#222',
+              padding: '15px',
+              borderRadius: '10px',
+              minWidth: '180px',
+            }}
+          >
+            <h3>En proceso</h3>
+            <h2>{ocupacion}</h2>
+          </div>
+
+          <div
+            style={{
+              background: '#222',
+              padding: '15px',
+              borderRadius: '10px',
+              minWidth: '180px',
+            }}
+          >
+            <h3>Ocupación</h3>
+            <h2>{ocupacion}/63</h2>
+          </div>
+
+          <div
+            style={{
+              background: '#d32f2f',
+              padding: '15px',
+              borderRadius: '10px',
+              minWidth: '180px',
+            }}
+          >
+            <h3>Canalizado</h3>
+            <h2>{canalizados}/{ocupacion}</h2>
+          </div>
+
+          <div
+            style={{
+              background: '#fbc02d',
+              color: 'black',
+              padding: '15px',
+              borderRadius: '10px',
+              minWidth: '180px',
+            }}
+          >
+            <h3>Cableado</h3>
+            <h2>{cableados}/{ocupacion}</h2>
+          </div>
+
+          <div
+            style={{
+              background: '#1976d2',
+              padding: '15px',
+              borderRadius: '10px',
+              minWidth: '180px',
+            }}
+          >
+            <h3>Terminaciones</h3>
+            <h2>{terminaciones}/{ocupacion}</h2>
+          </div>
+
+          <div
+            style={{
+              background: '#388e3c',
+              padding: '15px',
+              borderRadius: '10px',
+              minWidth: '180px',
+            }}
+          >
+            <h3>Prueba eléctrica</h3>
+<h2>{pruebas}/{ocupacion}</h2>
+</div>
+
+<div
+  style={{
+    background: '#4caf50',
+    padding: '15px',
+    borderRadius: '10px',
+    minWidth: '180px',
+  }}
+>
+  <h3>Terminados hoy</h3>
+  <h2>{terminadosHoy}</h2>
+</div>
+
+<div
+  style={{
+    background: '#009688',
+    padding: '15px',
+    borderRadius: '10px',
+    minWidth: '180px',
+  }}
+>
+  <h3>Terminados este mes</h3>
+  <h2>{terminadosMes}</h2>
+</div>
+<div
+  style={{
+    background: '#222',
+    padding: '20px',
+    borderRadius: '10px',
+    marginBottom: '30px',
+  }}
+>
+  <h2>Buscar historial por serie</h2>
+
+<input
+  type="text"
+  value={serieBusqueda}
+  onChange={(e) => setSerieBusqueda(e.target.value)}
+  placeholder="Buscar serie"
+  onKeyDown={(e) => {
+    if (e.key === 'Enter') {
+      buscarSerie()
+    }
+  }}
+/>
+
+<button onClick={buscarSerie} style={{ marginLeft: '10px' }}>
+  Buscar
+</button>
+
+{/* BLOQUE FECHAS + EXPORTAR (SEPARADO) */}
+<div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+
+  <input
+    type="date"
+    value={fechaDesde}
+    onChange={(e) => setFechaDesde(e.target.value)}
+  />
+
+  <input
+    type="date"
+    value={fechaHasta}
+    onChange={(e) => setFechaHasta(e.target.value)}
+  />
+
+  <button
+    type="button"
+    onClick={exportarHistorialExcel}
+  >
+    Exportar Excel
+  </button>
+
+</div>
+
+  {resultadoBusqueda.map((item) => (
+    <div
+      key={item.id}
+      style={{
+        marginTop: '10px',
+        padding: '10px',
+        border: '1px solid #555',
+      }}
+    >
+      <div>
+        <strong>Serie:</strong> {item.serie}
+      </div>
+
+      <div>
+        <strong>Fecha prueba:</strong>{' '}
+        {new Date(item.fecha_salida).toLocaleDateString()}
+      </div>
+
+      <div>
+        <strong>Proyecto:</strong> {item.proyecto}
+      </div>
+
+      <div>
+        <strong>Responsable:</strong> {item.responsable}
+      </div>
+    </div>
+  ))}
+</div>
+
+</div>
+
+{Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
+          <div key={linea} style={{ marginBottom: '30px' }}>
+            <h2>Línea {linea}</h2>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '10px',
+              }}
+            >
+              {datos
+                .filter((x) => x.linea === linea)
+                .map((pos) => (
+                  <div
+                    key={`${pos.linea}-${pos.posicion}`}
+                    onClick={() => {
+  console.log('CLICK POSICION', pos)
+
+  if (pos.serie) {
+    setModuloSeleccionado(pos)
+
+    setEstadoEditado(pos.estado)
+    setLineaEditada(pos.linea)
+    setPosicionEditada(pos.posicion)
+  } else {
+    console.log('POSICION VACIA')
+
+    setPosicionSeleccionada(pos)
+    setMostrarNuevoModulo(true)
+  }
+}}
+                    style={{
+                      width: '150px',
+                      height: '120px',
+                      padding: '8px',
+                      borderRadius: '8px',
+                      cursor: pos.serie ? 'pointer' : 'default',
+                      backgroundColor: pos.estado
+                        ? colorEstado(pos.estado.toLowerCase())
+                        : '#222',
+                      color: 'white',
+                    }}
+                  >
+                    <div>
+                      <strong>P{pos.posicion}</strong>
+                    </div>
+
+                    {pos.serie ? (
+                      <>
+                        <div>
+                          <strong>{pos.serie}</strong>
+                        </div>
+                        <div>{pos.tipo}</div>
+                        <div>{pos.proyecto}</div>
+                        <div>{pos.estado}</div>
+                      </>
+                    ) : (
+                      <div>Vacío</div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {moduloSeleccionado && (
+  <div
+    style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      background: '#222',
+      padding: '20px',
+      borderRadius: '10px',
+      border: '1px solid white',
+      minWidth: '350px',
+      zIndex: 1000,
+      color: 'white',
+    }}
+  >
+    <h2>Módulo</h2>
+
+    <p>
+      <strong>Serie:</strong> {moduloSeleccionado.serie}
+    </p>
+
+    <p>
+      <strong>Tipo:</strong> {moduloSeleccionado.tipo}
+    </p>
+
+    <p>
+      <strong>Proyecto:</strong> {moduloSeleccionado.proyecto}
+    </p>
+
+    <p>
+      <strong>Responsable:</strong> {moduloSeleccionado.responsable}
+    </p>
+
+    <div style={{ marginBottom: '10px' }}>
+      <strong>Estado</strong>
+
+      <select
+        value={estadoEditado}
+        onChange={(e) => setEstadoEditado(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '8px',
+          marginTop: '5px',
+        }}
+      >
+        <option value="Sin iniciar">Sin iniciar</option>
+        <option value="Canalizado">Canalizado</option>
+        <option value="Cableado">Cableado</option>
+        <option value="Terminaciones">Terminaciones</option>
+        <option value="Prueba eléctrica">Prueba eléctrica</option>
+      </select>
+    </div>
+
+    <div style={{ marginBottom: '10px' }}>
+      <strong>Línea</strong>
+
+      <select
+        value={lineaEditada}
+        onChange={(e) => setLineaEditada(Number(e.target.value))}
+        style={{
+          width: '100%',
+          padding: '8px',
+          marginTop: '5px',
+        }}
+      >
+        {[1,2,3,4,5,6,7,8,9].map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <div style={{ marginBottom: '15px' }}>
+      <strong>Posición</strong>
+
+      <select
+        value={posicionEditada}
+        onChange={(e) => setPosicionEditada(Number(e.target.value))}
+        style={{
+          width: '100%',
+          padding: '8px',
+          marginTop: '5px',
+        }}
+      >
+        {[1,2,3,4,5,6,7].map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <div
+      style={{
+        display: 'flex',
+        gap: '10px',
+      }}
+    >
+      <button
+        onClick={guardarCambios}
+        style={{
+          padding: '10px',
+          flex: 1,
+        }}
+      >
+        Guardar
+      </button>
+
+      <button
+        onClick={() => setModuloSeleccionado(null)}
+        style={{
+          padding: '10px',
+          flex: 1,
+        }}
+      >
+        Cerrar
+      </button>
+    </div>
+
+    <button
+      onClick={finalizarModulo}
+      style={{
+        padding: '10px',
+        background: '#388e3c',
+        color: 'white',
+        width: '100%',
+        marginTop: '10px',
+      }}
+    >
+      Finalizar módulo
+    </button>
+  </div>
+)}
+
+{mostrarNuevoModulo && (
+  <div
+    style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      background: '#222',
+      padding: '20px',
+      borderRadius: '10px',
+      border: '1px solid white',
+      minWidth: '350px',
+      zIndex: 1000,
+      color: 'white',
+    }}
+  >
+    <h2>Nuevo módulo</h2>
+
+    <p>
+      <strong>Línea:</strong> {posicionSeleccionada?.linea}
+    </p>
+
+    <p>
+      <strong>Posición:</strong> {posicionSeleccionada?.posicion}
+    </p>
+
+    <input
+      placeholder="Serie"
+      value={serieNueva}
+      onChange={(e) => setSerieNueva(e.target.value)}
+      style={{
+        width: '100%',
+        padding: '8px',
+        marginBottom: '10px',
+      }}
+    />
+
+    <input
+      placeholder="Tipo"
+      value={tipoNuevo}
+      onChange={(e) => setTipoNuevo(e.target.value)}
+      style={{
+        width: '100%',
+        padding: '8px',
+        marginBottom: '10px',
+      }}
+    />
+
+    <input
+      placeholder="Proyecto"
+      value={proyectoNuevo}
+      onChange={(e) => setProyectoNuevo(e.target.value)}
+      style={{
+        width: '100%',
+        padding: '8px',
+        marginBottom: '10px',
+      }}
+    />
+
+    <input
+      placeholder="Responsable"
+      value={responsableNuevo}
+      onChange={(e) => setResponsableNuevo(e.target.value)}
+      style={{
+        width: '100%',
+        padding: '8px',
+        marginBottom: '10px',
+      }}
+    />
+
+    <div
+      style={{
+        display: 'flex',
+        gap: '10px',
+      }}
+    >
+      <button
+        onClick={crearModulo}
+        style={{
+          padding: '10px',
+          flex: 1,
+        }}
+      >
+        Guardar
+      </button>
+
+      <button
+        onClick={() => setMostrarNuevoModulo(false)}
+        style={{
+          padding: '10px',
+          flex: 1,
+        }}
+      >
+        Cancelar
+      </button>
+    </div>
+  </div>
+)}
+    </>
+  )
+}
+
+export default App
