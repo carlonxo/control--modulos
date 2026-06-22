@@ -1,7 +1,53 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import * as XLSX from 'xlsx'
+function Login() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
 
+  async function iniciarSesion() {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      alert(error.message)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        width: '300px',
+        margin: '100px auto',
+      }}
+    >
+      <h2>Iniciar sesión</h2>
+
+      <input
+        type="email"
+        placeholder="Correo"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+
+      <input
+        type="password"
+        placeholder="Contraseña"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+
+      <button onClick={iniciarSesion}>
+        Ingresar
+      </button>
+    </div>
+  )
+}
 function App() {
   const [datos, setDatos] = useState([])
 const [moduloSeleccionado, setModuloSeleccionado] = useState(null)
@@ -20,10 +66,37 @@ const [proyectoNuevo, setProyectoNuevo] = useState('')
 const [responsableNuevo, setResponsableNuevo] = useState('')
 const [fechaDesde, setFechaDesde] = useState('')
 const [fechaHasta, setFechaHasta] = useState('')
+const [session, setSession] = useState(null)
+const [perfil, setPerfil] = useState(null)
+  
+
+
+useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session)
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [])
+
   useEffect(() => {
     cargarTablero()
     cargarHistorial()
-    async function guardarCambios() {
+  }, [])
+
+  if (!session) {
+    return <Login />
+  }
+
+async function guardarCambios() {
   const { error } = await supabase
     .from('modulos')
     .update({
@@ -36,6 +109,7 @@ const [fechaHasta, setFechaHasta] = useState('')
   if (error) {
     alert(error.message)
     return
+    
   }
 
   await cargarTablero()
@@ -44,7 +118,25 @@ const [fechaHasta, setFechaHasta] = useState('')
 
   alert('Cambios guardados correctamente')
 }
-  }, [])
+  async function cargarPerfil() {
+  const usuario = session?.user
+
+  if (!usuario) return
+
+  const { data } = await supabase
+    .from('perfiles')
+    .select('*')
+    .eq('id', usuario.id)
+    .single()
+
+  setPerfil(data)
+  useEffect(() => {
+  if (session) {
+    cargarPerfil()
+  }
+}, [session])
+}
+
 
   async function cargarTablero() {
     const { data, error } = await supabase
@@ -315,8 +407,26 @@ const terminadosMes = historial.filter((x) => {
     <>
       <div style={{ padding: '20px' }}>
         <h1>Control de Módulos</h1>
-        <p>Modal nuevo módulo: {String(mostrarNuevoModulo)}</p>
+        <button
+  onClick={() => supabase.auth.signOut()}
+  style={{
+    marginBottom: '20px',
+  }}
+>
+  Cerrar sesión
+</button>
 
+        <p>Modal nuevo módulo: {String(mostrarNuevoModulo)}</p>
+             <div
+  style={{
+    marginBottom: '15px',
+    color: '#ccc',
+  }}
+>
+  Usuario: {perfil?.nombre}
+  {' | '}
+  Rol: {perfil?.rol}
+</div>
         <div
           style={{
             display: 'flex',
@@ -325,6 +435,7 @@ const terminadosMes = historial.filter((x) => {
             flexWrap: 'wrap',
           }}
         >
+          
           <div
             style={{
               background: '#222',
@@ -654,7 +765,7 @@ const terminadosMes = historial.filter((x) => {
           marginTop: '5px',
         }}
       >
-        {[1,2,3,4,5,6,7].map((n) => (
+        {[1,2,3,4,5,6,7,8,9].map((n) => (
           <option key={n} value={n}>
             {n}
           </option>
@@ -689,18 +800,20 @@ const terminadosMes = historial.filter((x) => {
       </button>
     </div>
 
-    <button
-      onClick={finalizarModulo}
-      style={{
-        padding: '10px',
-        background: '#388e3c',
-        color: 'white',
-        width: '100%',
-        marginTop: '10px',
-      }}
-    >
-      Finalizar módulo
-    </button>
+    {perfil?.rol === 'admin' && (
+  <button
+    onClick={finalizarModulo}
+    style={{
+      padding: '10px',
+      background: '#388e3c',
+      color: 'white',
+      width: '100%',
+      marginTop: '10px',
+    }}
+  >
+    Finalizar módulo
+  </button>
+)}
   </div>
 )}
 
