@@ -86,7 +86,11 @@ useEffect(() => {
 
     return () => subscription.unsubscribe()
   }, [])
-
+useEffect(() => {
+  if (session) {
+    cargarPerfil()
+  }
+}, [session])
   useEffect(() => {
     cargarTablero()
     cargarHistorial()
