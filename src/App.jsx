@@ -72,34 +72,58 @@ const [perfil, setPerfil] = useState(null)
 
 
 useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-    })
+  supabase.auth.getSession().then(({ data }) => {
+    setSession(data.session)
+  })
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session)
-      }
-    )
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(
+    (_event, session) => {
+      setSession(session)
+    }
+  )
+console.log('PERFIL ACTUAL:', perfil)
+  return () => subscription.unsubscribe()
+}, [])
 
-    return () => subscription.unsubscribe()
-  }, [])
 useEffect(() => {
   if (session) {
     cargarPerfil()
   }
 }, [session])
-  useEffect(() => {
-    cargarTablero()
-    cargarHistorial()
-  }, [])
 
-  if (!session) {
-    return <Login />
+useEffect(() => {
+  cargarTablero()
+  cargarHistorial()
+}, [])
+
+if (!session) {
+  return <Login />
+}
+
+async function cargarPerfil() {
+  const usuario = session?.user
+
+  if (!usuario) return
+
+  const { data, error } = await supabase
+  .from('perfiles')
+  .select('*')
+  .eq('id', usuario.id)
+  .maybeSingle()
+
+  console.log('USUARIO:', usuario.id)
+  console.log('PERFIL:', data)
+  console.log('ERROR PERFIL:', error)
+
+  if (error) {
+    console.error(error)
+    return
   }
 
+  setPerfil(data)
+}
 async function guardarCambios() {
   const { error } = await supabase
     .from('modulos')
@@ -122,25 +146,7 @@ async function guardarCambios() {
 
   alert('Cambios guardados correctamente')
 }
-  async function cargarPerfil() {
-  const usuario = session?.user
-
-  if (!usuario) return
-
-  const { data } = await supabase
-    .from('perfiles')
-    .select('*')
-    .eq('id', usuario.id)
-    .single()
-
-  setPerfil(data)
-  useEffect(() => {
-  if (session) {
-    cargarPerfil()
-  }
-}, [session])
-}
-
+  
 
   async function cargarTablero() {
     const { data, error } = await supabase
