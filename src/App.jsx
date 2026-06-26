@@ -714,9 +714,9 @@ const terminadosMes = historial.filter((x) => {
         <div
           style={{
             display: 'flex',
-            gap: '4px',
+            gap: '2px',
             overflowX: 'auto',
-            paddingBottom: '4px',
+            paddingBottom: '2px',
           }}
         >
           {datos
@@ -742,18 +742,18 @@ const terminadosMes = historial.filter((x) => {
                   }
                 }}
                 style={{
-                  width: '85px',
-                  minHeight: '70px',
-                  padding: '4px',
-                  borderRadius: '6px',
+                  width: '70px',
+                  minHeight: '60px',
+                  padding: '3px',
+                  borderRadius: '5px',
                   cursor: pos.serie ? 'pointer' : 'default',
                   backgroundColor: pos.estado
                     ? colorEstado(pos.estado.toLowerCase())
                     : '#222',
                   color: 'white',
                   boxSizing: 'border-box',
-                  flex: '0 0 85px',
-                  fontSize: '10px',
+                  flex: '0 0 70px',
+                  fontSize: '9px',
                 }}
               >
                 <div>
