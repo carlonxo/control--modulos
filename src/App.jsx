@@ -698,7 +698,8 @@ const terminadosMes = historial.filter((x) => {
               style={{
                 display: 'flex',
                 gap: '10px',
-                flexWrap: 'wrap',
+                overflowX: 'auto',
+                paddingBottom: '6px',
               }}
             >
               {datos
@@ -727,7 +728,7 @@ const terminadosMes = historial.filter((x) => {
   }
 }}
                     style={{
-                      width: 'min(150px, 100%)',
+                      width: '150px',
                       minHeight: '120px',
                       padding: '8px',
                       borderRadius: '8px',
@@ -737,7 +738,7 @@ const terminadosMes = historial.filter((x) => {
                         : '#222',
                       color: 'white',
                       boxSizing: 'border-box',
-                      flex: '0 1 150px',
+                      flex: '0 0 150px',
                     }}
                   >
                     <div>
