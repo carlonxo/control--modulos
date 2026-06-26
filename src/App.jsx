@@ -68,8 +68,10 @@ const [fechaDesde, setFechaDesde] = useState('')
 const [fechaHasta, setFechaHasta] = useState('')
 const [session, setSession] = useState(null)
 const [perfil, setPerfil] = useState(null)
-  
-
+  const [serieEditada, setSerieEditada] = useState('')
+const [tipoEditado, setTipoEditado] = useState('')
+const [proyectoEditado, setProyectoEditado] = useState('')
+const [mostrarKPI, setMostrarKPI] = useState(false)
 
 useEffect(() => {
   supabase.auth.getSession().then(({ data }) => {
@@ -128,6 +130,9 @@ async function guardarCambios() {
   const { error } = await supabase
     .from('modulos')
     .update({
+      serie: serieEditada,
+      tipo: tipoEditado,
+      proyecto: proyectoEditado,
       estado: estadoEditado,
       linea: lineaEditada,
       posicion: posicionEditada,
@@ -137,7 +142,6 @@ async function guardarCambios() {
   if (error) {
     alert(error.message)
     return
-    
   }
 
   await cargarTablero()
@@ -283,10 +287,13 @@ async function crearModulo() {
   const { error } = await supabase
     .from('modulos')
     .update({
-      estado: estadoEditado,
-      linea: lineaEditada,
-      posicion: posicionEditada,
-    })
+  serie: serieEditada,
+  tipo: tipoEditado,
+  proyecto: proyectoEditado,
+  estado: estadoEditado,
+  linea: lineaEditada,
+  posicion: posicionEditada,
+})
     .eq('id', moduloSeleccionado.id)
 
   if (error) {
@@ -437,111 +444,130 @@ const terminadosMes = historial.filter((x) => {
   {' | '}
   Rol: {perfil?.rol}
 </div>
-        <div
-          style={{
-            display: 'flex',
-            gap: '20px',
-            marginBottom: '30px',
-            flexWrap: 'wrap',
-          }}
-        >
-          
-          <div
-            style={{
-              background: '#222',
-              padding: '15px',
-              borderRadius: '10px',
-              minWidth: '180px',
-            }}
-          >
-            <h3>En proceso</h3>
-            <h2>{ocupacion}</h2>
-          </div>
 
-          <div
-            style={{
-              background: '#222',
-              padding: '15px',
-              borderRadius: '10px',
-              minWidth: '180px',
-            }}
-          >
-            <h3>Ocupación</h3>
-            <h2>{ocupacion}/63</h2>
-          </div>
-
-          <div
-            style={{
-              background: '#d32f2f',
-              padding: '15px',
-              borderRadius: '10px',
-              minWidth: '180px',
-            }}
-          >
-            <h3>Canalizado</h3>
-            <h2>{canalizados}/{ocupacion}</h2>
-          </div>
-
-          <div
-            style={{
-              background: '#fbc02d',
-              color: 'black',
-              padding: '15px',
-              borderRadius: '10px',
-              minWidth: '180px',
-            }}
-          >
-            <h3>Cableado</h3>
-            <h2>{cableados}/{ocupacion}</h2>
-          </div>
-
-          <div
-            style={{
-              background: '#1976d2',
-              padding: '15px',
-              borderRadius: '10px',
-              minWidth: '180px',
-            }}
-          >
-            <h3>Terminaciones</h3>
-            <h2>{terminaciones}/{ocupacion}</h2>
-          </div>
-
-          <div
-            style={{
-              background: '#388e3c',
-              padding: '15px',
-              borderRadius: '10px',
-              minWidth: '180px',
-            }}
-          >
-            <h3>Prueba eléctrica</h3>
-<h2>{pruebas}/{ocupacion}</h2>
+<div style={{ marginBottom: '20px' }}>
+  <button
+    onClick={() => setMostrarKPI(!mostrarKPI)}
+    style={{
+      padding: '10px 20px',
+      borderRadius: '8px',
+      cursor: 'pointer',
+    }}
+  >
+    {mostrarKPI ? 'Ocultar indicadores' : 'Ver indicadores'}
+  </button>
 </div>
 
-<div
-  style={{
-    background: '#4caf50',
-    padding: '15px',
-    borderRadius: '10px',
-    minWidth: '180px',
-  }}
->
-  <h3>Terminados hoy</h3>
-  <h2>{terminadosHoy}</h2>
-</div>
+{mostrarKPI && (
+  <div
+    style={{
+      display: 'flex',
+      gap: '20px',
+      marginBottom: '30px',
+      flexWrap: 'wrap',
+    }}
+  >
 
-<div
-  style={{
-    background: '#009688',
-    padding: '15px',
-    borderRadius: '10px',
-    minWidth: '180px',
-  }}
->
-  <h3>Terminados este mes</h3>
-  <h2>{terminadosMes}</h2>
-</div>
+    <div
+      style={{
+        background: '#222',
+        padding: '15px',
+        borderRadius: '10px',
+        minWidth: '180px',
+      }}
+    >
+      <h3>En proceso</h3>
+      <h2>{ocupacion}</h2>
+    </div>
+
+    <div
+      style={{
+        background: '#222',
+        padding: '15px',
+        borderRadius: '10px',
+        minWidth: '180px',
+      }}
+    >
+      <h3>Ocupación</h3>
+      <h2>{ocupacion}/63</h2>
+    </div>
+
+    <div
+      style={{
+        background: '#d32f2f',
+        padding: '15px',
+        borderRadius: '10px',
+        minWidth: '180px',
+      }}
+    >
+      <h3>Canalizado</h3>
+      <h2>{canalizados}/{ocupacion}</h2>
+    </div>
+
+    <div
+      style={{
+        background: '#fbc02d',
+        color: 'black',
+        padding: '15px',
+        borderRadius: '10px',
+        minWidth: '180px',
+      }}
+    >
+      <h3>Cableado</h3>
+      <h2>{cableados}/{ocupacion}</h2>
+    </div>
+
+    <div
+      style={{
+        background: '#1976d2',
+        padding: '15px',
+        borderRadius: '10px',
+        minWidth: '180px',
+      }}
+    >
+      <h3>Terminaciones</h3>
+      <h2>{terminaciones}/{ocupacion}</h2>
+    </div>
+
+    <div
+      style={{
+        background: '#388e3c',
+        padding: '15px',
+        borderRadius: '10px',
+        minWidth: '180px',
+      }}
+    >
+      <h3>Prueba eléctrica</h3>
+      <h2>{pruebas}/{ocupacion}</h2>
+    </div>
+
+    <div
+      style={{
+        background: '#4caf50',
+        padding: '15px',
+        borderRadius: '10px',
+        minWidth: '180px',
+      }}
+    >
+      <h3>Terminados hoy</h3>
+      <h2>{terminadosHoy}</h2>
+    </div>
+
+    <div
+      style={{
+        background: '#009688',
+        padding: '15px',
+        borderRadius: '10px',
+        minWidth: '180px',
+      }}
+    >
+      <h3>Terminados este mes</h3>
+      <h2>{terminadosMes}</h2>
+    </div>
+
+  </div>
+)}
+
 <div
   style={{
     background: '#222',
@@ -550,6 +576,7 @@ const terminadosMes = historial.filter((x) => {
     marginBottom: '30px',
   }}
 >
+
   <h2>Buscar historial por serie</h2>
 
 <input
@@ -644,6 +671,10 @@ const terminadosMes = historial.filter((x) => {
   if (pos.serie) {
     setModuloSeleccionado(pos)
 
+    setSerieEditada(pos.serie)
+  setTipoEditado(pos.tipo)
+  setProyectoEditado(pos.proyecto)
+
     setEstadoEditado(pos.estado)
     setLineaEditada(pos.linea)
     setPosicionEditada(pos.posicion)
@@ -687,7 +718,7 @@ const terminadosMes = historial.filter((x) => {
             </div>
           </div>
         ))}
-      </div>
+      
 
       {moduloSeleccionado && (
   <div
@@ -707,21 +738,47 @@ const terminadosMes = historial.filter((x) => {
   >
     <h2>Módulo</h2>
 
-    <p>
-      <strong>Serie:</strong> {moduloSeleccionado.serie}
-    </p>
+    <div style={{ marginBottom: '10px' }}>
+  <strong>Serie</strong>
 
-    <p>
-      <strong>Tipo:</strong> {moduloSeleccionado.tipo}
-    </p>
+  <input
+    value={serieEditada}
+    onChange={(e) => setSerieEditada(e.target.value)}
+    style={{
+      width: '100%',
+      padding: '8px',
+      marginTop: '5px',
+    }}
+  />
+</div>
 
-    <p>
-      <strong>Proyecto:</strong> {moduloSeleccionado.proyecto}
-    </p>
+<div style={{ marginBottom: '10px' }}>
+  <strong>Tipo</strong>
 
-    <p>
-      <strong>Responsable:</strong> {moduloSeleccionado.responsable}
-    </p>
+  <input
+    value={tipoEditado}
+    onChange={(e) => setTipoEditado(e.target.value)}
+    style={{
+      width: '100%',
+      padding: '8px',
+      marginTop: '5px',
+    }}
+  />
+</div>
+
+<div style={{ marginBottom: '10px' }}>
+  <strong>Proyecto</strong>
+
+  <input
+    value={proyectoEditado}
+    onChange={(e) => setProyectoEditado(e.target.value)}
+    style={{
+      width: '100%',
+      padding: '8px',
+      marginTop: '5px',
+    }}
+  />
+</div>
 
     <div style={{ marginBottom: '10px' }}>
       <strong>Estado</strong>
@@ -824,6 +881,12 @@ const terminadosMes = historial.filter((x) => {
     Finalizar módulo
   </button>
 )}
+  </div>
+)}
+
+{mostrarKPI && (
+  <div className="kpi-grid">
+    ...
   </div>
 )}
 
