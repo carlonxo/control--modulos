@@ -435,8 +435,16 @@ const terminadosMes = historial.filter((x) => {
 
   return (
     <>
-      <div style={{ padding: '20px' }}>
-        <h1>Control de Módulos</h1>
+      <div
+        style={{
+          padding: '20px',
+          width: '100%',
+          boxSizing: 'border-box',
+          maxWidth: '1200px',
+          margin: '0 auto',
+        }}
+      >
+        <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Control de Módulos</h1>
 
         {notificacion && (
           <div
@@ -494,6 +502,7 @@ const terminadosMes = historial.filter((x) => {
       gap: '20px',
       marginBottom: '30px',
       flexWrap: 'wrap',
+      width: '100%',
     }}
   >
 
@@ -603,6 +612,8 @@ const terminadosMes = historial.filter((x) => {
     padding: '20px',
     borderRadius: '10px',
     marginBottom: '30px',
+    width: '100%',
+    boxSizing: 'border-box',
   }}
 >
 
@@ -625,7 +636,7 @@ const terminadosMes = historial.filter((x) => {
 </button>
 
 {/* BLOQUE FECHAS + EXPORTAR (SEPARADO) */}
-<div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+<div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
 
   <input
     type="date"
@@ -687,6 +698,7 @@ const terminadosMes = historial.filter((x) => {
               style={{
                 display: 'flex',
                 gap: '10px',
+                flexWrap: 'wrap',
               }}
             >
               {datos
@@ -715,8 +727,8 @@ const terminadosMes = historial.filter((x) => {
   }
 }}
                     style={{
-                      width: '150px',
-                      height: '120px',
+                      width: 'min(150px, 100%)',
+                      minHeight: '120px',
                       padding: '8px',
                       borderRadius: '8px',
                       cursor: pos.serie ? 'pointer' : 'default',
@@ -724,6 +736,8 @@ const terminadosMes = historial.filter((x) => {
                         ? colorEstado(pos.estado.toLowerCase())
                         : '#222',
                       color: 'white',
+                      boxSizing: 'border-box',
+                      flex: '0 1 150px',
                     }}
                   >
                     <div>
@@ -930,7 +944,11 @@ const terminadosMes = historial.filter((x) => {
       padding: '20px',
       borderRadius: '10px',
       border: '1px solid white',
-      minWidth: '350px',
+      width: '90vw',
+      maxWidth: '360px',
+      maxHeight: '90vh',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
       zIndex: 1000,
       color: 'white',
     }}
