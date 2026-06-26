@@ -714,7 +714,7 @@ const terminadosMes = historial.filter((x) => {
         <div
           style={{
             display: 'flex',
-            gap: '6px',
+            gap: '4px',
             overflowX: 'auto',
             paddingBottom: '4px',
           }}
@@ -742,9 +742,9 @@ const terminadosMes = historial.filter((x) => {
                   }
                 }}
                 style={{
-                  width: '100px',
-                  minHeight: '80px',
-                  padding: '5px',
+                  width: '85px',
+                  minHeight: '70px',
+                  padding: '4px',
                   borderRadius: '6px',
                   cursor: pos.serie ? 'pointer' : 'default',
                   backgroundColor: pos.estado
@@ -752,8 +752,8 @@ const terminadosMes = historial.filter((x) => {
                     : '#222',
                   color: 'white',
                   boxSizing: 'border-box',
-                  flex: '0 0 100px',
-                  fontSize: '11px',
+                  flex: '0 0 85px',
+                  fontSize: '10px',
                 }}
               >
                 <div>
@@ -766,8 +766,6 @@ const terminadosMes = historial.filter((x) => {
                       <strong>{pos.serie}</strong>
                     </div>
                     <div>{pos.tipo}</div>
-                    <div>{pos.proyecto}</div>
-                    <div>{pos.estado}</div>
                   </>
                 ) : (
                   <div>Vacío</div>
