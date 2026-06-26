@@ -72,6 +72,19 @@ const [perfil, setPerfil] = useState(null)
 const [tipoEditado, setTipoEditado] = useState('')
 const [proyectoEditado, setProyectoEditado] = useState('')
 const [mostrarKPI, setMostrarKPI] = useState(false)
+const [notificacion, setNotificacion] = useState(null)
+
+useEffect(() => {
+  if (!notificacion) return
+
+  const timer = window.setTimeout(() => setNotificacion(null), 3000)
+
+  return () => window.clearTimeout(timer)
+}, [notificacion])
+
+function mostrarNotificacion(mensaje) {
+  setNotificacion(mensaje)
+}
 
 useEffect(() => {
   supabase.auth.getSession().then(({ data }) => {
@@ -140,7 +153,7 @@ async function guardarCambios() {
     .eq('id', moduloSeleccionado.id)
 
   if (error) {
-    alert(error.message)
+    mostrarNotificacion(error.message)
     return
   }
 
@@ -148,7 +161,7 @@ async function guardarCambios() {
 
   setModuloSeleccionado(null)
 
-  alert('Cambios guardados correctamente')
+  mostrarNotificacion('Cambios guardados correctamente')
 }
   
 
@@ -297,7 +310,7 @@ async function crearModulo() {
     .eq('id', moduloSeleccionado.id)
 
   if (error) {
-    alert(error.message)
+    mostrarNotificacion(error.message)
     return
   }
 
@@ -305,7 +318,7 @@ async function crearModulo() {
 
   setModuloSeleccionado(null)
 
-  alert('Cambios guardados correctamente')
+  mostrarNotificacion('Cambios guardados correctamente')
 }
 async function finalizarModulo() {
   const modulo = moduloSeleccionado
@@ -331,7 +344,7 @@ async function finalizarModulo() {
 
 
   if (errorHistorial) {
-    alert(errorHistorial.message)
+    mostrarNotificacion(errorHistorial.message)
     return
   }
 
@@ -343,7 +356,7 @@ async function finalizarModulo() {
   
 
   if (errorDelete) {
-    alert(errorDelete.message)
+    mostrarNotificacion(errorDelete.message)
     return
   }
 
@@ -352,7 +365,7 @@ async function finalizarModulo() {
 
   setModuloSeleccionado(null)
 
-  alert('Módulo finalizado correctamente')
+  mostrarNotificacion('Módulo finalizado correctamente')
 }
 
   function colorEstado(estado) {
@@ -424,6 +437,22 @@ const terminadosMes = historial.filter((x) => {
     <>
       <div style={{ padding: '20px' }}>
         <h1>Control de Módulos</h1>
+
+        {notificacion && (
+          <div
+            style={{
+              marginBottom: '15px',
+              padding: '10px 12px',
+              background: '#2e7d32',
+              color: 'white',
+              borderRadius: '8px',
+              maxWidth: '400px',
+            }}
+          >
+            {notificacion}
+          </div>
+        )}
+
         <button
   onClick={() => supabase.auth.signOut()}
   style={{
@@ -433,7 +462,7 @@ const terminadosMes = historial.filter((x) => {
   Cerrar sesión
 </button>
 
-        <p>Modal nuevo módulo: {String(mostrarNuevoModulo)}</p>
+        
              <div
   style={{
     marginBottom: '15px',
