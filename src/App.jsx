@@ -72,6 +72,7 @@ const [perfil, setPerfil] = useState(null)
 const [tipoEditado, setTipoEditado] = useState('')
 const [proyectoEditado, setProyectoEditado] = useState('')
 const [mostrarKPI, setMostrarKPI] = useState(false)
+const [mostrarVistaGeneral, setMostrarVistaGeneral] = useState(false)
 const [notificacion, setNotificacion] = useState(null)
 
 useEffect(() => {
@@ -482,7 +483,7 @@ const terminadosMes = historial.filter((x) => {
   Rol: {perfil?.rol}
 </div>
 
-<div style={{ marginBottom: '20px' }}>
+<div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
   <button
     onClick={() => setMostrarKPI(!mostrarKPI)}
     style={{
@@ -492,6 +493,16 @@ const terminadosMes = historial.filter((x) => {
     }}
   >
     {mostrarKPI ? 'Ocultar indicadores' : 'Ver indicadores'}
+  </button>
+  <button
+    onClick={() => setMostrarVistaGeneral(!mostrarVistaGeneral)}
+    style={{
+      padding: '10px 20px',
+      borderRadius: '8px',
+      cursor: 'pointer',
+    }}
+  >
+    {mostrarVistaGeneral ? 'Ver por línea' : 'Vista general'}
   </button>
 </div>
 
@@ -690,78 +701,156 @@ const terminadosMes = historial.filter((x) => {
 
 </div>
 
-{Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
-          <div key={linea} style={{ marginBottom: '30px' }}>
-            <h2>Línea {linea}</h2>
+{mostrarVistaGeneral ? (
+  <div style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 1.2 }}>
+    <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Vista general de todas las líneas</h2>
 
-            <div
-              style={{
-                display: 'flex',
-                gap: '10px',
-                overflowX: 'auto',
-                paddingBottom: '6px',
-              }}
-            >
-              {datos
-                .filter((x) => x.linea === linea)
-                .map((pos) => (
-                  <div
-                    key={`${pos.linea}-${pos.posicion}`}
-                    onClick={() => {
-  console.log('CLICK POSICION', pos)
+    {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
+      <div key={linea} style={{ marginBottom: '14px' }}>
+        <h3 style={{ marginBottom: '8px', fontSize: '16px' }}>
+          Línea {linea} ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
+        </h3>
 
-  if (pos.serie) {
-    setModuloSeleccionado(pos)
+        <div
+          style={{
+            display: 'flex',
+            gap: '6px',
+            overflowX: 'auto',
+            paddingBottom: '4px',
+          }}
+        >
+          {datos
+            .filter((x) => x.linea === linea)
+            .map((pos) => (
+              <div
+                key={`${pos.linea}-${pos.posicion}`}
+                onClick={() => {
+                  console.log('CLICK POSICION', pos)
 
-    setSerieEditada(pos.serie)
-  setTipoEditado(pos.tipo)
-  setProyectoEditado(pos.proyecto)
+                  if (pos.serie) {
+                    setModuloSeleccionado(pos)
+                    setSerieEditada(pos.serie)
+                    setTipoEditado(pos.tipo)
+                    setProyectoEditado(pos.proyecto)
+                    setEstadoEditado(pos.estado)
+                    setLineaEditada(pos.linea)
+                    setPosicionEditada(pos.posicion)
+                  } else {
+                    console.log('POSICION VACIA')
+                    setPosicionSeleccionada(pos)
+                    setMostrarNuevoModulo(true)
+                  }
+                }}
+                style={{
+                  width: '100px',
+                  minHeight: '80px',
+                  padding: '5px',
+                  borderRadius: '6px',
+                  cursor: pos.serie ? 'pointer' : 'default',
+                  backgroundColor: pos.estado
+                    ? colorEstado(pos.estado.toLowerCase())
+                    : '#222',
+                  color: 'white',
+                  boxSizing: 'border-box',
+                  flex: '0 0 100px',
+                  fontSize: '11px',
+                }}
+              >
+                <div>
+                  <strong>P{pos.posicion}</strong>
+                </div>
 
-    setEstadoEditado(pos.estado)
-    setLineaEditada(pos.linea)
-    setPosicionEditada(pos.posicion)
-  } else {
-    console.log('POSICION VACIA')
-
-    setPosicionSeleccionada(pos)
-    setMostrarNuevoModulo(true)
-  }
-}}
-                    style={{
-                      width: '150px',
-                      minHeight: '120px',
-                      padding: '8px',
-                      borderRadius: '8px',
-                      cursor: pos.serie ? 'pointer' : 'default',
-                      backgroundColor: pos.estado
-                        ? colorEstado(pos.estado.toLowerCase())
-                        : '#222',
-                      color: 'white',
-                      boxSizing: 'border-box',
-                      flex: '0 0 150px',
-                    }}
-                  >
+                {pos.serie ? (
+                  <>
                     <div>
-                      <strong>P{pos.posicion}</strong>
+                      <strong>{pos.serie}</strong>
                     </div>
+                    <div>{pos.tipo}</div>
+                    <div>{pos.proyecto}</div>
+                    <div>{pos.estado}</div>
+                  </>
+                ) : (
+                  <div>Vacío</div>
+                )}
+              </div>
+            ))}
+        </div>
+      </div>
+    ))}
+  </div>
+) : (
+  <>
+    {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
+      <div key={linea} style={{ marginBottom: '30px' }}>
+        <h2>Línea {linea} ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)</h2>
 
-                    {pos.serie ? (
-                      <>
-                        <div>
-                          <strong>{pos.serie}</strong>
-                        </div>
-                        <div>{pos.tipo}</div>
-                        <div>{pos.proyecto}</div>
-                        <div>{pos.estado}</div>
-                      </>
-                    ) : (
-                      <div>Vacío</div>
-                    )}
-                  </div>
-                ))}
-            </div>
-          </div>
-        ))}
+        <div
+          style={{
+            display: 'flex',
+            gap: '10px',
+            overflowX: 'auto',
+            paddingBottom: '6px',
+          }}
+        >
+          {datos
+            .filter((x) => x.linea === linea)
+            .map((pos) => (
+              <div
+                key={`${pos.linea}-${pos.posicion}`}
+                onClick={() => {
+                  console.log('CLICK POSICION', pos)
+
+                  if (pos.serie) {
+                    setModuloSeleccionado(pos)
+                    setSerieEditada(pos.serie)
+                    setTipoEditado(pos.tipo)
+                    setProyectoEditado(pos.proyecto)
+                    setEstadoEditado(pos.estado)
+                    setLineaEditada(pos.linea)
+                    setPosicionEditada(pos.posicion)
+                  } else {
+                    console.log('POSICION VACIA')
+                    setPosicionSeleccionada(pos)
+                    setMostrarNuevoModulo(true)
+                  }
+                }}
+                style={{
+                  width: '150px',
+                  minHeight: '120px',
+                  padding: '8px',
+                  borderRadius: '8px',
+                  cursor: pos.serie ? 'pointer' : 'default',
+                  backgroundColor: pos.estado
+                    ? colorEstado(pos.estado.toLowerCase())
+                    : '#222',
+                  color: 'white',
+                  boxSizing: 'border-box',
+                  flex: '0 0 150px',
+                }}
+              >
+                <div>
+                  <strong>P{pos.posicion}</strong>
+                </div>
+
+                {pos.serie ? (
+                  <>
+                    <div>
+                      <strong>{pos.serie}</strong>
+                    </div>
+                    <div>{pos.tipo}</div>
+                    <div>{pos.proyecto}</div>
+                    <div>{pos.estado}</div>
+                  </>
+                ) : (
+                  <div>Vacío</div>
+                )}
+              </div>
+            ))}
+        </div>
+      </div>
+    ))}
+  </>
+)}
       
 
       {moduloSeleccionado && (
