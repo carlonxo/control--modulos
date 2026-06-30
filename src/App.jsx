@@ -74,6 +74,7 @@ const [proyectoEditado, setProyectoEditado] = useState('')
 const [mostrarKPI, setMostrarKPI] = useState(false)
 const [mostrarVistaGeneral, setMostrarVistaGeneral] = useState(false)
 const [notificacion, setNotificacion] = useState(null)
+const [moduloEnDrag, setModuloEnDrag] = useState(null)
 
 useEffect(() => {
   if (!notificacion) return
@@ -375,6 +376,110 @@ async function finalizarModulo() {
   setModuloSeleccionado(null)
 
   mostrarNotificacion('Módulo finalizado correctamente')
+}
+
+async function moverModulo(moduloId, lineaDestino, posicionDestino) {
+  if (!moduloId) {
+    mostrarNotificacion('Error: Módulo inválido')
+    return
+  }
+
+  const lineaDestinoParsed = Number(lineaDestino)
+  const posicionDestinoParsed = Number(posicionDestino)
+
+  const { data: registros, error: errorCarga } = await supabase
+    .from('modulos')
+    .select('*')
+
+  if (errorCarga) {
+    mostrarNotificacion('Error al cargar módulos: ' + errorCarga.message)
+    return
+  }
+
+  const modulosActivos = (registros || []).filter(
+    (x) => x?.serie && String(x.serie).trim() !== ''
+  )
+  const moduloActual = modulosActivos.find(
+    (x) => String(x.id) === String(moduloId)
+  )
+
+  if (!moduloActual) {
+    mostrarNotificacion('Error: No se encontró el módulo')
+    return
+  }
+
+  const lineaOrigen = Number(moduloActual.linea)
+  const posicionOrigen = Number(moduloActual.posicion)
+
+  if (lineaOrigen === lineaDestinoParsed && posicionOrigen === posicionDestinoParsed) {
+    mostrarNotificacion('El módulo ya está en esa posición')
+    return
+  }
+
+  try {
+    const reindexarLinea = async (linea, lista) => {
+      const ordenado = [...lista]
+        .filter((x) => x?.id)
+        .sort((a, b) => {
+          const posA = Number(a.posicion) || 0
+          const posB = Number(b.posicion) || 0
+          return posA - posB || String(a.id).localeCompare(String(b.id))
+        })
+
+      for (const [index, item] of ordenado.entries()) {
+        const nuevaPosicion = Math.min(index + 1, 9)
+        const { error } = await supabase
+          .from('modulos')
+          .update({
+            linea,
+            posicion: nuevaPosicion,
+          })
+          .eq('id', item.id)
+
+        if (error) {
+          throw new Error(error.message)
+        }
+      }
+    }
+
+    if (lineaOrigen === lineaDestinoParsed) {
+      const listaLinea = modulosActivos.filter(
+        (x) => Number(x.linea) === lineaOrigen && String(x.id) !== String(moduloId)
+      )
+      const listaConModulo = [...listaLinea]
+      const insertIndex = Math.max(0, Math.min(posicionDestinoParsed - 1, listaConModulo.length))
+      listaConModulo.splice(insertIndex, 0, {
+        ...moduloActual,
+        linea: lineaDestinoParsed,
+      })
+
+      await reindexarLinea(lineaDestinoParsed, listaConModulo)
+    } else {
+      const listaOrigen = modulosActivos.filter(
+        (x) => Number(x.linea) === lineaOrigen && String(x.id) !== String(moduloId)
+      )
+      await reindexarLinea(lineaOrigen, listaOrigen)
+
+      const listaDestino = modulosActivos.filter(
+        (x) => Number(x.linea) === lineaDestinoParsed
+      )
+      const listaDestinoConModulo = [...listaDestino]
+      const insertIndex = Math.max(0, Math.min(posicionDestinoParsed - 1, listaDestinoConModulo.length))
+      listaDestinoConModulo.splice(insertIndex, 0, {
+        ...moduloActual,
+        linea: lineaDestinoParsed,
+      })
+
+      await reindexarLinea(lineaDestinoParsed, listaDestinoConModulo)
+    }
+
+    await cargarTablero()
+    mostrarNotificacion('Módulo movido correctamente')
+  } catch (err) {
+    console.error(err)
+    mostrarNotificacion('Error: ' + (err?.message || 'Error desconocido'))
+    await cargarTablero()
+  }
 }
 
   function colorEstado(estado) {
@@ -732,6 +837,28 @@ const terminadosMes = historial.filter((x) => {
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
+                draggable={pos.serie ? true : false}
+                onDragStart={() => pos.serie && setModuloEnDrag(pos)}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.currentTarget.style.opacity = '0.6'
+                }}
+                onDragLeave={(e) => {
+                  e.currentTarget.style.opacity = '1'
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.currentTarget.style.opacity = '1'
+                  const idValido = typeof moduloEnDrag?.id === 'string' && moduloEnDrag.id !== 'null' && moduloEnDrag.id.trim() !== ''
+                  const esMismo = moduloEnDrag?.id === pos.id
+                  if (idValido && !esMismo) {
+                    moverModulo(moduloEnDrag.id, linea, pos.posicion)
+                  }
+                  setModuloEnDrag(null)
+                }}
+                onDragEnd={() => {
+                  setModuloEnDrag(null)
+                }}
                 onClick={() => {
                   console.log('CLICK POSICION', pos)
 
@@ -754,7 +881,7 @@ const terminadosMes = historial.filter((x) => {
                   minHeight: '60px',
                   padding: '3px',
                   borderRadius: '5px',
-                  cursor: pos.serie ? 'pointer' : 'default',
+                  cursor: pos.serie ? 'grab' : 'default',
                   backgroundColor: pos.estado
                     ? colorEstado(pos.estado.toLowerCase())
                     : '#222',
@@ -762,6 +889,7 @@ const terminadosMes = historial.filter((x) => {
                   boxSizing: 'border-box',
                   flex: '0 0 70px',
                   fontSize: '9px',
+                  transition: 'opacity 0.2s',
                 }}
               >
                 <div>
@@ -803,6 +931,28 @@ const terminadosMes = historial.filter((x) => {
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
+                draggable={pos.serie ? true : false}
+                onDragStart={() => pos.serie && setModuloEnDrag(pos)}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.currentTarget.style.opacity = '0.6'
+                }}
+                onDragLeave={(e) => {
+                  e.currentTarget.style.opacity = '1'
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.currentTarget.style.opacity = '1'
+                  const idValido = typeof moduloEnDrag?.id === 'string' && moduloEnDrag.id !== 'null' && moduloEnDrag.id.trim() !== ''
+                  const esMismo = moduloEnDrag?.id === pos.id
+                  if (idValido && !esMismo) {
+                    moverModulo(moduloEnDrag.id, linea, pos.posicion)
+                  }
+                  setModuloEnDrag(null)
+                }}
+                onDragEnd={() => {
+                  setModuloEnDrag(null)
+                }}
                 onClick={() => {
                   console.log('CLICK POSICION', pos)
 
@@ -825,13 +975,14 @@ const terminadosMes = historial.filter((x) => {
                   minHeight: '120px',
                   padding: '8px',
                   borderRadius: '8px',
-                  cursor: pos.serie ? 'pointer' : 'default',
+                  cursor: pos.serie ? 'grab' : 'default',
                   backgroundColor: pos.estado
                     ? colorEstado(pos.estado.toLowerCase())
                     : '#222',
                   color: 'white',
                   boxSizing: 'border-box',
                   flex: '0 0 150px',
+                  transition: 'opacity 0.2s',
                 }}
               >
                 <div>
