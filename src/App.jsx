@@ -140,32 +140,7 @@ async function cargarPerfil() {
 
   setPerfil(data)
 }
-async function guardarCambios() {
-  const { error } = await supabase
-    .from('modulos')
-    .update({
-      serie: serieEditada,
-      tipo: tipoEditado,
-      proyecto: proyectoEditado,
-      estado: estadoEditado,
-      linea: lineaEditada,
-      posicion: posicionEditada,
-    })
-    .eq('id', moduloSeleccionado.id)
-
-  if (error) {
-    mostrarNotificacion(error.message)
-    return
-  }
-
-  await cargarTablero()
-
-  setModuloSeleccionado(null)
-
-  mostrarNotificacion('Cambios guardados correctamente')
-}
   
-
   async function cargarTablero() {
     const { data, error } = await supabase
       .from('tablero')
@@ -298,17 +273,50 @@ async function crearModulo() {
 }
 
   async function guardarCambios() {
-  const { error } = await supabase
+  const isPruebaElectrica = estadoEditado === 'Prueba eléctrica'
+  const shouldSetFechaPrueba =
+    isPruebaElectrica && moduloSeleccionado?.estado !== 'Prueba eléctrica'
+
+  const updatePayload = {
+    serie: serieEditada,
+    tipo: tipoEditado,
+    proyecto: proyectoEditado,
+    estado: estadoEditado,
+    linea: lineaEditada,
+    posicion: posicionEditada,
+  }
+
+  if (shouldSetFechaPrueba) {
+    updatePayload.fecha_prueba = new Date()
+  }
+
+  let { error } = await supabase
     .from('modulos')
-    .update({
-  serie: serieEditada,
-  tipo: tipoEditado,
-  proyecto: proyectoEditado,
-  estado: estadoEditado,
-  linea: lineaEditada,
-  posicion: posicionEditada,
-})
+    .update(updatePayload)
     .eq('id', moduloSeleccionado.id)
+
+  if (error && shouldSetFechaPrueba) {
+    const message = String(error.message || '').toLowerCase()
+    if (message.includes('fecha_prueba') || message.includes('column') || message.includes('does not exist')) {
+      delete updatePayload.fecha_prueba
+
+      const retry = await supabase
+        .from('modulos')
+        .update(updatePayload)
+        .eq('id', moduloSeleccionado.id)
+
+      if (!retry.error) {
+        mostrarNotificacion(
+          'Estado actualizado. No se guardó la fecha de prueba porque falta la columna fecha_prueba.'
+        )
+        await cargarTablero()
+        setModuloSeleccionado(null)
+        return
+      }
+
+      error = retry.error
+    }
+  }
 
   if (error) {
     mostrarNotificacion(error.message)
