@@ -288,36 +288,13 @@ async function crearModulo() {
   }
 
   if (shouldSetFechaPrueba) {
-    updatePayload.fecha_prueba = new Date()
+    updatePayload.fecha_prueba_electrica = new Date()
   }
 
   let { error } = await supabase
     .from('modulos')
     .update(updatePayload)
     .eq('id', moduloSeleccionado.id)
-
-  if (error && shouldSetFechaPrueba) {
-    const message = String(error.message || '').toLowerCase()
-    if (message.includes('fecha_prueba') || message.includes('column') || message.includes('does not exist')) {
-      delete updatePayload.fecha_prueba
-
-      const retry = await supabase
-        .from('modulos')
-        .update(updatePayload)
-        .eq('id', moduloSeleccionado.id)
-
-      if (!retry.error) {
-        mostrarNotificacion(
-          'Estado actualizado. No se guardó la fecha de prueba porque falta la columna fecha_prueba.'
-        )
-        await cargarTablero()
-        setModuloSeleccionado(null)
-        return
-      }
-
-      error = retry.error
-    }
-  }
 
   if (error) {
     mostrarNotificacion(error.message)
