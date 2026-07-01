@@ -211,6 +211,15 @@ function exportarHistorialExcel() {
     return
   }
 
+  const formatearFecha = (fecha) => {
+    if (!fecha) return ''
+    const d = new Date(fecha)
+    const dia = String(d.getDate()).padStart(2, '0')
+    const mes = String(d.getMonth() + 1).padStart(2, '0')
+    const anio = d.getFullYear()
+    return `${dia}/${mes}/${anio}`
+  }
+
   const datosExcel = filtrado.map((item) => ({
     Serie: item.serie,
     Tipo: item.tipo,
@@ -219,8 +228,9 @@ function exportarHistorialExcel() {
     Estado: item.estado,
     Linea: item.linea,
     Posicion: item.posicion,
-    FechaIngreso: item.fecha_ingreso,
-    FechaSalida: item.fecha_salida,
+    FechaIngreso: formatearFecha(item.fecha_ingreso),
+    FechaSalida: formatearFecha(item.fecha_salida),
+    FechaPruebaElectrica: formatearFecha(item.fecha_prueba_electrica),
   }))
 
   const worksheet = XLSX.utils.json_to_sheet(datosExcel)
