@@ -144,27 +144,33 @@ async function cargarPerfil() {
 }
   
   async function cargarTablero() {
-    const { data, error } = await supabase
-      .from('modulos')
+    const { data: tableroData, error: tableroError } = await supabase
+      .from('tablero')
       .select('*')
       .order('linea')
       .order('posicion')
 
-    if (error) {
-      console.error(error)
+    if (tableroError) {
+      console.error(tableroError)
       return
     }
 
-    console.log('DATOS CARGADOS DEL TABLERO:', data)
-    if (data && data.length > 0) {
-      console.log('PRIMER REGISTRO (COLUMNAS DISPONIBLES):', Object.keys(data[0]))
-      // Buscar el módulo que acabamos de editar
-      const moduloGuardado = data.find(m => m.id === moduloSeleccionado?.id)
-      if (moduloGuardado) {
-        console.log('MODULO GUARDADO ENCONTRADO - NOTA:', moduloGuardado.nota)
-      }
+    const { data: modulosData, error: modulosError } = await supabase
+      .from('modulos')
+      .select('id, nota')
+
+    if (modulosError) {
+      console.error(modulosError)
+      return
     }
-    setDatos(data)
+
+    const notaMap = new Map((modulosData || []).map((item) => [item.id, item.nota]))
+    const mergedData = (tableroData || []).map((row) => ({
+      ...row,
+      nota: row.nota || notaMap.get(row.id) || '',
+    }))
+
+    setDatos(mergedData)
   }
 
   async function cargarHistorial() {
