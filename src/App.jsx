@@ -714,10 +714,10 @@ const terminadosMes = historial.filter((x) => {
 
     <div
       style={{
-        background: '#222',
+        background: '#a6a1a1',
         padding: '15px',
         borderRadius: '10px',
-        minWidth: '180px',
+        minWidth: '120px',
       }}
     >
       <h3>En proceso</h3>
@@ -726,10 +726,10 @@ const terminadosMes = historial.filter((x) => {
 
     <div
       style={{
-        background: '#222',
+        background: '#000000',
         padding: '15px',
         borderRadius: '10px',
-        minWidth: '180px',
+        minWidth: '120px',
       }}
     >
       <h3>Ocupación</h3>
@@ -741,7 +741,7 @@ const terminadosMes = historial.filter((x) => {
         background: '#d32f2f',
         padding: '15px',
         borderRadius: '10px',
-        minWidth: '180px',
+        minWidth: '120px',
       }}
     >
       <h3>Canalizado</h3>
@@ -754,7 +754,7 @@ const terminadosMes = historial.filter((x) => {
         color: 'black',
         padding: '15px',
         borderRadius: '10px',
-        minWidth: '180px',
+        minWidth: '120px',
       }}
     >
       <h3>Cableado</h3>
@@ -766,7 +766,7 @@ const terminadosMes = historial.filter((x) => {
         background: '#1976d2',
         padding: '15px',
         borderRadius: '10px',
-        minWidth: '180px',
+        minWidth: '120px',
       }}
     >
       <h3>Terminaciones</h3>
@@ -778,7 +778,7 @@ const terminadosMes = historial.filter((x) => {
         background: '#388e3c',
         padding: '15px',
         borderRadius: '10px',
-        minWidth: '180px',
+        minWidth: '120px',
       }}
     >
       <h3>Prueba eléctrica</h3>
@@ -790,7 +790,7 @@ const terminadosMes = historial.filter((x) => {
         background: '#4caf50',
         padding: '15px',
         borderRadius: '10px',
-        minWidth: '180px',
+        minWidth: '120px',
       }}
     >
       <h3>Terminados hoy</h3>
@@ -802,7 +802,7 @@ const terminadosMes = historial.filter((x) => {
         background: '#009688',
         padding: '15px',
         borderRadius: '10px',
-        minWidth: '180px',
+        minWidth: '120px',
       }}
     >
       <h3>Terminados este mes</h3>
