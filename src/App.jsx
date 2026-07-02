@@ -116,6 +116,14 @@ useEffect(() => {
   cargarHistorial()
 }, [])
 
+useEffect(() => {
+  const intervalo = setInterval(() => {
+    cargarTablero()
+  }, 30000)
+
+  return () => clearInterval(intervalo)
+}, [])
+
 if (!session) {
   return <Login />
 }
