@@ -145,7 +145,7 @@ async function cargarPerfil() {
   
   async function cargarTablero() {
     const { data, error } = await supabase
-      .from('tablero')
+      .from('modulos')
       .select('*')
       .order('linea')
       .order('posicion')
@@ -155,6 +155,15 @@ async function cargarPerfil() {
       return
     }
 
+    console.log('DATOS CARGADOS DEL TABLERO:', data)
+    if (data && data.length > 0) {
+      console.log('PRIMER REGISTRO (COLUMNAS DISPONIBLES):', Object.keys(data[0]))
+      // Buscar el módulo que acabamos de editar
+      const moduloGuardado = data.find(m => m.id === moduloSeleccionado?.id)
+      if (moduloGuardado) {
+        console.log('MODULO GUARDADO ENCONTRADO - NOTA:', moduloGuardado.nota)
+      }
+    }
     setDatos(data)
   }
 
@@ -313,6 +322,17 @@ async function crearModulo() {
   alert('Módulo creado correctamente')
 }
 
+function limpiarEstadosModal() {
+  setModuloSeleccionado(null)
+  setSerieEditada('')
+  setTipoEditado('')
+  setProyectoEditado('')
+  setEstadoEditado('')
+  setLineaEditada('')
+  setPosicionEditada('')
+  setNotaEditada('')
+}
+
   async function guardarCambios() {
   const isPruebaElectrica = estadoEditado === 'Prueba eléctrica'
   const shouldSetFechaPrueba =
@@ -327,6 +347,13 @@ async function crearModulo() {
     posicion: posicionEditada,
     nota: notaEditada,
   }
+
+  console.log('GUARDANDO CAMBIOS:', {
+    moduloId: moduloSeleccionado?.id,
+    notaEditada,
+    moduloSeleccionado,
+  })
+
 console.log({
   estadoOriginal: moduloSeleccionado.estado,
   estadoNuevo: estadoEditado,
@@ -343,6 +370,17 @@ console.log({
     .update(updatePayload)
     .eq('id', moduloSeleccionado.id)
 
+  console.log('RESULTADO UPDATE - NOTA:', notaEditada)
+  console.log('RESULTADO UPDATE - PAYLOAD:')
+  console.log('  serie:', updatePayload.serie)
+  console.log('  tipo:', updatePayload.tipo)
+  console.log('  proyecto:', updatePayload.proyecto)
+  console.log('  estado:', updatePayload.estado)
+  console.log('  linea:', updatePayload.linea)
+  console.log('  posicion:', updatePayload.posicion)
+  console.log('  nota:', updatePayload.nota)
+  console.log('  error:', error)
+
   if (error) {
     mostrarNotificacion(error.message)
     return
@@ -350,11 +388,10 @@ console.log({
 
   await cargarTablero()
 
-  setModuloSeleccionado(null)
+  limpiarEstadosModal()
 
   mostrarNotificacion('Cambios guardados correctamente')
-}
-async function finalizarModulo() {
+}async function finalizarModulo() {
 
   const { data: modulo, error: errorModulo } = await supabase
     .from('modulos')
@@ -404,7 +441,7 @@ async function finalizarModulo() {
   await cargarTablero()
   await cargarHistorial()
 
-  setModuloSeleccionado(null)
+  limpiarEstadosModal()
 
   mostrarNotificacion('Módulo finalizado correctamente')
 }
@@ -1025,6 +1062,7 @@ const terminadosMes = historial.filter((x) => {
                     setEstadoEditado(pos.estado)
                     setLineaEditada(pos.linea)
                     setPosicionEditada(pos.posicion)
+                    setNotaEditada(pos.nota || '')
                   } else {
                     console.log('POSICION VACIA')
                     setPosicionSeleccionada(pos)
@@ -1265,7 +1303,7 @@ const terminadosMes = historial.filter((x) => {
       </button>
 
       <button
-        onClick={() => setModuloSeleccionado(null)}
+        onClick={limpiarEstadosModal}
         style={{
           padding: '10px',
           flex: 1,
