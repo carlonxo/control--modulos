@@ -75,6 +75,7 @@ const [mostrarKPI, setMostrarKPI] = useState(false)
 const [mostrarVistaGeneral, setMostrarVistaGeneral] = useState(false)
 const [notificacion, setNotificacion] = useState(null)
 const [moduloEnDrag, setModuloEnDrag] = useState(null)
+const [notaEditada, setNotaEditada] = useState('')
 
 useEffect(() => {
   if (!notificacion) return
@@ -324,6 +325,7 @@ async function crearModulo() {
     estado: estadoEditado,
     linea: lineaEditada,
     posicion: posicionEditada,
+    nota: notaEditada,
   }
 console.log({
   estadoOriginal: moduloSeleccionado.estado,
@@ -904,6 +906,7 @@ const terminadosMes = historial.filter((x) => {
                     setEstadoEditado(pos.estado)
                     setLineaEditada(pos.linea)
                     setPosicionEditada(pos.posicion)
+                    setNotaEditada(pos.nota || '')
                   } else {
                     console.log('POSICION VACIA')
                     setPosicionSeleccionada(pos)
@@ -932,8 +935,25 @@ const terminadosMes = historial.filter((x) => {
 
                 {pos.serie ? (
                   <>
-                    <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
                       <strong>{pos.serie}</strong>
+
+                      {pos.nota && (
+                        <span
+                          title="Este módulo tiene una nota"
+                          style={{
+                            fontSize: '18px',
+                          }}
+                        >
+                          💬
+                        </span>
+                      )}
                     </div>
                     <div>{pos.tipo}</div>
                   </>
@@ -1032,8 +1052,25 @@ const terminadosMes = historial.filter((x) => {
 
                 {pos.serie ? (
                   <>
-                    <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
                       <strong>{pos.serie}</strong>
+
+                      {pos.nota && (
+                        <span
+                          title="Este módulo tiene una nota"
+                          style={{
+                            fontSize: '18px',
+                          }}
+                        >
+                          💬
+                        </span>
+                      )}
                     </div>
                     <div>{pos.tipo}</div>
                     <div>{pos.proyecto}</div>
@@ -1067,7 +1104,24 @@ const terminadosMes = historial.filter((x) => {
       color: 'white',
     }}
   >
-    <h2>Módulo</h2>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+      <h2 style={{ margin: 0 }}>Módulo</h2>
+      {perfil?.rol === 'admin' && (
+        <button
+          onClick={finalizarModulo}
+          style={{
+            background: '#d32f2f',
+            color: 'white',
+            padding: '10px 14px',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+          }}
+        >
+          Finalizar módulo
+        </button>
+      )}
+    </div>
 
     <div style={{ marginBottom: '10px' }}>
   <strong>Serie</strong>
@@ -1075,6 +1129,7 @@ const terminadosMes = historial.filter((x) => {
   <input
     value={serieEditada}
     onChange={(e) => setSerieEditada(e.target.value)}
+    disabled={perfil?.rol === 'visor'}
     style={{
       width: '100%',
       padding: '8px',
@@ -1089,6 +1144,7 @@ const terminadosMes = historial.filter((x) => {
   <input
     value={tipoEditado}
     onChange={(e) => setTipoEditado(e.target.value)}
+    disabled={perfil?.rol === 'visor'}
     style={{
       width: '100%',
       padding: '8px',
@@ -1103,6 +1159,7 @@ const terminadosMes = historial.filter((x) => {
   <input
     value={proyectoEditado}
     onChange={(e) => setProyectoEditado(e.target.value)}
+    disabled={perfil?.rol === 'visor'}
     style={{
       width: '100%',
       padding: '8px',
@@ -1111,65 +1168,85 @@ const terminadosMes = historial.filter((x) => {
   />
 </div>
 
-    <div style={{ marginBottom: '10px' }}>
-      <strong>Estado</strong>
+<div style={{ marginBottom: '15px' }}>
+  <strong>Nota</strong>
+  <textarea
+    value={notaEditada}
+    onChange={(e) => setNotaEditada(e.target.value)}
+    rows={4}
+    style={{
+      width: '100%',
+      marginTop: '5px',
+      padding: '8px',
+      resize: 'vertical',
+    }}
+  />
+</div>
 
-      <select
-        value={estadoEditado}
-        onChange={(e) => setEstadoEditado(e.target.value)}
-        style={{
-          width: '100%',
-          padding: '8px',
-          marginTop: '5px',
-        }}
-      >
-        <option value="Sin iniciar">Sin iniciar</option>
-        <option value="Canalizado">Canalizado</option>
-        <option value="Cableado">Cableado</option>
-        <option value="Terminaciones">Terminaciones</option>
-        <option value="Prueba eléctrica">Prueba eléctrica</option>
-      </select>
-    </div>
+    {perfil?.rol !== 'visor' && (
+      <>
+        <div style={{ marginBottom: '10px' }}>
+          <strong>Estado</strong>
 
-    <div style={{ marginBottom: '10px' }}>
-      <strong>Línea</strong>
+          <select
+            value={estadoEditado}
+            onChange={(e) => setEstadoEditado(e.target.value)}
+            disabled={perfil?.rol === 'visor'}
+            style={{
+              width: '100%',
+              padding: '8px',
+              marginTop: '5px',
+            }}
+          >
+            <option value="Sin iniciar">Sin iniciar</option>
+            <option value="Canalizado">Canalizado</option>
+            <option value="Cableado">Cableado</option>
+            <option value="Terminaciones">Terminaciones</option>
+            <option value="Prueba eléctrica">Prueba eléctrica</option>
+          </select>
+        </div>
 
-      <select
-        value={lineaEditada}
-        onChange={(e) => setLineaEditada(Number(e.target.value))}
-        style={{
-          width: '100%',
-          padding: '8px',
-          marginTop: '5px',
-        }}
-      >
-        {[1,2,3,4,5,6,7,8,9].map((n) => (
-          <option key={n} value={n}>
-            {n}
-          </option>
-        ))}
-      </select>
-    </div>
+        <div style={{ marginBottom: '10px' }}>
+          <strong>Línea</strong>
 
-    <div style={{ marginBottom: '15px' }}>
-      <strong>Posición</strong>
+          <select
+            value={lineaEditada}
+            onChange={(e) => setLineaEditada(Number(e.target.value))}
+            style={{
+              width: '100%',
+              padding: '8px',
+              marginTop: '5px',
+            }}
+          >
+            {[1,2,3,4,5,6,7,8,9].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <select
-        value={posicionEditada}
-        onChange={(e) => setPosicionEditada(Number(e.target.value))}
-        style={{
-          width: '100%',
-          padding: '8px',
-          marginTop: '5px',
-        }}
-      >
-        {[1,2,3,4,5,6,7,8,9].map((n) => (
-          <option key={n} value={n}>
-            {n}
-          </option>
-        ))}
-      </select>
-    </div>
+        <div style={{ marginBottom: '15px' }}>
+          <strong>Posición</strong>
+
+          <select
+            value={posicionEditada}
+            onChange={(e) => setPosicionEditada(Number(e.target.value))}
+            style={{
+              width: '100%',
+              padding: '8px',
+              marginTop: '5px',
+            }}
+          >
+            {[1,2,3,4,5,6,7,8,9].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+      </>
+    )}
 
     <div
       style={{
@@ -1184,7 +1261,7 @@ const terminadosMes = historial.filter((x) => {
           flex: 1,
         }}
       >
-        Guardar
+        {perfil?.rol === 'visor' ? 'Guardar nota' : 'Guardar cambios'}
       </button>
 
       <button
@@ -1197,21 +1274,6 @@ const terminadosMes = historial.filter((x) => {
         Cerrar
       </button>
     </div>
-
-    {perfil?.rol === 'admin' && (
-  <button
-    onClick={finalizarModulo}
-    style={{
-      padding: '10px',
-      background: '#388e3c',
-      color: 'white',
-      width: '100%',
-      marginTop: '10px',
-    }}
-  >
-    Finalizar módulo
-  </button>
-)}
   </div>
 )}
 
