@@ -188,18 +188,47 @@ async function buscarSerie() {
 
 function exportarHistorialExcel() {
   console.log('🔥 EXPORTACIÓN EJECUTADA')
+  console.log('fechaDesde (string):', fechaDesde)
+  console.log('fechaHasta (string):', fechaHasta)
+  console.log('desde Date:', new Date(fechaDesde))
+  console.log('hasta Date:', new Date(fechaHasta))
   
   if (!historial || historial.length === 0) {
     alert('No hay datos para exportar')
     return
   }
+console.log("Historial completo:", historial);
+console.log(
+  "Series:",
+  historial.map(x => x.serie)
+);
+  const parseLocalDate = (value) => {
+    if (!value) return null
+    const parts = String(value).split('-').map(Number)
+    if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) return null
+    return new Date(parts[0], parts[1] - 1, parts[2])
+  }
 
   const filtrado = historial.filter((item) => {
     const fecha = new Date(item.fecha_ingreso)
 
-    const desde = fechaDesde ? new Date(fechaDesde) : null
-    const hasta = fechaHasta ? new Date(fechaHasta) : null
+    const desde = fechaDesde ? parseLocalDate(fechaDesde) : null
+    const hasta = fechaHasta ? parseLocalDate(fechaHasta) : null
 
+    if (desde) {
+      desde.setHours(0, 0, 0, 0)
+    }
+
+    if (hasta) {
+      hasta.setHours(23, 59, 59, 999)
+    }
+
+    console.log({
+      serie: item.serie,
+      fecha,
+      desde,
+      hasta,
+    })
     if (desde && fecha < desde) return false
     if (hasta && fecha > hasta) return false
 
@@ -210,7 +239,7 @@ function exportarHistorialExcel() {
     alert('No hay registros en ese rango de fechas')
     return
   }
-
+console.log("Series filtradas:", filtrado.map(x => x.serie));
   const formatearFecha = (fecha) => {
     if (!fecha) return ''
     const d = new Date(fecha)
@@ -230,7 +259,7 @@ function exportarHistorialExcel() {
     Posicion: item.posicion,
     FechaIngreso: formatearFecha(item.fecha_ingreso),
     FechaSalida: formatearFecha(item.fecha_salida),
-    FechaPruebaElectrica: formatearFecha(item.fecha_prueba_electrica),
+    'Fecha Prueba Eléctrica': formatearFecha(item.fecha_prueba_electrica),
   }))
 
   const worksheet = XLSX.utils.json_to_sheet(datosExcel)
@@ -296,9 +325,15 @@ async function crearModulo() {
     linea: lineaEditada,
     posicion: posicionEditada,
   }
-
+console.log({
+  estadoOriginal: moduloSeleccionado.estado,
+  estadoNuevo: estadoEditado,
+  shouldSetFechaPrueba
+})
   if (shouldSetFechaPrueba) {
-    updatePayload.fecha_prueba_electrica = new Date()
+    console.log("Guardando fecha de prueba eléctrica")
+
+    updatePayload.fecha_prueba_electrica = new Date().toISOString()
   }
 
   let { error } = await supabase
@@ -318,27 +353,36 @@ async function crearModulo() {
   mostrarNotificacion('Cambios guardados correctamente')
 }
 async function finalizarModulo() {
-  const modulo = moduloSeleccionado
+
+  const { data: modulo, error: errorModulo } = await supabase
+    .from('modulos')
+    .select('*')
+    .eq('id', moduloSeleccionado.id)
+    .single()
+
+  if (errorModulo) {
+    mostrarNotificacion(errorModulo.message)
+    return
+  }
 
   const { data, error: errorHistorial } = await supabase
     .from('historial_modulos')
     .insert([
       {
-  modulo_id: modulo.id,
-  serie: modulo.serie,
-  tipo: modulo.tipo,
-  proyecto: modulo.proyecto,
-  responsable: modulo.responsable,
-  fecha_ingreso: modulo.fecha_ingreso,
-  fecha_salida: new Date(),
-  estado: modulo.estado,
-  linea: modulo.linea,
-  posicion: modulo.posicion,
-},
+        modulo_id: modulo.id,
+        serie: modulo.serie,
+        tipo: modulo.tipo,
+        proyecto: modulo.proyecto,
+        responsable: modulo.responsable,
+        fecha_ingreso: modulo.fecha_ingreso,
+        fecha_prueba_electrica: modulo.fecha_prueba_electrica,
+        fecha_salida: new Date().toISOString(),
+        estado: modulo.estado,
+        linea: modulo.linea,
+        posicion: modulo.posicion,
+      },
     ])
     .select()
-
-
 
   if (errorHistorial) {
     mostrarNotificacion(errorHistorial.message)
@@ -349,8 +393,6 @@ async function finalizarModulo() {
     .from('modulos')
     .delete()
     .eq('id', modulo.id)
-
-  
 
   if (errorDelete) {
     mostrarNotificacion(errorDelete.message)
