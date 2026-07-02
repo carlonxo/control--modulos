@@ -849,8 +849,13 @@ const terminadosMes = historial.filter((x) => {
 
     {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
       <div key={linea} style={{ marginBottom: '14px' }}>
-        <h3 style={{ marginBottom: '8px', fontSize: '16px' }}>
-          Línea {linea} ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
+        <h3 style={{ marginBottom: '8px', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '26px', fontWeight: '800', textTransform: 'uppercase' }}>
+            Línea {linea}
+          </span>
+          <span style={{ fontSize: '16px', fontWeight: '500', color: '#ccc' }}>
+            ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
+          </span>
         </h3>
 
         <div
@@ -945,7 +950,14 @@ const terminadosMes = historial.filter((x) => {
   <>
     {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
       <div key={linea} style={{ marginBottom: '30px' }}>
-        <h2>Línea {linea} ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)</h2>
+        <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontSize: '22px' }}>
+          <span style={{ fontWeight: '800', textTransform: 'uppercase' }}>
+            Línea {linea}
+          </span>
+          <span style={{ fontWeight: '500', fontSize: '18px', color: '#ccc' }}>
+            ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
+          </span>
+        </h2>
 
         <div
           style={{
