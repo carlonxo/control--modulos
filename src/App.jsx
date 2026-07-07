@@ -82,6 +82,8 @@ const [moduloEnDrag, setModuloEnDrag] = useState(null)
 const [notaEditada, setNotaEditada] = useState('')
 const [nombreSolicitante, setNombreSolicitante] = useState('')
 const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
+const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
+const ocultarEspaciosVacios = ['electrico', 'visor', 'control_calidad'].includes(perfil?.rol)
 
 useEffect(() => {
   if (!notificacion) return
@@ -216,6 +218,11 @@ function exportarHistorialExcelHandler() {
 }
 
 async function crearModulo() {
+  if (!puedeAgregarModulos) {
+    mostrarNotificacion('No tienes permisos para agregar módulos')
+    setMostrarNuevoModulo(false)
+    return
+  }
 
   if (
     !serieNueva.trim() ||
@@ -921,6 +928,7 @@ const terminadosMes = historial.filter((x) => {
         >
           {datos
             .filter((x) => x.linea === linea)
+            .filter((x) => !ocultarEspaciosVacios || x.serie)
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
@@ -966,8 +974,10 @@ const terminadosMes = historial.filter((x) => {
                     }
                   } else {
                     console.log('POSICION VACIA')
-                    setPosicionSeleccionada(pos)
-                    setMostrarNuevoModulo(true)
+                    if (puedeAgregarModulos) {
+                      setPosicionSeleccionada(pos)
+                      setMostrarNuevoModulo(true)
+                    }
                   }
                 }}
                 style={{
@@ -1046,6 +1056,7 @@ const terminadosMes = historial.filter((x) => {
         >
           {datos
             .filter((x) => x.linea === linea)
+            .filter((x) => !ocultarEspaciosVacios || x.serie)
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
@@ -1098,8 +1109,10 @@ const terminadosMes = historial.filter((x) => {
 
     console.log('POSICION VACIA')
 
-    setPosicionSeleccionada(pos)
-    setMostrarNuevoModulo(true)
+    if (puedeAgregarModulos) {
+      setPosicionSeleccionada(pos)
+      setMostrarNuevoModulo(true)
+    }
 
   }
 }}
@@ -1437,7 +1450,7 @@ const terminadosMes = historial.filter((x) => {
   </div>
 )}
 
-{mostrarNuevoModulo && (
+{mostrarNuevoModulo && puedeAgregarModulos && (
   <div
     style={{
       position: 'fixed',
