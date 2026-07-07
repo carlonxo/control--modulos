@@ -174,6 +174,7 @@ const [lineaEditada, setLineaEditada] = useState('')
 const [posicionEditada, setPosicionEditada] = useState('')
 const [serieBusqueda, setSerieBusqueda] = useState('')
 const [resultadoBusqueda, setResultadoBusqueda] = useState([])
+const [busquedaRealizada, setBusquedaRealizada] = useState(false)
 const [mostrarNuevoModulo, setMostrarNuevoModulo] = useState(false)
 const [posicionSeleccionada, setPosicionSeleccionada] = useState(null)
 const [serieNueva, setSerieNueva] = useState('')
@@ -199,6 +200,7 @@ const [mostrarResumenMateriales, setMostrarResumenMateriales] = useState(false)
 const [cargandoMateriales, setCargandoMateriales] = useState(false)
 const [avisoPruebaElectrica, setAvisoPruebaElectrica] = useState(null)
 const [mostrarLlamadosPendientes, setMostrarLlamadosPendientes] = useState(false)
+const [solicitantesPendientes, setSolicitantesPendientes] = useState({})
 const solicitudesPendientesRef = useRef(new Set())
 const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
 const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
@@ -308,6 +310,65 @@ useEffect(() => {
   }
 }, [perfil?.rol, recibeAvisosPrueba])
 
+useEffect(() => {
+  if (!recibeAvisosPrueba) return
+
+  const modulosPendientes = datos.filter(
+    (modulo) => modulo.id && esSolicitudPruebaActiva(modulo.solicitud_prueba)
+  )
+
+  if (modulosPendientes.length === 0) {
+    return
+  }
+
+  async function cargarSolicitantesPendientes() {
+    const idsModulos = modulosPendientes.map((modulo) => modulo.id)
+    const { data: modulos, error: errorModulos } = await supabase
+      .from('modulos')
+      .select('id, solicitado_por')
+      .in('id', idsModulos)
+
+    if (errorModulos) {
+      console.error(errorModulos)
+      return
+    }
+
+    const idsPerfiles = [...new Set(
+      (modulos || []).map((modulo) => modulo.solicitado_por).filter(Boolean)
+    )]
+
+    if (idsPerfiles.length === 0) {
+      setSolicitantesPendientes({})
+      return
+    }
+
+    const { data: perfiles, error: errorPerfiles } = await supabase
+      .from('perfiles')
+      .select('id, nombre')
+      .in('id', idsPerfiles)
+
+    if (errorPerfiles) {
+      console.error(errorPerfiles)
+      return
+    }
+
+    const nombresPorPerfil = new Map(
+      (perfiles || []).map((perfilSolicitante) => [perfilSolicitante.id, perfilSolicitante.nombre])
+    )
+
+    setSolicitantesPendientes(
+      Object.fromEntries(
+        (modulos || []).map((modulo) => [
+          modulo.id,
+          nombresPorPerfil.get(modulo.solicitado_por) || 'No disponible',
+        ])
+      )
+    )
+  }
+
+  cargarSolicitantesPendientes()
+}, [datos, recibeAvisosPrueba])
+
 if (!session) {
   return <Login />
 }
@@ -382,19 +443,39 @@ async function cargarPerfil() {
 }
 
 async function buscarSerie() {
-  const { data, error } = await supabase
-    .from('historial_modulos')
-    .select('*')
-    .eq('serie', serieBusqueda)
-    .order('fecha_salida', { ascending: false })
-    .limit(5)
+  const serie = serieBusqueda.trim()
 
-  if (error) {
-    alert(error.message)
+  if (!serie) {
+    setResultadoBusqueda([])
+    setBusquedaRealizada(false)
     return
   }
 
-  setResultadoBusqueda(data || [])
+  const [respuestaHistorial, respuestaActivos] = await Promise.all([
+    supabase
+      .from('historial_modulos')
+      .select('*')
+      .eq('serie', serie)
+      .order('fecha_salida', { ascending: false })
+      .limit(5),
+    supabase
+      .from('modulos')
+      .select('*')
+      .eq('serie', serie),
+  ])
+
+  if (respuestaHistorial.error || respuestaActivos.error) {
+    alert((respuestaHistorial.error || respuestaActivos.error).message)
+    return
+  }
+
+  const activos = (respuestaActivos.data || []).map((modulo) => ({
+    ...modulo,
+    esActual: true,
+  }))
+
+  setResultadoBusqueda([...activos, ...(respuestaHistorial.data || [])])
+  setBusquedaRealizada(true)
 }
 
 function exportarHistorialExcelHandler() {
@@ -1035,9 +1116,12 @@ const terminadosMes = historial.filter((x) => {
                       key={modulo.id}
                       style={{ padding: '9px 0', borderBottom: '1px solid #444' }}
                     >
-                      <strong>Línea {modulo.linea}</strong>
-                      {' · '}{modulo.serie}
-                      {modulo.posicion ? ` · Posición ${modulo.posicion}` : ''}
+                      <strong style={{ display: 'block' }}>
+                        LÍNEA {modulo.linea}
+                      </strong>
+                      <span style={{ display: 'block', marginTop: '2px', fontSize: '13px', color: '#ccc' }}>
+                        {solicitantesPendientes[modulo.id] || 'Cargando...'} - {modulo.serie}
+                      </span>
                     </div>
                   ))
                 )}
@@ -1254,9 +1338,13 @@ const terminadosMes = historial.filter((x) => {
 
 </div>
 
+  {busquedaRealizada && resultadoBusqueda.length === 0 && (
+    <p style={{ marginTop: '12px' }}>No se encontraron registros para esa serie.</p>
+  )}
+
   {resultadoBusqueda.map((item) => (
     <div
-      key={item.id}
+      key={`${item.esActual ? 'actual' : 'historial'}-${item.id}`}
       style={{
         marginTop: '10px',
         padding: '10px',
@@ -1269,8 +1357,16 @@ const terminadosMes = historial.filter((x) => {
 
       <div>
         <strong>Fecha prueba:</strong>{' '}
-        {new Date(item.fecha_salida).toLocaleDateString()}
+        {item.fecha_prueba_electrica
+          ? new Date(item.fecha_prueba_electrica).toLocaleDateString('es-CL')
+          : 'Sin registro'}
       </div>
+
+      {item.esActual && (
+        <div style={{ marginTop: '4px', color: '#81c784', fontWeight: 700 }}>
+          (Actualmente en línea {item.linea})
+        </div>
+      )}
 
       <div>
         <strong>Proyecto:</strong> {item.proyecto}
