@@ -85,6 +85,7 @@ const [notificacion, setNotificacion] = useState(null)
 const [moduloEnDrag, setModuloEnDrag] = useState(null)
 const [notaEditada, setNotaEditada] = useState('')
 const [nombreSolicitante, setNombreSolicitante] = useState('')
+const [rolSolicitante, setRolSolicitante] = useState('')
 const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
 const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
 const ocultarEspaciosVacios = ['electrico', 'visor', 'control_calidad'].includes(perfil?.rol)
@@ -438,6 +439,7 @@ async function cargarNombreSolicitante(idSolicitante, moduloId) {
     if (errorModulo) {
       console.error(errorModulo)
       setNombreSolicitante('No disponible')
+      setRolSolicitante('')
       return
     }
 
@@ -446,22 +448,25 @@ async function cargarNombreSolicitante(idSolicitante, moduloId) {
 
   if (!solicitanteId) {
     setNombreSolicitante('No disponible')
+    setRolSolicitante('')
     return
   }
 
   const { data, error } = await supabase
     .from('perfiles')
-    .select('nombre')
+    .select('nombre, rol')
     .eq('id', solicitanteId)
     .single()
 
   if (error) {
     console.error(error)
     setNombreSolicitante('No disponible')
+    setRolSolicitante('')
     return
   }
 
   setNombreSolicitante(data?.nombre || 'No disponible')
+  setRolSolicitante(data?.rol || '')
 }
 
 
@@ -999,6 +1004,7 @@ const terminadosMes = historial.filter((x) => {
 
                   if (pos.serie) {
                     setNombreSolicitante('')
+                    setRolSolicitante('')
                     setModuloSeleccionado(pos)
                     setSerieEditada(pos.serie)
                     setTipoEditado(pos.tipo)
@@ -1129,6 +1135,7 @@ const terminadosMes = historial.filter((x) => {
   if (pos.serie) {
 
     setNombreSolicitante('')
+    setRolSolicitante('')
 
     setModuloSeleccionado(pos)
 
@@ -1239,6 +1246,7 @@ const terminadosMes = historial.filter((x) => {
           <p style={{ marginBottom: '20px' }}>
             <strong>Solicitado por:</strong>{' '}
             {nombreSolicitante || 'Cargando...'}
+            {rolSolicitante && ` (${rolSolicitante})`}
           </p>
 
           <button
