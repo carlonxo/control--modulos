@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from './services/supabase'
 import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
@@ -197,10 +197,17 @@ const [rolSolicitante, setRolSolicitante] = useState('')
 const [formulariosElectricos, setFormulariosElectricos] = useState({})
 const [mostrarResumenMateriales, setMostrarResumenMateriales] = useState(false)
 const [cargandoMateriales, setCargandoMateriales] = useState(false)
+const [avisoPruebaElectrica, setAvisoPruebaElectrica] = useState(null)
+const [mostrarLlamadosPendientes, setMostrarLlamadosPendientes] = useState(false)
+const solicitudesPendientesRef = useRef(new Set())
 const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
 const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
 const ocultarEspaciosVacios = ['electrico', 'visor', 'control_calidad'].includes(perfil?.rol)
 const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
+const recibeAvisosPrueba = ['admin', 'control_calidad', 'operador'].includes(perfil?.rol)
+const llamadosPendientes = datos.filter(
+  (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
+)
 const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
 const resumenMateriales = Object.entries(materialesModuloSeleccionado)
   .map(([material, valor]) => {
@@ -219,6 +226,13 @@ useEffect(() => {
 
   return () => window.clearTimeout(timer)
 }, [notificacion])
+
+useEffect(() => {
+  if (!avisoPruebaElectrica) return
+
+  const timer = window.setTimeout(() => setAvisoPruebaElectrica(null), 6000)
+  return () => window.clearTimeout(timer)
+}, [avisoPruebaElectrica])
 
 function mostrarNotificacion(mensaje) {
   setNotificacion(mensaje)
@@ -264,14 +278,35 @@ useEffect(() => {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'modulos' },
-      () => cargarTablero()
+      (cambio) => {
+        const moduloActualizado = cambio.new
+
+        if (
+          recibeAvisosPrueba &&
+          esSolicitudPruebaActiva(moduloActualizado?.solicitud_prueba) &&
+          !solicitudesPendientesRef.current.has(moduloActualizado.id)
+        ) {
+          setAvisoPruebaElectrica({
+            linea: moduloActualizado.linea,
+            id: moduloActualizado.id,
+          })
+        }
+
+        if (esSolicitudPruebaActiva(moduloActualizado?.solicitud_prueba)) {
+          solicitudesPendientesRef.current.add(moduloActualizado.id)
+        } else if (moduloActualizado?.id) {
+          solicitudesPendientesRef.current.delete(moduloActualizado.id)
+        }
+
+        cargarTablero()
+      }
     )
     .subscribe()
 
   return () => {
     supabase.removeChannel(canalModulos)
   }
-}, [])
+}, [perfil?.rol, recibeAvisosPrueba])
 
 if (!session) {
   return <Login />
@@ -327,6 +362,12 @@ async function cargarPerfil() {
       nota: row.nota || notaMap.get(row.id) || '',
       solicitud_prueba: esSolicitudPruebaActiva(row.solicitud_prueba),
     }))
+
+    solicitudesPendientesRef.current = new Set(
+      mergedData
+        .filter((modulo) => esSolicitudPruebaActiva(modulo.solicitud_prueba))
+        .map((modulo) => modulo.id)
+    )
 
     setDatos(mergedData)
   }
@@ -889,6 +930,121 @@ const terminadosMes = historial.filter((x) => {
         <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Control de Módulos</h1>
 
         <Notificacion mensaje={notificacion} />
+
+        {recibeAvisosPrueba && avisoPruebaElectrica && (
+          <button
+            onClick={() => {
+              setMostrarLlamadosPendientes(true)
+              setAvisoPruebaElectrica(null)
+            }}
+            style={{
+              position: 'fixed',
+              top: '14px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 'calc(100vw - 32px)',
+              maxWidth: '420px',
+              padding: '14px 18px',
+              background: '#f57c00',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
+              zIndex: 3000,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Prueba eléctrica línea {avisoPruebaElectrica.linea}
+          </button>
+        )}
+
+        {recibeAvisosPrueba && (
+          <>
+            <button
+              aria-label="Ver llamados a prueba eléctrica pendientes"
+              onClick={() => setMostrarLlamadosPendientes((visible) => !visible)}
+              style={{
+                position: 'fixed',
+                left: '12px',
+                bottom: '20px',
+                width: '52px',
+                height: '52px',
+                borderRadius: '50%',
+                border: '2px solid white',
+                background: '#1976d2',
+                color: 'white',
+                fontSize: '24px',
+                zIndex: 2500,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+              }}
+            >
+              🔔
+              {llamadosPendientes.length > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-6px',
+                    minWidth: '20px',
+                    height: '20px',
+                    padding: '0 4px',
+                    boxSizing: 'border-box',
+                    borderRadius: '10px',
+                    background: '#d32f2f',
+                    color: 'white',
+                    fontSize: '12px',
+                    lineHeight: '20px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {llamadosPendientes.length}
+                </span>
+              )}
+            </button>
+
+            {mostrarLlamadosPendientes && (
+              <div
+                style={{
+                  position: 'fixed',
+                  left: '12px',
+                  bottom: '82px',
+                  width: 'calc(100vw - 24px)',
+                  maxWidth: '360px',
+                  maxHeight: '60vh',
+                  overflowY: 'auto',
+                  padding: '16px',
+                  boxSizing: 'border-box',
+                  border: '1px solid white',
+                  borderRadius: '10px',
+                  background: '#222',
+                  color: 'white',
+                  textAlign: 'left',
+                  zIndex: 2499,
+                  boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+                }}
+              >
+                <h3 style={{ margin: '0 0 12px' }}>Pruebas pendientes</h3>
+
+                {llamadosPendientes.length === 0 ? (
+                  <p>No hay llamados pendientes.</p>
+                ) : (
+                  llamadosPendientes.map((modulo) => (
+                    <div
+                      key={modulo.id}
+                      style={{ padding: '9px 0', borderBottom: '1px solid #444' }}
+                    >
+                      <strong>Línea {modulo.linea}</strong>
+                      {' · '}{modulo.serie}
+                      {modulo.posicion ? ` · Posición ${modulo.posicion}` : ''}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         <button
   onClick={() => supabase.auth.signOut()}
