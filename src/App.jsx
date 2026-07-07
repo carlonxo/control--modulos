@@ -4,6 +4,10 @@ import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
 import { obtenerHistorial } from './services/modulosService'
 
+function esSolicitudPruebaActiva(valor) {
+  return valor === true || valor === 'true' || valor === 1
+}
+
 
 function Login() {
   const [email, setEmail] = useState('')
@@ -84,6 +88,7 @@ const [nombreSolicitante, setNombreSolicitante] = useState('')
 const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
 const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
 const ocultarEspaciosVacios = ['electrico', 'visor', 'control_calidad'].includes(perfil?.rol)
+const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
 
 useEffect(() => {
   if (!notificacion) return
@@ -183,6 +188,7 @@ async function cargarPerfil() {
     const mergedData = (tableroData || []).map((row) => ({
       ...row,
       nota: row.nota || notaMap.get(row.id) || '',
+      solicitud_prueba: esSolicitudPruebaActiva(row.solicitud_prueba),
     }))
 
     setDatos(mergedData)
@@ -932,7 +938,7 @@ const terminadosMes = historial.filter((x) => {
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
-                className={pos.solicitud_prueba ? 'modulo-prueba-pendiente' : undefined}
+                className={esSolicitudPruebaActiva(pos.solicitud_prueba) ? 'modulo-prueba-pendiente' : undefined}
                 draggable={pos.serie ? true : false}
                 onDragStart={() => pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
@@ -969,7 +975,7 @@ const terminadosMes = historial.filter((x) => {
                     setPosicionEditada(pos.posicion)
                     setNotaEditada(pos.nota || '')
 
-                    if (pos.solicitud_prueba) {
+                    if (esSolicitudPruebaActiva(pos.solicitud_prueba)) {
                       cargarNombreSolicitante(pos.solicitado_por)
                     }
                   } else {
@@ -1060,7 +1066,7 @@ const terminadosMes = historial.filter((x) => {
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
-                className={pos.solicitud_prueba ? 'modulo-prueba-pendiente' : undefined}
+                className={esSolicitudPruebaActiva(pos.solicitud_prueba) ? 'modulo-prueba-pendiente' : undefined}
                 draggable={pos.serie ? true : false}
                 onDragStart={() => pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
@@ -1101,7 +1107,7 @@ const terminadosMes = historial.filter((x) => {
     setPosicionEditada(pos.posicion)
     setNotaEditada(pos.nota || '')
 
-    if (pos.solicitud_prueba) {
+    if (esSolicitudPruebaActiva(pos.solicitud_prueba)) {
       cargarNombreSolicitante(pos.solicitado_por)
     }
 
@@ -1173,7 +1179,77 @@ const terminadosMes = historial.filter((x) => {
 )}
       
 
-      {moduloSeleccionado && (
+      {esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba) && puedeResolverPrueba && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 'calc(100vw - 32px)',
+            maxWidth: '380px',
+            maxHeight: 'calc(100vh - 32px)',
+            overflowY: 'auto',
+            boxSizing: 'border-box',
+            background: '#222',
+            padding: '20px',
+            border: '2px solid orange',
+            borderRadius: '10px',
+            zIndex: 1100,
+            color: 'white',
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>⚠ PRUEBA ELÉCTRICA SOLICITADA</h2>
+          <p style={{ marginBottom: '8px' }}>
+            <strong>Módulo:</strong> {moduloSeleccionado.serie}
+          </p>
+          <p style={{ marginBottom: '20px' }}>
+            <strong>Solicitado por:</strong>{' '}
+            {nombreSolicitante || 'Cargando...'}
+          </p>
+
+          <button
+            onClick={aprobarPruebaElectrica}
+            style={{
+              width: '100%',
+              padding: '12px',
+              backgroundColor: '#2e7d32',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            ✔ Aprobar prueba
+          </button>
+
+          <button
+            onClick={rechazarPruebaElectrica}
+            style={{
+              width: '100%',
+              marginTop: '10px',
+              padding: '12px',
+              backgroundColor: '#c62828',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            ✖ Rechazar solicitud
+          </button>
+
+          <button
+            onClick={limpiarEstadosModal}
+            style={{ width: '100%', marginTop: '10px', padding: '12px' }}
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      {moduloSeleccionado &&
+       !(esSolicitudPruebaActiva(moduloSeleccionado.solicitud_prueba) && puedeResolverPrueba) && (
   <div
     style={{
       position: 'fixed',
@@ -1350,7 +1426,7 @@ const terminadosMes = historial.filter((x) => {
       </button>
 
        {perfil?.rol === 'electrico' && (
-  moduloSeleccionado?.solicitud_prueba ? (
+  esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba) ? (
     <button
       disabled
       style={{
@@ -1377,59 +1453,6 @@ const terminadosMes = historial.filter((x) => {
       ⚡ Solicitar Prueba Eléctrica
     </button>
   )
-)}
-{['admin', 'control_calidad'].includes(perfil?.rol) &&
- moduloSeleccionado?.solicitud_prueba && (
-  <div
-    style={{
-      marginTop: '20px',
-      marginBottom: '20px',
-      padding: '15px',
-      border: '2px solid orange',
-      borderRadius: '8px',
-      backgroundColor: '#333',
-    }}
-  >
-    <h3 style={{ marginTop: 0 }}>
-      ⚠ PRUEBA ELÉCTRICA SOLICITADA
-    </h3>
-
-    <p>
-      <strong>Solicitado por:</strong>{' '}
-      {nombreSolicitante || 'Cargando...'}
-    </p>
-
-    <button
-      onClick={aprobarPruebaElectrica}
-      style={{
-        width: '100%',
-        padding: '10px',
-        backgroundColor: '#2e7d32',
-        color: 'white',
-        border: 'none',
-        borderRadius: '6px',
-        cursor: 'pointer',
-      }}
-    >
-      ✔ Aprobar prueba
-    </button>
-
-    <button
-      onClick={rechazarPruebaElectrica}
-      style={{
-        width: '100%',
-        marginTop: '10px',
-        padding: '10px',
-        backgroundColor: '#c62828',
-        color: 'white',
-        border: 'none',
-        borderRadius: '6px',
-        cursor: 'pointer',
-      }}
-    >
-      ✖ Rechazar solicitud
-    </button>
-  </div>
 )}
       <button
         onClick={limpiarEstadosModal}
