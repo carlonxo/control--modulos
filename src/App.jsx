@@ -52,31 +52,57 @@ function FormularioElectrico({ valores, onChange }) {
           </summary>
 
           <div style={{ padding: '6px 10px' }}>
-            {seccion.items.map((item) => (
-              <label
-                key={item}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1fr) 72px',
-                  gap: '10px',
-                  alignItems: 'center',
-                  padding: '7px 0',
-                  borderBottom: '1px solid #444',
-                }}
-              >
-                <span style={{ lineHeight: 1.2 }}>{item}</span>
-                <input
-                  type="number"
-                  min="0"
-                  inputMode="numeric"
-                  aria-label={`Cantidad de ${item}`}
-                  placeholder="Cant."
-                  value={valores[item] ?? ''}
-                  onChange={(e) => onChange(item, e.target.value)}
-                  style={{ width: '100%', padding: '8px 6px', boxSizing: 'border-box' }}
-                />
-              </label>
-            ))}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) 64px 76px',
+                gap: '7px',
+                padding: '4px 0',
+                fontSize: '12px',
+                fontWeight: 700,
+                textAlign: 'center',
+              }}
+            >
+              <span />
+              <span>Nuevo</span>
+              <span>Reutilizado</span>
+            </div>
+
+            {seccion.items.map((item) => {
+              const valorGuardado = valores[item]
+              const cantidades =
+                valorGuardado && typeof valorGuardado === 'object'
+                  ? valorGuardado
+                  : { nuevo: valorGuardado ?? '', reutilizado: '' }
+
+              return (
+                <div
+                  key={item}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) 64px 76px',
+                    gap: '7px',
+                    alignItems: 'center',
+                    padding: '7px 0',
+                    borderBottom: '1px solid #444',
+                  }}
+                >
+                  <span style={{ lineHeight: 1.2 }}>{item}</span>
+                  {['nuevo', 'reutilizado'].map((tipo) => (
+                    <input
+                      key={tipo}
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      aria-label={`${tipo} de ${item}`}
+                      value={cantidades[tipo] ?? ''}
+                      onChange={(e) => onChange(item, tipo, e.target.value)}
+                      style={{ width: '100%', padding: '8px 5px', boxSizing: 'border-box' }}
+                    />
+                  ))}
+                </div>
+              )
+            })}
           </div>
         </details>
       ))}
@@ -170,9 +196,15 @@ const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
 const ocultarEspaciosVacios = ['electrico', 'visor', 'control_calidad'].includes(perfil?.rol)
 const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
 const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
-const resumenMateriales = Object.entries(materialesModuloSeleccionado).filter(
-  ([, cantidad]) => cantidad !== '' && Number(cantidad) > 0
-)
+const resumenMateriales = Object.entries(materialesModuloSeleccionado)
+  .map(([material, valor]) => {
+    const cantidades = valor && typeof valor === 'object'
+      ? valor
+      : { nuevo: valor ?? '', reutilizado: '' }
+
+    return [material, cantidades.nuevo || 0, cantidades.reutilizado || 0]
+  })
+  .filter(([, nuevo, reutilizado]) => Number(nuevo) > 0 || Number(reutilizado) > 0)
 
 useEffect(() => {
   if (!notificacion) return
@@ -1503,7 +1535,7 @@ const terminadosMes = historial.filter((x) => {
 
         <FormularioElectrico
           valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
-          onChange={(item, valor) => {
+          onChange={(item, tipo, valor) => {
             const moduloId = moduloSeleccionado?.id
             if (!moduloId) return
 
@@ -1511,7 +1543,14 @@ const terminadosMes = historial.filter((x) => {
               ...actuales,
               [moduloId]: {
                 ...(actuales[moduloId] || {}),
-                [item]: valor,
+                [item]: {
+                  ...(
+                    typeof actuales[moduloId]?.[item] === 'object'
+                      ? actuales[moduloId][item]
+                      : { nuevo: actuales[moduloId]?.[item] || '', reutilizado: '' }
+                  ),
+                  [tipo]: valor,
+                },
               },
             }))
           }}
@@ -1739,19 +1778,36 @@ const terminadosMes = historial.filter((x) => {
       <p>No hay materiales registrados.</p>
     ) : (
       <div style={{ display: 'grid', gap: '8px' }}>
-        {resumenMateriales.map(([material, cantidad]) => (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) 64px 76px',
+            gap: '7px',
+            fontSize: '12px',
+            fontWeight: 700,
+            textAlign: 'center',
+          }}
+        >
+          <span />
+          <span>Nuevo</span>
+          <span>Reutilizado</span>
+        </div>
+
+        {resumenMateriales.map(([material, nuevo, reutilizado]) => (
           <div
             key={material}
             style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: '16px',
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) 64px 76px',
+              gap: '7px',
               paddingBottom: '8px',
               borderBottom: '1px solid #444',
+              alignItems: 'center',
             }}
           >
             <span>{material}</span>
-            <strong>{cantidad}</strong>
+            <strong style={{ textAlign: 'center' }}>{nuevo || '—'}</strong>
+            <strong style={{ textAlign: 'center' }}>{reutilizado || '—'}</strong>
           </div>
         ))}
       </div>
