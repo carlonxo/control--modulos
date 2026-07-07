@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
-import { supabase } from './supabase'
-import * as XLSX from 'xlsx'
+import { supabase } from './services/supabase'
+import { exportarHistorialExcel } from './services/exportarExcel'
+import Notificacion from './components/Notificacion'
+import { obtenerHistorial } from './services/modulosService'
+
+
 function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -76,6 +80,8 @@ const [mostrarVistaGeneral, setMostrarVistaGeneral] = useState(false)
 const [notificacion, setNotificacion] = useState(null)
 const [moduloEnDrag, setModuloEnDrag] = useState(null)
 const [notaEditada, setNotaEditada] = useState('')
+const [nombreSolicitante, setNombreSolicitante] = useState('')
+const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
 
 useEffect(() => {
   if (!notificacion) return
@@ -101,7 +107,6 @@ useEffect(() => {
       setSession(session)
     }
   )
-console.log('PERFIL ACTUAL:', perfil)
   return () => subscription.unsubscribe()
 }, [])
 
@@ -182,16 +187,12 @@ async function cargarPerfil() {
   }
 
   async function cargarHistorial() {
-  const { data, error } = await supabase
-    .from('historial_modulos')
-    .select('*')
-
-  if (error) {
-    console.error('Error cargando historial:', error)
-    return
+  try {
+    const data = await obtenerHistorial()
+    setHistorial(data || [])
+  } catch (error) {
+    console.error(error)
   }
-
-  setHistorial(data || [])
 }
 
 async function buscarSerie() {
@@ -210,91 +211,8 @@ async function buscarSerie() {
   setResultadoBusqueda(data || [])
 }
 
-function exportarHistorialExcel() {
-  console.log('🔥 EXPORTACIÓN EJECUTADA')
-  console.log('fechaDesde (string):', fechaDesde)
-  console.log('fechaHasta (string):', fechaHasta)
-  console.log('desde Date:', new Date(fechaDesde))
-  console.log('hasta Date:', new Date(fechaHasta))
-  
-  if (!historial || historial.length === 0) {
-    alert('No hay datos para exportar')
-    return
-  }
-console.log("Historial completo:", historial);
-console.log(
-  "Series:",
-  historial.map(x => x.serie)
-);
-  const parseLocalDate = (value) => {
-    if (!value) return null
-    const parts = String(value).split('-').map(Number)
-    if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) return null
-    return new Date(parts[0], parts[1] - 1, parts[2])
-  }
-
-  const filtrado = historial.filter((item) => {
-    const fecha = new Date(item.fecha_ingreso)
-
-    const desde = fechaDesde ? parseLocalDate(fechaDesde) : null
-    const hasta = fechaHasta ? parseLocalDate(fechaHasta) : null
-
-    if (desde) {
-      desde.setHours(0, 0, 0, 0)
-    }
-
-    if (hasta) {
-      hasta.setHours(23, 59, 59, 999)
-    }
-
-    console.log({
-      serie: item.serie,
-      fecha,
-      desde,
-      hasta,
-    })
-    if (desde && fecha < desde) return false
-    if (hasta && fecha > hasta) return false
-
-    return true
-  })
-
-  if (filtrado.length === 0) {
-    alert('No hay registros en ese rango de fechas')
-    return
-  }
-console.log("Series filtradas:", filtrado.map(x => x.serie));
-  const formatearFecha = (fecha) => {
-    if (!fecha) return ''
-    const d = new Date(fecha)
-    const dia = String(d.getDate()).padStart(2, '0')
-    const mes = String(d.getMonth() + 1).padStart(2, '0')
-    const anio = d.getFullYear()
-    return `${dia}/${mes}/${anio}`
-  }
-
-  const datosExcel = filtrado.map((item) => ({
-    Serie: item.serie,
-    Tipo: item.tipo,
-    Proyecto: item.proyecto,
-    Responsable: item.responsable,
-    Estado: item.estado,
-    Linea: item.linea,
-    Posicion: item.posicion,
-    FechaIngreso: formatearFecha(item.fecha_ingreso),
-    FechaSalida: formatearFecha(item.fecha_salida),
-    'Fecha Prueba Eléctrica': formatearFecha(item.fecha_prueba_electrica),
-  }))
-
-  const worksheet = XLSX.utils.json_to_sheet(datosExcel)
-  const workbook = XLSX.utils.book_new()
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Historial')
-
-  XLSX.writeFile(
-    workbook,
-    `Historial_${fechaDesde || 'inicio'}_${fechaHasta || 'actual'}.xlsx`
-  )
+function exportarHistorialExcelHandler() {
+  exportarHistorialExcel(historial, fechaDesde, fechaHasta)
 }
 
 async function crearModulo() {
@@ -352,15 +270,17 @@ function limpiarEstadosModal() {
   const shouldSetFechaPrueba =
     isPruebaElectrica && moduloSeleccionado?.estado !== 'Prueba eléctrica'
 
-  const updatePayload = {
-    serie: serieEditada,
-    tipo: tipoEditado,
-    proyecto: proyectoEditado,
-    estado: estadoEditado,
-    linea: lineaEditada,
-    posicion: posicionEditada,
-    nota: notaEditada,
-  }
+  const updatePayload = esRolSoloLectura
+    ? { nota: notaEditada }
+    : {
+        serie: serieEditada,
+        tipo: tipoEditado,
+        proyecto: proyectoEditado,
+        estado: estadoEditado,
+        linea: lineaEditada,
+        posicion: posicionEditada,
+        nota: notaEditada,
+      }
 
   console.log('GUARDANDO CAMBIOS:', {
     moduloId: moduloSeleccionado?.id,
@@ -405,7 +325,101 @@ console.log({
   limpiarEstadosModal()
 
   mostrarNotificacion('Cambios guardados correctamente')
-}async function finalizarModulo() {
+}
+
+async function solicitarPruebaElectrica() {
+  const usuario = session?.user
+
+  if (!usuario || !moduloSeleccionado?.id) {
+    mostrarNotificacion('No se pudo identificar al usuario o al módulo')
+    return
+  }
+
+  const { error } = await supabase
+    .from('modulos')
+    .update({
+      solicitud_prueba: true,
+      solicitado_por: usuario.id,
+      fecha_solicitud: new Date().toISOString(),
+    })
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    mostrarNotificacion(error.message)
+    return
+  }
+
+  await cargarTablero()
+
+  setModuloSeleccionado(null)
+
+  mostrarNotificacion('Solicitud de prueba eléctrica enviada')
+}
+
+async function aprobarPruebaElectrica() {
+  if (!moduloSeleccionado?.id) return
+
+  const { error } = await supabase
+    .from('modulos')
+    .update({
+      solicitud_prueba: false,
+      estado: 'Prueba eléctrica',
+      fecha_prueba_electrica: new Date().toISOString(),
+    })
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    mostrarNotificacion(error.message)
+    return
+  }
+
+  await cargarTablero()
+  limpiarEstadosModal()
+  mostrarNotificacion('Prueba eléctrica aprobada')
+}
+
+async function rechazarPruebaElectrica() {
+  if (!moduloSeleccionado?.id) return
+
+  const { error } = await supabase
+    .from('modulos')
+    .update({ solicitud_prueba: false })
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    mostrarNotificacion(error.message)
+    return
+  }
+
+  await cargarTablero()
+  limpiarEstadosModal()
+  mostrarNotificacion('Solicitud de prueba eléctrica rechazada')
+}
+
+
+async function cargarNombreSolicitante(idSolicitante) {
+  if (!idSolicitante) {
+    setNombreSolicitante('')
+    return
+  }
+
+  const { data, error } = await supabase
+    .from('perfiles')
+    .select('nombre')
+    .eq('id', idSolicitante)
+    .single()
+
+  if (error) {
+    console.error(error)
+    setNombreSolicitante('')
+    return
+  }
+
+  setNombreSolicitante(data?.nombre || '')
+}
+
+
+async function finalizarModulo() {
 
   const { data: modulo, error: errorModulo } = await supabase
     .from('modulos')
@@ -418,7 +432,7 @@ console.log({
     return
   }
 
-  const { data, error: errorHistorial } = await supabase
+  const { error: errorHistorial } = await supabase
     .from('historial_modulos')
     .insert([
       {
@@ -435,7 +449,6 @@ console.log({
         posicion: modulo.posicion,
       },
     ])
-    .select()
 
   if (errorHistorial) {
     mostrarNotificacion(errorHistorial.message)
@@ -642,20 +655,7 @@ const terminadosMes = historial.filter((x) => {
       >
         <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Control de Módulos</h1>
 
-        {notificacion && (
-          <div
-            style={{
-              marginBottom: '15px',
-              padding: '10px 12px',
-              background: '#2e7d32',
-              color: 'white',
-              borderRadius: '8px',
-              maxWidth: '400px',
-            }}
-          >
-            {notificacion}
-          </div>
-        )}
+        <Notificacion mensaje={notificacion} />
 
         <button
   onClick={() => supabase.auth.signOut()}
@@ -858,7 +858,7 @@ const terminadosMes = historial.filter((x) => {
 
   <button
     type="button"
-    onClick={exportarHistorialExcel}
+    onClick={exportarHistorialExcelHandler}
   >
     Exportar Excel
   </button>
@@ -924,6 +924,7 @@ const terminadosMes = historial.filter((x) => {
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
+                className={pos.solicitud_prueba ? 'modulo-prueba-pendiente' : undefined}
                 draggable={pos.serie ? true : false}
                 onDragStart={() => pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
@@ -950,6 +951,7 @@ const terminadosMes = historial.filter((x) => {
                   console.log('CLICK POSICION', pos)
 
                   if (pos.serie) {
+                    setNombreSolicitante('')
                     setModuloSeleccionado(pos)
                     setSerieEditada(pos.serie)
                     setTipoEditado(pos.tipo)
@@ -958,6 +960,10 @@ const terminadosMes = historial.filter((x) => {
                     setLineaEditada(pos.linea)
                     setPosicionEditada(pos.posicion)
                     setNotaEditada(pos.nota || '')
+
+                    if (pos.solicitud_prueba) {
+                      cargarNombreSolicitante(pos.solicitado_por)
+                    }
                   } else {
                     console.log('POSICION VACIA')
                     setPosicionSeleccionada(pos)
@@ -1043,6 +1049,7 @@ const terminadosMes = historial.filter((x) => {
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
+                className={pos.solicitud_prueba ? 'modulo-prueba-pendiente' : undefined}
                 draggable={pos.serie ? true : false}
                 onDragStart={() => pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
@@ -1065,24 +1072,37 @@ const terminadosMes = historial.filter((x) => {
                 onDragEnd={() => {
                   setModuloEnDrag(null)
                 }}
-                onClick={() => {
-                  console.log('CLICK POSICION', pos)
 
-                  if (pos.serie) {
-                    setModuloSeleccionado(pos)
-                    setSerieEditada(pos.serie)
-                    setTipoEditado(pos.tipo)
-                    setProyectoEditado(pos.proyecto)
-                    setEstadoEditado(pos.estado)
-                    setLineaEditada(pos.linea)
-                    setPosicionEditada(pos.posicion)
-                    setNotaEditada(pos.nota || '')
-                  } else {
-                    console.log('POSICION VACIA')
-                    setPosicionSeleccionada(pos)
-                    setMostrarNuevoModulo(true)
-                  }
-                }}
+                onClick={() => {
+  console.log('CLICK POSICION', pos)
+
+  if (pos.serie) {
+
+    setNombreSolicitante('')
+
+    setModuloSeleccionado(pos)
+
+    setSerieEditada(pos.serie)
+    setTipoEditado(pos.tipo)
+    setProyectoEditado(pos.proyecto)
+    setEstadoEditado(pos.estado)
+    setLineaEditada(pos.linea)
+    setPosicionEditada(pos.posicion)
+    setNotaEditada(pos.nota || '')
+
+    if (pos.solicitud_prueba) {
+      cargarNombreSolicitante(pos.solicitado_por)
+    }
+
+  } else {
+
+    console.log('POSICION VACIA')
+
+    setPosicionSeleccionada(pos)
+    setMostrarNuevoModulo(true)
+
+  }
+}}
                 style={{
                   width: '150px',
                   minHeight: '120px',
@@ -1181,7 +1201,7 @@ const terminadosMes = historial.filter((x) => {
   <input
     value={serieEditada}
     onChange={(e) => setSerieEditada(e.target.value)}
-    disabled={perfil?.rol === 'visor'}
+    disabled={esRolSoloLectura}
     style={{
       width: '100%',
       padding: '8px',
@@ -1196,7 +1216,7 @@ const terminadosMes = historial.filter((x) => {
   <input
     value={tipoEditado}
     onChange={(e) => setTipoEditado(e.target.value)}
-    disabled={perfil?.rol === 'visor'}
+    disabled={esRolSoloLectura}
     style={{
       width: '100%',
       padding: '8px',
@@ -1211,7 +1231,7 @@ const terminadosMes = historial.filter((x) => {
   <input
     value={proyectoEditado}
     onChange={(e) => setProyectoEditado(e.target.value)}
-    disabled={perfil?.rol === 'visor'}
+    disabled={esRolSoloLectura}
     style={{
       width: '100%',
       padding: '8px',
@@ -1235,7 +1255,7 @@ const terminadosMes = historial.filter((x) => {
   />
 </div>
 
-    {perfil?.rol !== 'visor' && (
+    {!esRolSoloLectura && (
       <>
         <div style={{ marginBottom: '10px' }}>
           <strong>Estado</strong>
@@ -1243,7 +1263,7 @@ const terminadosMes = historial.filter((x) => {
           <select
             value={estadoEditado}
             onChange={(e) => setEstadoEditado(e.target.value)}
-            disabled={perfil?.rol === 'visor'}
+            disabled={esRolSoloLectura}
             style={{
               width: '100%',
               padding: '8px',
@@ -1313,9 +1333,91 @@ const terminadosMes = historial.filter((x) => {
           flex: 1,
         }}
       >
-        {perfil?.rol === 'visor' ? 'Guardar nota' : 'Guardar cambios'}
+        {esRolSoloLectura ? 'Guardar nota' : 'Guardar cambios'}
       </button>
 
+       {perfil?.rol === 'electrico' && (
+  moduloSeleccionado?.solicitud_prueba ? (
+    <button
+      disabled
+      style={{
+        backgroundColor: '#ff9800',
+        color: 'white',
+        padding: '10px',
+        flex: 1,
+        opacity: 0.8,
+        cursor: 'not-allowed',
+      }}
+    >
+      🟡 Esperando aprobación
+    </button>
+  ) : (
+    <button
+      onClick={solicitarPruebaElectrica}
+      style={{
+        backgroundColor: '#1976d2',
+        color: 'white',
+        padding: '10px',
+        flex: 1,
+      }}
+    >
+      ⚡ Solicitar Prueba Eléctrica
+    </button>
+  )
+)}
+{['admin', 'control_calidad'].includes(perfil?.rol) &&
+ moduloSeleccionado?.solicitud_prueba && (
+  <div
+    style={{
+      marginTop: '20px',
+      marginBottom: '20px',
+      padding: '15px',
+      border: '2px solid orange',
+      borderRadius: '8px',
+      backgroundColor: '#333',
+    }}
+  >
+    <h3 style={{ marginTop: 0 }}>
+      ⚠ PRUEBA ELÉCTRICA SOLICITADA
+    </h3>
+
+    <p>
+      <strong>Solicitado por:</strong>{' '}
+      {nombreSolicitante || 'Cargando...'}
+    </p>
+
+    <button
+      onClick={aprobarPruebaElectrica}
+      style={{
+        width: '100%',
+        padding: '10px',
+        backgroundColor: '#2e7d32',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        cursor: 'pointer',
+      }}
+    >
+      ✔ Aprobar prueba
+    </button>
+
+    <button
+      onClick={rechazarPruebaElectrica}
+      style={{
+        width: '100%',
+        marginTop: '10px',
+        padding: '10px',
+        backgroundColor: '#c62828',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        cursor: 'pointer',
+      }}
+    >
+      ✖ Rechazar solicitud
+    </button>
+  </div>
+)}
       <button
         onClick={limpiarEstadosModal}
         style={{
@@ -1331,7 +1433,7 @@ const terminadosMes = historial.filter((x) => {
 
 {mostrarKPI && (
   <div className="kpi-grid">
-    ...
+    <div style={{ color: '#ccc' }}>KPIs próximos a implementarse</div>
   </div>
 )}
 
