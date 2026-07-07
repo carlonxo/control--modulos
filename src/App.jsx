@@ -8,6 +8,12 @@ function esSolicitudPruebaActiva(valor) {
   return valor === true || valor === 'true' || valor === 1
 }
 
+function esEstadoPruebaElectrica(estado) {
+  return ['prueba eléctrica', 'prueba electrica'].includes(
+    String(estado || '').trim().toLowerCase()
+  )
+}
+
 const seccionesFormularioElectrico = [
   {
     nombre: 'Canalización',
@@ -480,6 +486,11 @@ console.log({
 async function solicitarPruebaElectrica() {
   const usuario = session?.user
 
+  if (esEstadoPruebaElectrica(moduloSeleccionado?.estado)) {
+    mostrarNotificacion('Este módulo ya tiene la prueba eléctrica aprobada')
+    return
+  }
+
   if (!usuario || !moduloSeleccionado?.id) {
     mostrarNotificacion('No se pudo identificar al usuario o al módulo')
     return
@@ -507,6 +518,24 @@ async function solicitarPruebaElectrica() {
   setModuloSeleccionado(null)
 
   mostrarNotificacion('Solicitud de prueba eléctrica enviada')
+}
+
+async function cancelarSolicitudPruebaElectrica() {
+  if (!moduloSeleccionado?.id) return
+
+  const { error } = await supabase
+    .from('modulos')
+    .update({ solicitud_prueba: false })
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    mostrarNotificacion(error.message)
+    return
+  }
+
+  await cargarTablero()
+  limpiarEstadosModal()
+  mostrarNotificacion('Solicitud de prueba eléctrica cancelada')
 }
 
 async function aprobarPruebaElectrica() {
@@ -1700,19 +1729,35 @@ const terminadosMes = historial.filter((x) => {
       </button>
 
        {['electrico', 'operador'].includes(perfil?.rol) && (
-  esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba) ? (
+  esEstadoPruebaElectrica(moduloSeleccionado?.estado) ? (
     <button
       disabled
+      style={{
+        backgroundColor: '#388e3c',
+        color: 'white',
+        padding: '10px',
+        flex: 1,
+        opacity: 0.75,
+        cursor: 'not-allowed',
+      }}
+    >
+      ✓ Prueba eléctrica aprobada
+    </button>
+  ) : esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba) ? (
+    <button
+      onClick={cancelarSolicitudPruebaElectrica}
       style={{
         backgroundColor: '#ff9800',
         color: 'white',
         padding: '10px',
         flex: 1,
-        opacity: 0.8,
-        cursor: 'not-allowed',
+        cursor: 'pointer',
       }}
     >
-      🟡 Esperando aprobación
+      <span style={{ display: 'block' }}>🟡 Esperando aprobación</span>
+      <small style={{ display: 'block', marginTop: '3px' }}>
+        (presione para cancelar)
+      </small>
     </button>
   ) : (
     <button
