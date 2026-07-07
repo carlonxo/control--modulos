@@ -8,6 +8,82 @@ function esSolicitudPruebaActiva(valor) {
   return valor === true || valor === 'true' || valor === 1
 }
 
+const seccionesFormularioElectrico = [
+  {
+    nombre: 'Canalización',
+    items: ['Conduit 20mm', 'Conduit 25mm', 'Caja PVC 100x100x65', 'Caja 5/8"', 'Tapa ciega - Pasac.'],
+  },
+  {
+    nombre: 'Cableado',
+    items: ['Cable RZ1 2,5mm', 'Cable RZ1 4mm', 'Cable RZ1 6mm'],
+  },
+  {
+    nombre: 'Iluminación',
+    items: ['Ampolleta B/Conc.', 'Plafón', 'Tubo fluorescente', 'Hermético 2x40W', 'Foco tortuga 60W'],
+  },
+  {
+    nombre: 'Artefactos',
+    items: ['Artefacto simple', 'Artefacto doble', 'Artefacto triple', 'Tapa ciega artefacto', 'Ench. Ind. 32A macho', 'Ench. Ind. 32A hembra', 'Extractor'],
+  },
+  {
+    nombre: 'Tableros',
+    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Diferencial 2x25A', 'Falso polo', 'Tablero PVC emb.', 'Barra repartidora'],
+  },
+]
+
+function FormularioElectrico({ valores, onChange }) {
+  return (
+    <div style={{ display: 'grid', gap: '8px', marginBottom: '14px', textAlign: 'left' }}>
+      {seccionesFormularioElectrico.map((seccion, index) => (
+        <details
+          key={seccion.nombre}
+          defaultOpen={index === 0}
+          style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}
+        >
+          <summary
+            style={{
+              padding: '10px 12px',
+              background: '#333',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {seccion.nombre}
+          </summary>
+
+          <div style={{ padding: '6px 10px' }}>
+            {seccion.items.map((item) => (
+              <label
+                key={item}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) 72px',
+                  gap: '10px',
+                  alignItems: 'center',
+                  padding: '7px 0',
+                  borderBottom: '1px solid #444',
+                }}
+              >
+                <span style={{ lineHeight: 1.2 }}>{item}</span>
+                <input
+                  type="number"
+                  min="0"
+                  inputMode="numeric"
+                  aria-label={`Cantidad de ${item}`}
+                  placeholder="Cant."
+                  value={valores[item] ?? ''}
+                  onChange={(e) => onChange(item, e.target.value)}
+                  style={{ width: '100%', padding: '8px 6px', boxSizing: 'border-box' }}
+                />
+              </label>
+            ))}
+          </div>
+        </details>
+      ))}
+    </div>
+  )
+}
+
 
 function Login() {
   const [email, setEmail] = useState('')
@@ -86,10 +162,17 @@ const [moduloEnDrag, setModuloEnDrag] = useState(null)
 const [notaEditada, setNotaEditada] = useState('')
 const [nombreSolicitante, setNombreSolicitante] = useState('')
 const [rolSolicitante, setRolSolicitante] = useState('')
+const [formulariosElectricos, setFormulariosElectricos] = useState({})
+const [mostrarResumenMateriales, setMostrarResumenMateriales] = useState(false)
+const [cargandoMateriales, setCargandoMateriales] = useState(false)
 const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
 const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
 const ocultarEspaciosVacios = ['electrico', 'visor', 'control_calidad'].includes(perfil?.rol)
 const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
+const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
+const resumenMateriales = Object.entries(materialesModuloSeleccionado).filter(
+  ([, cantidad]) => cantidad !== '' && Number(cantidad) > 0
+)
 
 useEffect(() => {
   if (!notificacion) return
@@ -284,6 +367,7 @@ async function crearModulo() {
 }
 
 function limpiarEstadosModal() {
+  setMostrarResumenMateriales(false)
   setModuloSeleccionado(null)
   setSerieEditada('')
   setTipoEditado('')
@@ -300,7 +384,12 @@ function limpiarEstadosModal() {
     isPruebaElectrica && moduloSeleccionado?.estado !== 'Prueba eléctrica'
 
   const updatePayload = esRolSoloLectura
-    ? { nota: notaEditada }
+    ? {
+        nota: notaEditada,
+        ...(perfil?.rol === 'electrico'
+          ? { materiales: formulariosElectricos[moduloSeleccionado?.id] || {} }
+          : {}),
+      }
     : {
         serie: serieEditada,
         tipo: tipoEditado,
@@ -370,6 +459,9 @@ async function solicitarPruebaElectrica() {
       solicitud_prueba: true,
       solicitado_por: usuario.id,
       fecha_solicitud: new Date().toISOString(),
+      ...(perfil?.rol === 'electrico'
+        ? { materiales: formulariosElectricos[moduloSeleccionado.id] || {} }
+        : {}),
     })
     .eq('id', moduloSeleccionado.id)
 
@@ -467,6 +559,35 @@ async function cargarNombreSolicitante(idSolicitante, moduloId) {
 
   setNombreSolicitante(data?.nombre || 'No disponible')
   setRolSolicitante(data?.rol || '')
+}
+
+async function cargarMaterialesModulo(moduloId) {
+  if (!moduloId) return
+
+  setCargandoMateriales(true)
+  const { data, error } = await supabase
+    .from('modulos')
+    .select('materiales')
+    .eq('id', moduloId)
+    .single()
+  setCargandoMateriales(false)
+
+  if (error) {
+    console.error(error)
+    mostrarNotificacion('No se pudieron cargar los materiales')
+    return
+  }
+
+  setFormulariosElectricos((actuales) => ({
+    ...actuales,
+    [moduloId]: data?.materiales || {},
+  }))
+}
+
+async function abrirResumenMateriales() {
+  if (!moduloSeleccionado?.id) return
+  await cargarMaterialesModulo(moduloSeleccionado.id)
+  setMostrarResumenMateriales(true)
 }
 
 
@@ -1014,6 +1135,10 @@ const terminadosMes = historial.filter((x) => {
                     setPosicionEditada(pos.posicion)
                     setNotaEditada(pos.nota || '')
 
+                    if (['electrico', 'visor', 'operador', 'admin'].includes(perfil?.rol)) {
+                      cargarMaterialesModulo(pos.id)
+                    }
+
                     if (esSolicitudPruebaActiva(pos.solicitud_prueba)) {
                       cargarNombreSolicitante(pos.solicitado_por, pos.id)
                     }
@@ -1147,6 +1272,10 @@ const terminadosMes = historial.filter((x) => {
     setPosicionEditada(pos.posicion)
     setNotaEditada(pos.nota || '')
 
+    if (['electrico', 'visor', 'operador', 'admin'].includes(perfil?.rol)) {
+      cargarMaterialesModulo(pos.id)
+    }
+
     if (esSolicitudPruebaActiva(pos.solicitud_prueba)) {
       cargarNombreSolicitante(pos.solicitado_por, pos.id)
     }
@@ -1249,6 +1378,15 @@ const terminadosMes = historial.filter((x) => {
             {rolSolicitante && ` (${rolSolicitante})`}
           </p>
 
+          {perfil?.rol === 'admin' && (
+            <button
+              onClick={abrirResumenMateriales}
+              style={{ width: '100%', marginBottom: '10px', padding: '12px' }}
+            >
+              Materiales
+            </button>
+          )}
+
           <button
             onClick={aprobarPruebaElectrica}
             style={{
@@ -1301,7 +1439,11 @@ const terminadosMes = historial.filter((x) => {
       padding: '20px',
       borderRadius: '10px',
       border: '1px solid white',
-      minWidth: '350px',
+      width: 'calc(100vw - 32px)',
+      maxWidth: '420px',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
       zIndex: 1000,
       color: 'white',
     }}
@@ -1325,69 +1467,118 @@ const terminadosMes = historial.filter((x) => {
       )}
     </div>
 
-    <div style={{ marginBottom: '10px' }}>
-  <strong>Serie</strong>
-
-  <input
-    value={serieEditada}
-    onChange={(e) => setSerieEditada(e.target.value)}
-    disabled={esRolSoloLectura}
-    style={{
-      width: '100%',
-      padding: '8px',
-      marginTop: '5px',
-    }}
-  />
-</div>
-
-<div style={{ marginBottom: '10px' }}>
-  <strong>Tipo</strong>
-
-  <input
-    value={tipoEditado}
-    onChange={(e) => setTipoEditado(e.target.value)}
-    disabled={esRolSoloLectura}
-    style={{
-      width: '100%',
-      padding: '8px',
-      marginTop: '5px',
-    }}
-  />
-</div>
-
-<div style={{ marginBottom: '10px' }}>
-  <strong>Proyecto</strong>
-
-  <input
-    value={proyectoEditado}
-    onChange={(e) => setProyectoEditado(e.target.value)}
-    disabled={esRolSoloLectura}
-    style={{
-      width: '100%',
-      padding: '8px',
-      marginTop: '5px',
-    }}
-  />
-</div>
-
-<div style={{ marginBottom: '15px' }}>
-  <strong>Nota</strong>
-  <textarea
-    value={notaEditada}
-    onChange={(e) => setNotaEditada(e.target.value)}
-    rows={4}
-    style={{
-      width: '100%',
-      marginTop: '5px',
-      padding: '8px',
-      resize: 'vertical',
-    }}
-  />
-</div>
-
-    {!esRolSoloLectura && (
+    {perfil?.rol === 'electrico' ? (
       <>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+            gap: '10px 18px',
+            textAlign: 'left',
+            marginBottom: '12px',
+          }}
+        >
+          <div><strong>Serie:</strong> {serieEditada}</div>
+          <div><strong>Tipo:</strong> {tipoEditado}</div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <strong>Proyecto:</strong> {proyectoEditado}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '12px', textAlign: 'left' }}>
+          <strong>Nota:</strong>
+          <textarea
+            value={notaEditada}
+            onChange={(e) => setNotaEditada(e.target.value)}
+            rows={3}
+            style={{
+              width: '100%',
+              marginTop: '5px',
+              padding: '8px',
+              resize: 'vertical',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        <FormularioElectrico
+          valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
+          onChange={(item, valor) => {
+            const moduloId = moduloSeleccionado?.id
+            if (!moduloId) return
+
+            setFormulariosElectricos((actuales) => ({
+              ...actuales,
+              [moduloId]: {
+                ...(actuales[moduloId] || {}),
+                [item]: valor,
+              },
+            }))
+          }}
+        />
+      </>
+    ) : (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+          gap: '10px',
+          textAlign: 'left',
+        }}
+      >
         <div style={{ marginBottom: '10px' }}>
+          <strong>Serie</strong>
+          <input
+            value={serieEditada}
+            onChange={(e) => setSerieEditada(e.target.value)}
+            disabled={esRolSoloLectura}
+            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: '10px' }}>
+          <strong>Tipo</strong>
+          <input
+            value={tipoEditado}
+            onChange={(e) => setTipoEditado(e.target.value)}
+            disabled={esRolSoloLectura}
+            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
+          <strong>Proyecto</strong>
+          <input
+            value={proyectoEditado}
+            onChange={(e) => setProyectoEditado(e.target.value)}
+            disabled={esRolSoloLectura}
+            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: '5px', gridColumn: '1 / -1' }}>
+          <strong>Nota</strong>
+          <textarea
+            value={notaEditada}
+            onChange={(e) => setNotaEditada(e.target.value)}
+            rows={2}
+            style={{ width: '100%', marginTop: '5px', padding: '8px', resize: 'vertical', boxSizing: 'border-box' }}
+          />
+        </div>
+      </div>
+    )}
+
+    {perfil?.rol !== 'electrico' && (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+          gap: '10px',
+          textAlign: 'left',
+          marginTop: '10px',
+        }}
+      >
+        <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
           <strong>Estado</strong>
 
           <select
@@ -1414,6 +1605,7 @@ const terminadosMes = historial.filter((x) => {
           <select
             value={lineaEditada}
             onChange={(e) => setLineaEditada(Number(e.target.value))}
+            disabled={esRolSoloLectura}
             style={{
               width: '100%',
               padding: '8px',
@@ -1434,6 +1626,7 @@ const terminadosMes = historial.filter((x) => {
           <select
             value={posicionEditada}
             onChange={(e) => setPosicionEditada(Number(e.target.value))}
+            disabled={esRolSoloLectura}
             style={{
               width: '100%',
               padding: '8px',
@@ -1447,12 +1640,13 @@ const terminadosMes = historial.filter((x) => {
             ))}
           </select>
         </div>
-      </>
+      </div>
     )}
 
     <div
       style={{
         display: 'flex',
+        flexWrap: 'wrap',
         gap: '10px',
       }}
     >
@@ -1495,6 +1689,14 @@ const terminadosMes = historial.filter((x) => {
     </button>
   )
 )}
+      {['visor', 'operador', 'admin'].includes(perfil?.rol) && (
+        <button
+          onClick={abrirResumenMateriales}
+          style={{ padding: '10px', flex: 1 }}
+        >
+          Materiales
+        </button>
+      )}
       <button
         onClick={limpiarEstadosModal}
         style={{
@@ -1505,6 +1707,62 @@ const terminadosMes = historial.filter((x) => {
         Cerrar
       </button>
     </div>
+  </div>
+)}
+
+{mostrarResumenMateriales && moduloSeleccionado && (
+  <div
+    style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: 'calc(100vw - 32px)',
+      maxWidth: '420px',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      padding: '20px',
+      background: '#222',
+      border: '1px solid white',
+      borderRadius: '10px',
+      zIndex: 1200,
+      color: 'white',
+      textAlign: 'left',
+    }}
+  >
+    <h2 style={{ marginTop: 0 }}>Materiales — {moduloSeleccionado.serie}</h2>
+
+    {cargandoMateriales ? (
+      <p>Cargando...</p>
+    ) : resumenMateriales.length === 0 ? (
+      <p>No hay materiales registrados.</p>
+    ) : (
+      <div style={{ display: 'grid', gap: '8px' }}>
+        {resumenMateriales.map(([material, cantidad]) => (
+          <div
+            key={material}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: '16px',
+              paddingBottom: '8px',
+              borderBottom: '1px solid #444',
+            }}
+          >
+            <span>{material}</span>
+            <strong>{cantidad}</strong>
+          </div>
+        ))}
+      </div>
+    )}
+
+    <button
+      onClick={() => setMostrarResumenMateriales(false)}
+      style={{ width: '100%', marginTop: '18px', padding: '12px' }}
+    >
+      Cerrar
+    </button>
   </div>
 )}
 
