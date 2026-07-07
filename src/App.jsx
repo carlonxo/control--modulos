@@ -131,9 +131,24 @@ useEffect(() => {
 useEffect(() => {
   const intervalo = setInterval(() => {
     cargarTablero()
-  }, 30000)
+  }, 5000)
 
   return () => clearInterval(intervalo)
+}, [])
+
+useEffect(() => {
+  const canalModulos = supabase
+    .channel('cambios-modulos-tablero')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'modulos' },
+      () => cargarTablero()
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(canalModulos)
+  }
 }, [])
 
 if (!session) {
@@ -410,25 +425,43 @@ async function rechazarPruebaElectrica() {
 }
 
 
-async function cargarNombreSolicitante(idSolicitante) {
-  if (!idSolicitante) {
-    setNombreSolicitante('')
+async function cargarNombreSolicitante(idSolicitante, moduloId) {
+  let solicitanteId = idSolicitante
+
+  if (!solicitanteId && moduloId) {
+    const { data: modulo, error: errorModulo } = await supabase
+      .from('modulos')
+      .select('solicitado_por')
+      .eq('id', moduloId)
+      .single()
+
+    if (errorModulo) {
+      console.error(errorModulo)
+      setNombreSolicitante('No disponible')
+      return
+    }
+
+    solicitanteId = modulo?.solicitado_por
+  }
+
+  if (!solicitanteId) {
+    setNombreSolicitante('No disponible')
     return
   }
 
   const { data, error } = await supabase
     .from('perfiles')
     .select('nombre')
-    .eq('id', idSolicitante)
+    .eq('id', solicitanteId)
     .single()
 
   if (error) {
     console.error(error)
-    setNombreSolicitante('')
+    setNombreSolicitante('No disponible')
     return
   }
 
-  setNombreSolicitante(data?.nombre || '')
+  setNombreSolicitante(data?.nombre || 'No disponible')
 }
 
 
@@ -976,7 +1009,7 @@ const terminadosMes = historial.filter((x) => {
                     setNotaEditada(pos.nota || '')
 
                     if (esSolicitudPruebaActiva(pos.solicitud_prueba)) {
-                      cargarNombreSolicitante(pos.solicitado_por)
+                      cargarNombreSolicitante(pos.solicitado_por, pos.id)
                     }
                   } else {
                     console.log('POSICION VACIA')
@@ -1108,7 +1141,7 @@ const terminadosMes = historial.filter((x) => {
     setNotaEditada(pos.nota || '')
 
     if (esSolicitudPruebaActiva(pos.solicitud_prueba)) {
-      cargarNombreSolicitante(pos.solicitado_por)
+      cargarNombreSolicitante(pos.solicitado_por, pos.id)
     }
 
   } else {
