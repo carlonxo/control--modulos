@@ -1466,7 +1466,7 @@ const terminadosMes = historial.filter((x) => {
         {esRolSoloLectura ? 'Guardar nota' : 'Guardar cambios'}
       </button>
 
-       {perfil?.rol === 'electrico' && (
+       {['electrico', 'operador'].includes(perfil?.rol) && (
   esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba) ? (
     <button
       disabled
