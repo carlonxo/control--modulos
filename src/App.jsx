@@ -33,7 +33,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Tableros',
-    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Diferencial 2x25A', 'Falso polo', 'Tablero PVC emb.', 'Barra repartidora'],
+    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Diferencial 2x25A', 'Barra repartidora', 'Falso polo', 'Tablero PVC emb.', 'Tablero PVC sobrepuesto', 'Tablero armado'],
   },
 ]
 
