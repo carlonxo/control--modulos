@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import plantillaProtocolo from '../assets/protocolo-entrega-base.png'
 import './ProtocoloEntrega.css'
 
@@ -13,6 +13,7 @@ const camposMateriales = [
   ['Ench. Ind. 32A macho', ['Ench. Ind. 32A macho'], 981, 653], ['Tablero emb. IP44', ['Tablero emb. IP44'], 981, 696], ['Tablero sobr. IP44', ['Tablero sobr. IP44'], 981, 718],
   ['Tablero IP65', ['Tablero IP65 18p', 'Tablero IP65 24p'], 981, 739], ['Tablero armado', ['Tablero armado'], 981, 760], ['Aut. monof. 10-16-20A', ['Aut. monof. 10-16-20A'], 981, 781],
   ['Aut. bifásico 2x10A', ['Aut. bifásico 2x10A'], 981, 803], ['Aut. bifásico 2x16A', ['Aut. bifásico 2x16A'], 981, 824], ['Aut. bifásico 2x20A', ['Aut. bifásico 2x20A'], 981, 846],
+  ['Aut. bifásico 2x25A', ['Aut. bifásico 2x25A'], 981, 867],
   ['Diferencial 2x25A', ['Diferencial 2x25A'], 981, 888], ['Porta Fusible', ['Porta Fusible'], 981, 931], ['Luz Piloto', ['Luz Piloto'], 981, 952],
   ['Barra repartidora', ['Barra repartidora'], 981, 974], ['Falso polo', ['Falso polo'], 981, 1016],
 ]
@@ -45,6 +46,19 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
   const material = (item, tipo, valor) => setDatos((actual) => ({ ...actual, detalleMateriales: { ...actual.detalleMateriales, [item]: { ...(actual.detalleMateriales?.[item] || {}), [tipo]: valor } } }))
   const guardar = async () => { setGuardando(true); await onGuardar({ ...datos, materiales }); setGuardando(false) }
   const campo = (nombre, style, props = {}) => <input className="pdf-campo" style={style} value={datos[nombre] || ''} onChange={(e) => cambiar(nombre, e.target.value)} {...props} />
+
+  useEffect(() => {
+    const viewport = document.querySelector('meta[name="viewport"]')
+    if (!viewport) return
+
+    const configuracionAnterior = viewport.getAttribute('content')
+    viewport.setAttribute(
+      'content',
+      'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes'
+    )
+
+    return () => viewport.setAttribute('content', configuracionAnterior || 'width=device-width, initial-scale=1.0')
+  }, [])
 
   return <div className="protocolo-overlay">
     <div className="protocolo-toolbar">

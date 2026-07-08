@@ -34,7 +34,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Tableros',
-    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Diferencial 2x25A', 'Luz Piloto', 'Porta Fusible', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
+    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Aut. bifásico 2x25A', 'Diferencial 2x25A', 'Luz Piloto', 'Porta Fusible', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
   },
 ]
 
