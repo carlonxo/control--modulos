@@ -975,6 +975,23 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       x.estado?.toLowerCase() === 'prueba eléctrica' ||
       x.estado?.toLowerCase() === 'prueba electrica'
   ).length
+
+const esFechaDeHoy = (valor) => {
+  if (!valor) return false
+  const fecha = new Date(valor)
+  const hoyLocal = new Date()
+
+  return (
+    fecha.getFullYear() === hoyLocal.getFullYear() &&
+    fecha.getMonth() === hoyLocal.getMonth() &&
+    fecha.getDate() === hoyLocal.getDate()
+  )
+}
+
+const pruebasElectricasHoy = [...modulosActivos, ...historial].filter(
+  (modulo) => esFechaDeHoy(modulo.fecha_prueba_electrica)
+).length
+
 const hoy = new Date().toISOString().slice(0, 10)
 
 const terminadosHoy = historial.filter(
@@ -986,10 +1003,12 @@ const terminadosHoy = historial.filter(
 const mesActual = new Date().getMonth()
 const anioActual = new Date().getFullYear()
 
-const terminadosMes = historial.filter((x) => {
-  const fecha = new Date(x.fecha_salida)
+const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) => {
+  if (!modulo.fecha_prueba_electrica) return false
+  const fecha = new Date(modulo.fecha_prueba_electrica)
 
   return (
+    !Number.isNaN(fecha.getTime()) &&
     fecha.getMonth() === mesActual &&
     fecha.getFullYear() === anioActual
   )
@@ -1193,20 +1212,8 @@ const terminadosMes = historial.filter((x) => {
         minWidth: '120px',
       }}
     >
-      <h3>En proceso</h3>
-      <h2>{ocupacion}</h2>
-    </div>
-
-    <div
-      style={{
-        background: '#000000',
-        padding: '15px',
-        borderRadius: '10px',
-        minWidth: '120px',
-      }}
-    >
-      <h3>Ocupación</h3>
-      <h2>{ocupacion}/63</h2>
+      <h3 style={{ color: '#111' }}>En proceso</h3>
+      <h2 style={{ color: '#111' }}>{ocupacion}</h2>
     </div>
 
     <div
@@ -1254,8 +1261,20 @@ const terminadosMes = historial.filter((x) => {
         minWidth: '120px',
       }}
     >
-      <h3>Prueba eléctrica</h3>
+      <h3>Prueba eléctrica OK</h3>
       <h2>{pruebas}/{ocupacion}</h2>
+    </div>
+
+    <div
+      style={{
+        background: '#00695c',
+        padding: '15px',
+        borderRadius: '10px',
+        minWidth: '120px',
+      }}
+    >
+      <h3 style={{ color: 'white' }}>Pruebas eléctricas hoy</h3>
+      <h2 style={{ color: 'white' }}>{pruebasElectricasHoy}</h2>
     </div>
 
     <div
@@ -1266,7 +1285,7 @@ const terminadosMes = historial.filter((x) => {
         minWidth: '120px',
       }}
     >
-      <h3>Terminados hoy</h3>
+      <h3>Retirados hoy</h3>
       <h2>{terminadosHoy}</h2>
     </div>
 
@@ -1278,8 +1297,8 @@ const terminadosMes = historial.filter((x) => {
         minWidth: '120px',
       }}
     >
-      <h3>Terminados este mes</h3>
-      <h2>{terminadosMes}</h2>
+      <h3>Pruebas eléctricas este mes</h3>
+      <h2>{pruebasElectricasMes}</h2>
     </div>
 
   </div>
