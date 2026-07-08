@@ -17,7 +17,7 @@ function esEstadoPruebaElectrica(estado) {
 const seccionesFormularioElectrico = [
   {
     nombre: 'Canalización',
-    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metálica 100x100x65', 'Caja 5/8"', 'Tapa ciega - Pasac.'],
+    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metálica 100x100x65', 'Caja tabique LH', 'Tapa ciega - Pasac.'],
   },
   {
     nombre: 'Cableado',
@@ -25,7 +25,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Iluminación',
-    items: ['Ampolleta B/Conc.', 'Plafón', 'Tubo fluorescente', 'Hermético 2x40W', 'Foco tortuga 60W', 'Foco tortuga LED'],
+    items: ['EQ. Herm. LED 40W (tubo/placa)', 'Tubo LED', 'Foco tortuga LED', 'Foco tortuga 60W', 'Ampolleta LED', 'Plafón'],
   },
   {
     nombre: 'Artefactos',
@@ -33,7 +33,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Tableros',
-    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Diferencial 2x25A', 'Barra repartidora', 'Falso polo', 'Tablero PVC emb.', 'Tablero PVC sobrepuesto', 'Tablero armado'],
+    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Diferencial 2x25A', 'Luz Piloto', 'Porta Fusible', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
   },
 ]
 
