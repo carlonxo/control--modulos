@@ -17,7 +17,7 @@ function esEstadoPruebaElectrica(estado) {
 const seccionesFormularioElectrico = [
   {
     nombre: 'Canalización',
-    items: ['Conduit 20mm', 'Conduit 25mm', 'Caja PVC 100x100x65', 'Caja 5/8"', 'Tapa ciega - Pasac.'],
+    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metálica 100x100x65', 'Caja 5/8"', 'Tapa ciega - Pasac.'],
   },
   {
     nombre: 'Cableado',
@@ -25,7 +25,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Iluminación',
-    items: ['Ampolleta B/Conc.', 'Plafón', 'Tubo fluorescente', 'Hermético 2x40W', 'Foco tortuga 60W'],
+    items: ['Ampolleta B/Conc.', 'Plafón', 'Tubo fluorescente', 'Hermético 2x40W', 'Foco tortuga 60W', 'Foco tortuga LED'],
   },
   {
     nombre: 'Artefactos',
