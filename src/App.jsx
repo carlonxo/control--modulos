@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from './services/supabase'
 import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
+import ProtocoloEntrega from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
 
 function esSolicitudPruebaActiva(valor) {
@@ -201,11 +202,15 @@ const [cargandoMateriales, setCargandoMateriales] = useState(false)
 const [avisoPruebaElectrica, setAvisoPruebaElectrica] = useState(null)
 const [mostrarLlamadosPendientes, setMostrarLlamadosPendientes] = useState(false)
 const [solicitantesPendientes, setSolicitantesPendientes] = useState({})
+const [mostrarProtocoloEntrega, setMostrarProtocoloEntrega] = useState(false)
+const [datosProtocoloEntrega, setDatosProtocoloEntrega] = useState({})
+const [responsableProtocolo, setResponsableProtocolo] = useState('')
 const solicitudesPendientesRef = useRef(new Set())
 const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
 const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
 const ocultarEspaciosVacios = ['electrico', 'visor', 'control_calidad'].includes(perfil?.rol)
 const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
+const puedeUsarProtocolo = ['admin', 'operador', 'control_calidad', 'visor'].includes(perfil?.rol)
 const recibeAvisosPrueba = ['admin', 'control_calidad', 'operador'].includes(perfil?.rol)
 const llamadosPendientes = datos.filter(
   (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
@@ -773,6 +778,65 @@ async function abrirResumenMateriales() {
   setMostrarResumenMateriales(true)
 }
 
+async function abrirProtocoloEntrega() {
+  if (!moduloSeleccionado?.id || !puedeUsarProtocolo) return
+
+  const { data: modulo, error } = await supabase
+    .from('modulos')
+    .select('materiales, protocolo_entrega, solicitado_por')
+    .eq('id', moduloSeleccionado.id)
+    .single()
+
+  if (error) {
+    mostrarNotificacion('No se pudo cargar el protocolo: ' + error.message)
+    return
+  }
+
+  let nombreResponsable = ''
+  if (modulo?.solicitado_por) {
+    const { data: perfilSolicitante } = await supabase
+      .from('perfiles')
+      .select('nombre')
+      .eq('id', modulo.solicitado_por)
+      .maybeSingle()
+    nombreResponsable = perfilSolicitante?.nombre || ''
+  }
+
+  setFormulariosElectricos((actuales) => ({
+    ...actuales,
+    [moduloSeleccionado.id]: modulo?.materiales || {},
+  }))
+  setDatosProtocoloEntrega(modulo?.protocolo_entrega || {})
+  setResponsableProtocolo(
+    modulo?.protocolo_entrega?.responsable || nombreResponsable
+  )
+  setMostrarProtocoloEntrega(true)
+}
+
+async function guardarProtocoloEntrega(protocolo) {
+  if (!moduloSeleccionado?.id || !puedeUsarProtocolo) return
+
+  const { error } = await supabase
+    .from('modulos')
+    .update({
+      protocolo_entrega: protocolo,
+      materiales: protocolo.materiales || {},
+    })
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    mostrarNotificacion('No se pudo guardar el protocolo: ' + error.message)
+    return
+  }
+
+  setDatosProtocoloEntrega(protocolo)
+  setFormulariosElectricos((actuales) => ({
+    ...actuales,
+    [moduloSeleccionado.id]: protocolo.materiales || {},
+  }))
+  mostrarNotificacion('Protocolo guardado correctamente')
+}
+
 
 async function finalizarModulo() {
 
@@ -798,6 +862,7 @@ async function finalizarModulo() {
         responsable: modulo.responsable,
         fecha_ingreso: modulo.fecha_ingreso,
         fecha_prueba_electrica: modulo.fecha_prueba_electrica,
+        protocolo_entrega: modulo.protocolo_entrega || {},
         fecha_salida: new Date().toISOString(),
         estado: modulo.estado,
         linea: modulo.linea,
@@ -1717,6 +1782,15 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
             </button>
           )}
 
+          {puedeUsarProtocolo && (
+            <button
+              onClick={abrirProtocoloEntrega}
+              style={{ width: '100%', marginBottom: '10px', padding: '12px' }}
+            >
+              Protocolo de entrega
+            </button>
+          )}
+
           <button
             onClick={aprobarPruebaElectrica}
             style={{
@@ -2050,6 +2124,14 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
           Materiales
         </button>
       )}
+      {puedeUsarProtocolo && (
+        <button
+          onClick={abrirProtocoloEntrega}
+          style={{ padding: '10px', flex: 1 }}
+        >
+          Protocolo
+        </button>
+      )}
       <button
         onClick={limpiarEstadosModal}
         style={{
@@ -2134,6 +2216,18 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
       Cerrar
     </button>
   </div>
+)}
+
+{mostrarProtocoloEntrega && moduloSeleccionado && (
+  <ProtocoloEntrega
+    key={moduloSeleccionado.id}
+    modulo={moduloSeleccionado}
+    responsable={responsableProtocolo}
+    datosIniciales={datosProtocoloEntrega}
+    materiales={formulariosElectricos[moduloSeleccionado.id] || {}}
+    onGuardar={guardarProtocoloEntrega}
+    onCerrar={() => setMostrarProtocoloEntrega(false)}
+  />
 )}
 
 {mostrarKPI && (

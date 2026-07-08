@@ -1,0 +1,13 @@
+.protocolo-overlay { position: fixed; inset: 0; z-index: 4000; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; background: rgba(0,0,0,.86); }
+.protocolo-toolbar { display: flex; justify-content: center; gap: 10px; padding-bottom: 10px; }
+.protocolo-toolbar button { padding: 10px 18px; }
+.protocolo-toolbar .protocolo-guardar { background: #2e7d32; color: white; }
+.protocolo-visor { flex: 1; overflow: auto; }
+.pdf-protocolo-pagina { position: relative; width: 1275px; height: 1650px; margin: 0 auto; background-size: 1275px 1650px; background-repeat: no-repeat; }
+.pdf-campo, .pdf-material { position: absolute; box-sizing: border-box; border: 1px solid transparent; border-radius: 0; background: rgba(255,255,210,.34); color: #111; font: 700 15px Arial,sans-serif; text-align: center; }
+.pdf-campo:focus, .pdf-material:focus { outline: 2px solid #1976d2; background: rgba(255,255,255,.92); }
+.pdf-campo:disabled { opacity: 1; color: #111; -webkit-text-fill-color: #111; }
+.pdf-material { padding: 0 3px; font-size: 13px; }
+.pdf-marca-x { position: absolute; padding: 0; border: 0; border-radius: 0; background: rgba(255,255,210,.28); color: #111; font: 900 20px Arial,sans-serif; cursor: pointer; }
+.pdf-marca-x:focus { outline: 2px solid #1976d2; }
+@media (max-width: 960px) { .pdf-protocolo-pagina { margin: 0; } .protocolo-toolbar button { flex: 1; } }
