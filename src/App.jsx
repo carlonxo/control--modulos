@@ -1195,11 +1195,9 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
 
 {mostrarKPI && (
   <div
+    className="indicadores-grid"
     style={{
-      display: 'flex',
-      gap: '20px',
       marginBottom: '30px',
-      flexWrap: 'wrap',
       width: '100%',
     }}
   >

@@ -54,6 +54,34 @@ body {
   margin: 0;
 }
 
+.indicadores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.indicadores-grid > div {
+  min-width: 0 !important;
+  padding: 12px 8px !important;
+}
+
+.indicadores-grid h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.indicadores-grid h2 {
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .indicadores-grid {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 8px;
+  }
+}
+
 @keyframes prueba-electrica-pendiente {
   0%,
   49% {
