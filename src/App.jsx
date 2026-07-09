@@ -215,6 +215,8 @@ const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
 const ocultarEspaciosVacios = ['electrico', 'visor', 'control_calidad'].includes(perfil?.rol)
 const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
 const puedeUsarProtocolo = ['admin', 'operador', 'control_calidad', 'visor'].includes(perfil?.rol)
+const puedeEditarProtocolo = ['admin', 'operador'].includes(perfil?.rol)
+const puedeEditarDatosProtocolo = ['admin', 'operador', 'control_calidad'].includes(perfil?.rol)
 const recibeAvisosPrueba = ['admin', 'control_calidad', 'operador'].includes(perfil?.rol)
 const llamadosPendientes = datos.filter(
   (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
@@ -818,7 +820,7 @@ async function abrirProtocoloEntrega() {
 }
 
 async function guardarProtocoloEntrega(protocolo) {
-  if (!moduloSeleccionado?.id || !puedeUsarProtocolo) return
+  if (!moduloSeleccionado?.id || !puedeEditarDatosProtocolo) return
 
   const { error } = await supabase
     .from('modulos')
@@ -2230,6 +2232,8 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
     datosIniciales={datosProtocoloEntrega}
     materiales={formulariosElectricos[moduloSeleccionado.id] || {}}
     onGuardar={guardarProtocoloEntrega}
+    soloLectura={!puedeEditarDatosProtocolo}
+    materialesSoloLectura={!puedeEditarProtocolo}
     onCerrar={() => setMostrarProtocoloEntrega(false)}
   />
 )}

@@ -3,6 +3,7 @@
 .protocolo-toolbar button { padding: 10px 18px; }
 .protocolo-toolbar .protocolo-guardar { background: #2e7d32; color: white; }
 .protocolo-toolbar .protocolo-descargar { background: #1565c0; color: white; }
+.protocolo-toolbar .protocolo-imprimir { background: #6a1b9a; color: white; }
 .protocolo-visor {
   flex: 1;
   overflow: auto;
