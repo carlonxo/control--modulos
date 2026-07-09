@@ -4,6 +4,7 @@ import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
 import ProtocoloEntrega from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
+import { formatearFecha } from './utils/fechas'
 
 function esSolicitudPruebaActiva(valor) {
   return valor === true || valor === 'true' || valor === 1
@@ -13,6 +14,40 @@ function esEstadoPruebaElectrica(estado) {
   return ['prueba eléctrica', 'prueba electrica'].includes(
     String(estado || '').trim().toLowerCase()
   )
+}
+
+function normalizarTexto(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function esTipoBodega(tipo) {
+  return normalizarTexto(tipo).includes('bodega')
+}
+
+function fechaParaInput(valor) {
+  if (!valor) return ''
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return ''
+  return fecha.toISOString().slice(0, 10)
+}
+
+function diasDesdeFecha(valor) {
+  if (!valor) return null
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return null
+  const hoy = new Date()
+  const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  const inicioFecha = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate())
+  return Math.floor((inicioHoy - inicioFecha) / 86400000)
+}
+
+function estaDentroDeGarantia(valor) {
+  const dias = diasDesdeFecha(valor)
+  return dias !== null && dias >= 0 && dias <= 90
 }
 
 const seccionesFormularioElectrico = [
@@ -177,6 +212,7 @@ const [historial, setHistorial] = useState([])
 const [estadoEditado, setEstadoEditado] = useState('')
 const [lineaEditada, setLineaEditada] = useState('')
 const [posicionEditada, setPosicionEditada] = useState('')
+const [fechaPruebaEditada, setFechaPruebaEditada] = useState('')
 const [serieBusqueda, setSerieBusqueda] = useState('')
 const [resultadoBusqueda, setResultadoBusqueda] = useState([])
 const [busquedaRealizada, setBusquedaRealizada] = useState(false)
@@ -193,6 +229,7 @@ const [perfil, setPerfil] = useState(null)
   const [serieEditada, setSerieEditada] = useState('')
 const [tipoEditado, setTipoEditado] = useState('')
 const [proyectoEditado, setProyectoEditado] = useState('')
+const [responsableEditado, setResponsableEditado] = useState('')
 const [mostrarKPI, setMostrarKPI] = useState(false)
 const [mostrarVistaGeneral, setMostrarVistaGeneral] = useState(false)
 const [notificacion, setNotificacion] = useState(null)
@@ -212,7 +249,6 @@ const [responsableProtocolo, setResponsableProtocolo] = useState('')
 const solicitudesPendientesRef = useRef(new Set())
 const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
 const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
-const ocultarEspaciosVacios = ['electrico', 'visor', 'control_calidad'].includes(perfil?.rol)
 const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
 const puedeUsarProtocolo = ['admin', 'operador', 'control_calidad', 'visor'].includes(perfil?.rol)
 const puedeEditarProtocolo = ['admin', 'operador'].includes(perfil?.rol)
@@ -421,17 +457,18 @@ async function cargarPerfil() {
 
     const { data: modulosData, error: modulosError } = await supabase
       .from('modulos')
-      .select('id, nota')
+      .select('id, nota, fecha_prueba_electrica')
 
     if (modulosError) {
       console.error(modulosError)
       return
     }
 
-    const notaMap = new Map((modulosData || []).map((item) => [item.id, item.nota]))
+    const modulosMap = new Map((modulosData || []).map((item) => [item.id, item]))
     const mergedData = (tableroData || []).map((row) => ({
       ...row,
-      nota: row.nota || notaMap.get(row.id) || '',
+      nota: row.nota || modulosMap.get(row.id)?.nota || '',
+      fecha_prueba_electrica: row.fecha_prueba_electrica || modulosMap.get(row.id)?.fecha_prueba_electrica || null,
       solicitud_prueba: esSolicitudPruebaActiva(row.solicitud_prueba),
     }))
 
@@ -510,6 +547,22 @@ async function crearModulo() {
     return
   }
 
+  let lineaIngreso = posicionSeleccionada.linea
+  let posicionIngreso = posicionSeleccionada.posicion
+
+  if (posicionSeleccionada.extremo) {
+    try {
+      posicionIngreso = await prepararLineaParaIngreso(
+        posicionSeleccionada.linea,
+        posicionSeleccionada.extremo
+      )
+    } catch (error) {
+      mostrarNotificacion(error.message)
+      await cargarTablero()
+      return
+    }
+  }
+
   const { error } = await supabase
     .from('modulos')
     .insert([
@@ -518,8 +571,8 @@ async function crearModulo() {
         tipo: tipoNuevo,
         proyecto: proyectoNuevo,
         responsable: responsableNuevo,
-        linea: posicionSeleccionada.linea,
-        posicion: posicionSeleccionada.posicion,
+        linea: lineaIngreso,
+        posicion: posicionIngreso,
         estado: 'Sin iniciar',
         fecha_ingreso: new Date(),
       },
@@ -537,22 +590,92 @@ async function crearModulo() {
   alert('Módulo creado correctamente')
 }
 
+function abrirIngresoModuloEnExtremo(linea, extremo) {
+  if (!puedeAgregarModulos) return
+
+  const cantidadModulos = datos.filter((x) => Number(x.linea) === Number(linea) && x.serie).length
+  if (cantidadModulos >= 9) {
+    mostrarNotificacion(`La línea ${linea} ya está completa`)
+    return
+  }
+
+  setPosicionSeleccionada({
+    linea,
+    posicion: extremo === 'inicio' ? 1 : cantidadModulos + 1,
+    extremo,
+  })
+  setMostrarNuevoModulo(true)
+}
+
+async function prepararLineaParaIngreso(linea, extremo) {
+  const { data: registros, error } = await supabase
+    .from('modulos')
+    .select('id, linea, posicion, serie')
+    .eq('linea', linea)
+
+  if (error) {
+    throw new Error('No se pudo preparar la línea: ' + error.message)
+  }
+
+  const modulosLinea = (registros || [])
+    .filter((x) => x?.serie && String(x.serie).trim() !== '')
+    .sort((a, b) => Number(a.posicion) - Number(b.posicion))
+
+  if (modulosLinea.length >= 9) {
+    throw new Error(`La línea ${linea} ya está completa`)
+  }
+
+  const posicionTemporalBase = 1000 + Math.floor(Math.random() * 100000)
+  for (const [index, modulo] of modulosLinea.entries()) {
+    const { error: errorTemporal } = await supabase
+      .from('modulos')
+      .update({ posicion: posicionTemporalBase + index })
+      .eq('id', modulo.id)
+
+    if (errorTemporal) {
+      throw new Error(errorTemporal.message)
+    }
+  }
+
+  for (const [index, modulo] of modulosLinea.entries()) {
+    const nuevaPosicion = extremo === 'inicio' ? index + 2 : index + 1
+    const { error: errorOrden } = await supabase
+      .from('modulos')
+      .update({ posicion: nuevaPosicion })
+      .eq('id', modulo.id)
+
+    if (errorOrden) {
+      throw new Error(errorOrden.message)
+    }
+  }
+
+  return extremo === 'inicio' ? 1 : modulosLinea.length + 1
+}
+
 function limpiarEstadosModal() {
   setMostrarResumenMateriales(false)
   setModuloSeleccionado(null)
   setSerieEditada('')
   setTipoEditado('')
   setProyectoEditado('')
+  setResponsableEditado('')
   setEstadoEditado('')
   setLineaEditada('')
   setPosicionEditada('')
+  setFechaPruebaEditada('')
   setNotaEditada('')
 }
 
   async function guardarCambios() {
   const isPruebaElectrica = estadoEditado === 'Prueba eléctrica'
+  const isEnGarantia = estadoEditado === 'En garantía'
   const shouldSetFechaPrueba =
     isPruebaElectrica && moduloSeleccionado?.estado !== 'Prueba eléctrica'
+
+  if (isEnGarantia && !fechaPruebaEditada) {
+    mostrarNotificacion('Debe ingresar la fecha de la prueba eléctrica')
+    return
+  }
 
   const updatePayload = esRolSoloLectura
     ? {
@@ -565,6 +688,7 @@ function limpiarEstadosModal() {
         serie: serieEditada,
         tipo: tipoEditado,
         proyecto: proyectoEditado,
+        responsable: responsableEditado,
         estado: estadoEditado,
         linea: lineaEditada,
         posicion: posicionEditada,
@@ -586,6 +710,10 @@ console.log({
     console.log("Guardando fecha de prueba eléctrica")
 
     updatePayload.fecha_prueba_electrica = new Date().toISOString()
+  }
+
+  if (isEnGarantia) {
+    updatePayload.fecha_prueba_electrica = new Date(`${fechaPruebaEditada}T12:00:00`).toISOString()
   }
 
   let { error } = await supabase
@@ -929,6 +1057,11 @@ async function eliminarModuloSinRegistro() {
 }
 
 async function moverModulo(moduloId, lineaDestino, posicionDestino) {
+  if (!puedeAgregarModulos) {
+    mostrarNotificacion('No tienes permisos para mover módulos')
+    return
+  }
+
   if (!moduloId) {
     mostrarNotificacion('Error: Módulo inválido')
     return
@@ -966,65 +1099,66 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     return
   }
 
+  const moduloDestino = modulosActivos.find(
+    (x) =>
+      Number(x.linea) === lineaDestinoParsed &&
+      Number(x.posicion) === posicionDestinoParsed &&
+      String(x.id) !== String(moduloId)
+  )
+
   try {
-    const reindexarLinea = async (linea, lista) => {
-      const ordenado = [...lista]
-        .filter((x) => x?.id)
-        .sort((a, b) => {
-          const posA = Number(a.posicion) || 0
-          const posB = Number(b.posicion) || 0
-          return posA - posB || String(a.id).localeCompare(String(b.id))
-        })
+    const posicionTemporal = 1000 + Math.floor(Math.random() * 100000)
+    const moverRegistro = async (id, linea, posicion) => {
+      const { error } = await supabase
+        .from('modulos')
+        .update({ linea, posicion })
+        .eq('id', id)
 
-      for (const [index, item] of ordenado.entries()) {
-        const nuevaPosicion = Math.min(index + 1, 9)
-        const { error } = await supabase
-          .from('modulos')
-          .update({
-            linea,
-            posicion: nuevaPosicion,
-          })
-          .eq('id', item.id)
-
-        if (error) {
-          throw new Error(error.message)
-        }
+      if (error) {
+        throw new Error(error.message)
       }
     }
 
-    if (lineaOrigen === lineaDestinoParsed) {
-      const listaLinea = modulosActivos.filter(
+    if (moduloDestino && lineaOrigen === lineaDestinoParsed) {
+      const modulosLinea = modulosActivos.filter(
         (x) => Number(x.linea) === lineaOrigen && String(x.id) !== String(moduloId)
       )
-      const listaConModulo = [...listaLinea]
-      const insertIndex = Math.max(0, Math.min(posicionDestinoParsed - 1, listaConModulo.length))
-      listaConModulo.splice(insertIndex, 0, {
-        ...moduloActual,
-        linea: lineaDestinoParsed,
-      })
+      let movimientos = []
 
-      await reindexarLinea(lineaDestinoParsed, listaConModulo)
-    } else {
-      const listaOrigen = modulosActivos.filter(
-        (x) => Number(x.linea) === lineaOrigen && String(x.id) !== String(moduloId)
-      )
-      await reindexarLinea(lineaOrigen, listaOrigen)
+      if (posicionOrigen > posicionDestinoParsed) {
+        movimientos = modulosLinea
+          .filter((x) => Number(x.posicion) >= posicionDestinoParsed && Number(x.posicion) < posicionOrigen)
+          .map((x) => ({ id: x.id, linea: lineaOrigen, posicion: Number(x.posicion) + 1, posicionActual: Number(x.posicion) }))
+          .sort((a, b) => b.posicionActual - a.posicionActual)
+      } else {
+        movimientos = modulosLinea
+          .filter((x) => Number(x.posicion) <= posicionDestinoParsed && Number(x.posicion) > posicionOrigen)
+          .map((x) => ({ id: x.id, linea: lineaOrigen, posicion: Number(x.posicion) - 1, posicionActual: Number(x.posicion) }))
+          .sort((a, b) => a.posicionActual - b.posicionActual)
+      }
 
-      const listaDestino = modulosActivos.filter(
-        (x) => Number(x.linea) === lineaDestinoParsed
-      )
-      const listaDestinoConModulo = [...listaDestino]
-      const insertIndex = Math.max(0, Math.min(posicionDestinoParsed - 1, listaDestinoConModulo.length))
-      listaDestinoConModulo.splice(insertIndex, 0, {
-        ...moduloActual,
-        linea: lineaDestinoParsed,
-      })
+      await moverRegistro(moduloActual.id, lineaOrigen, posicionTemporal)
 
-      await reindexarLinea(lineaDestinoParsed, listaDestinoConModulo)
+      for (const movimiento of movimientos) {
+        await moverRegistro(movimiento.id, movimiento.linea, movimiento.posicion)
+      }
+
+      await moverRegistro(moduloActual.id, lineaDestinoParsed, posicionDestinoParsed)
+      await cargarTablero()
+      mostrarNotificacion('Módulo insertado correctamente')
+      return
     }
 
+    await moverRegistro(moduloActual.id, lineaOrigen, posicionTemporal)
+
+    if (moduloDestino) {
+      await moverRegistro(moduloDestino.id, lineaOrigen, posicionOrigen)
+    }
+
+    await moverRegistro(moduloActual.id, lineaDestinoParsed, posicionDestinoParsed)
+
     await cargarTablero()
-    mostrarNotificacion('Módulo movido correctamente')
+    mostrarNotificacion(moduloDestino ? 'Módulos intercambiados correctamente' : 'Módulo movido correctamente')
   } catch (err) {
     console.error(err)
     mostrarNotificacion('Error: ' + (err?.message || 'Error desconocido'))
@@ -1032,8 +1166,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   }
 }
 
-  function colorEstado(estado) {
-    switch (estado) {
+  function colorEstado(estado, modulo = {}) {
+    switch (normalizarTexto(estado)) {
       case 'sin iniciar':
         return '#808080'
 
@@ -1046,8 +1180,12 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       case 'terminaciones':
         return '#1976d2'
 
-      case 'prueba eléctrica':
+      case 'prueba electrica':
+      case 'sin instalacion':
         return '#388e3c'
+
+      case 'en garantia':
+        return estaDentroDeGarantia(modulo.fecha_prueba_electrica) ? '#388e3c' : '#d32f2f'
 
       default:
         return '#444'
@@ -1475,7 +1613,7 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
       <div>
         <strong>Fecha prueba:</strong>{' '}
         {item.fecha_prueba_electrica
-          ? new Date(item.fecha_prueba_electrica).toLocaleDateString('es-CL')
+          ? formatearFecha(item.fecha_prueba_electrica)
           : 'Sin registro'}
       </div>
 
@@ -1521,15 +1659,35 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
             paddingBottom: '2px',
           }}
         >
+          {puedeAgregarModulos && (
+            <button
+              type="button"
+              onClick={() => abrirIngresoModuloEnExtremo(linea, 'inicio')}
+              style={{
+                flex: '0 0 34px',
+                minHeight: '60px',
+                borderRadius: '5px',
+                border: '1px dashed #90caf9',
+                background: '#0d47a1',
+                color: 'white',
+                fontSize: '20px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+              title="Ingresar módulo al inicio de la línea"
+            >
+              +
+            </button>
+          )}
           {datos
             .filter((x) => x.linea === linea)
-            .filter((x) => !ocultarEspaciosVacios || x.serie)
+            .filter((x) => x.serie)
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
                 className={esSolicitudPruebaActiva(pos.solicitud_prueba) ? 'modulo-prueba-pendiente' : undefined}
-                draggable={pos.serie ? true : false}
-                onDragStart={() => pos.serie && setModuloEnDrag(pos)}
+                draggable={puedeAgregarModulos && pos.serie ? true : false}
+                onDragStart={() => puedeAgregarModulos && pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
                   e.preventDefault()
                   e.currentTarget.style.opacity = '0.6'
@@ -1560,9 +1718,11 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                     setSerieEditada(pos.serie)
                     setTipoEditado(pos.tipo)
                     setProyectoEditado(pos.proyecto)
+                    setResponsableEditado(pos.responsable || '')
                     setEstadoEditado(pos.estado)
                     setLineaEditada(pos.linea)
                     setPosicionEditada(pos.posicion)
+                    setFechaPruebaEditada(fechaParaInput(pos.fecha_prueba_electrica))
                     setNotaEditada(pos.nota || '')
 
                     if (['electrico', 'visor', 'operador', 'admin'].includes(perfil?.rol)) {
@@ -1585,9 +1745,9 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                   minHeight: '60px',
                   padding: '3px',
                   borderRadius: '5px',
-                  cursor: pos.serie ? 'grab' : 'default',
+                  cursor: puedeAgregarModulos && pos.serie ? 'grab' : 'pointer',
                   backgroundColor: pos.estado
-                    ? colorEstado(pos.estado.toLowerCase())
+                    ? colorEstado(pos.estado, pos)
                     : '#222',
                   color: 'white',
                   boxSizing: 'border-box',
@@ -1596,10 +1756,6 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                   transition: 'opacity 0.2s',
                 }}
               >
-                <div>
-                  <strong>P{pos.posicion}</strong>
-                </div>
-
                 {pos.serie ? (
                   <>
                     <div
@@ -1629,6 +1785,26 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                 )}
               </div>
             ))}
+          {puedeAgregarModulos && (
+            <button
+              type="button"
+              onClick={() => abrirIngresoModuloEnExtremo(linea, 'fin')}
+              style={{
+                flex: '0 0 34px',
+                minHeight: '60px',
+                borderRadius: '5px',
+                border: '1px dashed #90caf9',
+                background: '#0d47a1',
+                color: 'white',
+                fontSize: '20px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+              title="Ingresar módulo al final de la línea"
+            >
+              +
+            </button>
+          )}
         </div>
       </div>
     ))}
@@ -1654,15 +1830,35 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
             paddingBottom: '6px',
           }}
         >
+          {puedeAgregarModulos && (
+            <button
+              type="button"
+              onClick={() => abrirIngresoModuloEnExtremo(linea, 'inicio')}
+              style={{
+                flex: '0 0 54px',
+                minHeight: '120px',
+                borderRadius: '8px',
+                border: '1px dashed #90caf9',
+                background: '#0d47a1',
+                color: 'white',
+                fontSize: '30px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+              title="Ingresar módulo al inicio de la línea"
+            >
+              +
+            </button>
+          )}
           {datos
             .filter((x) => x.linea === linea)
-            .filter((x) => !ocultarEspaciosVacios || x.serie)
+            .filter((x) => x.serie)
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
                 className={esSolicitudPruebaActiva(pos.solicitud_prueba) ? 'modulo-prueba-pendiente' : undefined}
-                draggable={pos.serie ? true : false}
-                onDragStart={() => pos.serie && setModuloEnDrag(pos)}
+                draggable={puedeAgregarModulos && pos.serie ? true : false}
+                onDragStart={() => puedeAgregarModulos && pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
                   e.preventDefault()
                   e.currentTarget.style.opacity = '0.6'
@@ -1697,9 +1893,11 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
     setSerieEditada(pos.serie)
     setTipoEditado(pos.tipo)
     setProyectoEditado(pos.proyecto)
+    setResponsableEditado(pos.responsable || '')
     setEstadoEditado(pos.estado)
     setLineaEditada(pos.linea)
     setPosicionEditada(pos.posicion)
+    setFechaPruebaEditada(fechaParaInput(pos.fecha_prueba_electrica))
     setNotaEditada(pos.nota || '')
 
     if (['electrico', 'visor', 'operador', 'admin'].includes(perfil?.rol)) {
@@ -1726,9 +1924,9 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                   minHeight: '120px',
                   padding: '8px',
                   borderRadius: '8px',
-                  cursor: pos.serie ? 'grab' : 'default',
+                  cursor: puedeAgregarModulos && pos.serie ? 'grab' : 'pointer',
                   backgroundColor: pos.estado
-                    ? colorEstado(pos.estado.toLowerCase())
+                    ? colorEstado(pos.estado, pos)
                     : '#222',
                   color: 'white',
                   boxSizing: 'border-box',
@@ -1736,10 +1934,6 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                   transition: 'opacity 0.2s',
                 }}
               >
-                <div>
-                  <strong>P{pos.posicion}</strong>
-                </div>
-
                 {pos.serie ? (
                   <>
                     <div
@@ -1771,6 +1965,26 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                 )}
               </div>
             ))}
+          {puedeAgregarModulos && (
+            <button
+              type="button"
+              onClick={() => abrirIngresoModuloEnExtremo(linea, 'fin')}
+              style={{
+                flex: '0 0 54px',
+                minHeight: '120px',
+                borderRadius: '8px',
+                border: '1px dashed #90caf9',
+                background: '#0d47a1',
+                color: 'white',
+                fontSize: '30px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+              title="Ingresar módulo al final de la línea"
+            >
+              +
+            </button>
+          )}
         </div>
       </div>
     ))}
@@ -1887,10 +2101,10 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
       color: 'white',
     }}
   >
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-      <h2 style={{ margin: 0 }}>Módulo</h2>
+    <div style={{ marginBottom: '16px' }}>
+      <h2 style={{ margin: '0 0 12px' }}>Módulo</h2>
       {perfil?.rol === 'admin' && (
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
           <button
             onClick={eliminarModuloSinRegistro}
             style={{
@@ -1900,6 +2114,7 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
+              flex: 1,
             }}
           >
             Eliminar módulo
@@ -1913,6 +2128,7 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
+              flex: 1,
             }}
           >
             Finalizar módulo
@@ -2017,6 +2233,87 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
           />
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+          <strong style={{ whiteSpace: 'nowrap' }}>Línea</strong>
+
+          <select
+            value={lineaEditada}
+            onChange={(e) => setLineaEditada(Number(e.target.value))}
+            disabled={esRolSoloLectura}
+            style={{
+              width: '64px',
+              padding: '8px',
+              boxSizing: 'border-box',
+            }}
+          >
+            {[1,2,3,4,5,6,7,8,9].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+          <strong style={{ whiteSpace: 'nowrap' }}>Estado</strong>
+
+          <select
+            value={estadoEditado}
+            onChange={(e) => setEstadoEditado(e.target.value)}
+            disabled={esRolSoloLectura}
+            style={{
+              width: '170px',
+              maxWidth: 'calc(100% - 62px)',
+              padding: '8px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <option value="Sin iniciar">Sin iniciar</option>
+            <option value="Canalizado">Canalizado</option>
+            <option value="Cableado">Cableado</option>
+            <option value="Terminaciones">Terminaciones</option>
+            <option value="Prueba eléctrica">Prueba eléctrica</option>
+            {(esTipoBodega(tipoEditado) || estadoEditado === 'Sin instalación') && (
+              <option value="Sin instalación">Sin instalación</option>
+            )}
+            <option value="En garantía">En garantía</option>
+          </select>
+        </div>
+
+        {estadoEditado === 'En garantía' && (
+          <div style={{ gridColumn: '1 / -1', marginBottom: '10px', textAlign: 'left' }}>
+            <strong>Fecha prueba eléctrica</strong>
+            <input
+              type="date"
+              value={fechaPruebaEditada}
+              onChange={(e) => setFechaPruebaEditada(e.target.value)}
+              disabled={esRolSoloLectura}
+              style={{
+                width: '190px',
+                maxWidth: '100%',
+                padding: '8px',
+                marginLeft: '8px',
+                boxSizing: 'border-box',
+              }}
+            />
+            {fechaPruebaEditada && !estaDentroDeGarantia(fechaPruebaEditada) && (
+              <div style={{ color: '#ff8a80', fontWeight: 800, marginTop: '6px' }}>
+                Fuera de garantía
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
+          <strong>Responsable</strong>
+          <input
+            value={responsableEditado}
+            onChange={(e) => setResponsableEditado(e.target.value)}
+            disabled={esRolSoloLectura}
+            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
+          />
+        </div>
+
         <div style={{ marginBottom: '5px', gridColumn: '1 / -1' }}>
           <strong>Nota</strong>
           <textarea
@@ -2029,7 +2326,7 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
       </div>
     )}
 
-    {perfil?.rol !== 'electrico' && (
+    {perfil?.rol !== 'electrico' && !['admin', 'operador'].includes(perfil?.rol) && (
       <div
         style={{
           display: 'grid',
@@ -2057,8 +2354,34 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
             <option value="Cableado">Cableado</option>
             <option value="Terminaciones">Terminaciones</option>
             <option value="Prueba eléctrica">Prueba eléctrica</option>
+            {(esTipoBodega(tipoEditado) || estadoEditado === 'Sin instalación') && (
+              <option value="Sin instalación">Sin instalación</option>
+            )}
+            <option value="En garantía">En garantía</option>
           </select>
         </div>
+
+        {estadoEditado === 'En garantía' && (
+          <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
+            <strong>Fecha prueba eléctrica</strong>
+            <input
+              type="date"
+              value={fechaPruebaEditada}
+              onChange={(e) => setFechaPruebaEditada(e.target.value)}
+              disabled={esRolSoloLectura}
+              style={{
+                width: '100%',
+                padding: '8px',
+                marginTop: '5px',
+              }}
+            />
+            {fechaPruebaEditada && !estaDentroDeGarantia(fechaPruebaEditada) && (
+              <div style={{ color: '#ff8a80', fontWeight: 800, marginTop: '6px' }}>
+                Fuera de garantía
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ marginBottom: '10px' }}>
           <strong>Línea</strong>
@@ -2081,26 +2404,6 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
           </select>
         </div>
 
-        <div style={{ marginBottom: '15px' }}>
-          <strong>Posición</strong>
-
-          <select
-            value={posicionEditada}
-            onChange={(e) => setPosicionEditada(Number(e.target.value))}
-            disabled={esRolSoloLectura}
-            style={{
-              width: '100%',
-              padding: '8px',
-              marginTop: '5px',
-            }}
-          >
-            {[1,2,3,4,5,6,7,8,9].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
     )}
 
@@ -2312,10 +2615,6 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
 
     <p>
       <strong>Línea:</strong> {posicionSeleccionada?.linea}
-    </p>
-
-    <p>
-      <strong>Posición:</strong> {posicionSeleccionada?.posicion}
     </p>
 
     <input

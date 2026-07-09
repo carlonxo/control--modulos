@@ -9,5 +9,5 @@ export function formatearFecha(fecha) {
   if (!fecha) return ''
   const date = new Date(fecha)
   if (Number.isNaN(date.getTime())) return ''
-  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+  return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`
 }

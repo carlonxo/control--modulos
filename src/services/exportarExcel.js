@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { parseLocalDate } from '../utils/fechas'
+import { formatearFecha, parseLocalDate } from '../utils/fechas'
 
 export function exportarHistorialExcel(historial, fechaDesde, fechaHasta) {
   if (!historial || historial.length === 0) {
@@ -33,8 +33,9 @@ export function exportarHistorialExcel(historial, fechaDesde, fechaHasta) {
     Estado: item.estado,
     Linea: item.linea,
     Posicion: item.posicion,
-    FechaIngreso: item.fecha_ingreso,
-    FechaPruebaElectrica: item.fecha_prueba_electrica,
+    FechaIngreso: formatearFecha(item.fecha_ingreso),
+    FechaPruebaElectrica: formatearFecha(item.fecha_prueba_electrica),
+    FechaSalida: formatearFecha(item.fecha_salida),
     Nota: item.nota,
   }))
 
