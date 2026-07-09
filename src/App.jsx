@@ -5,6 +5,7 @@ import Notificacion from './components/Notificacion'
 import ProtocoloEntrega from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
 import { formatearFecha } from './utils/fechas'
+import { descargarProtocolosDiariosPdf } from './services/protocolosDiariosPdf'
 
 function esSolicitudPruebaActiva(valor) {
   return valor === true || valor === 'true' || valor === 1
@@ -245,6 +246,9 @@ const [mostrarLlamadosPendientes, setMostrarLlamadosPendientes] = useState(false
 const [solicitantesPendientes, setSolicitantesPendientes] = useState({})
 const [mostrarMenuAcciones, setMostrarMenuAcciones] = useState(false)
 const [mostrarReintegrar, setMostrarReintegrar] = useState(false)
+const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false)
+const [fechaProtocolosDiarios, setFechaProtocolosDiarios] = useState(new Date().toISOString().slice(0, 10))
+const [descargandoProtocolos, setDescargandoProtocolos] = useState(false)
 const [serieReintegrar, setSerieReintegrar] = useState('')
 const [lineaReintegrar, setLineaReintegrar] = useState(1)
 const [extremoReintegrar, setExtremoReintegrar] = useState('fin')
@@ -254,13 +258,15 @@ const [mostrarProtocoloEntrega, setMostrarProtocoloEntrega] = useState(false)
 const [datosProtocoloEntrega, setDatosProtocoloEntrega] = useState({})
 const [responsableProtocolo, setResponsableProtocolo] = useState('')
 const solicitudesPendientesRef = useRef(new Set())
-const esRolSoloLectura = ['visor', 'electrico'].includes(perfil?.rol)
+const esRolSoloLectura = ['visor', 'analista', 'electrico'].includes(perfil?.rol)
 const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
 const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
-const puedeUsarProtocolo = ['admin', 'operador', 'control_calidad', 'visor'].includes(perfil?.rol)
+const puedeUsarProtocolo = ['admin', 'operador', 'control_calidad', 'visor', 'analista'].includes(perfil?.rol)
 const puedeEditarProtocolo = ['admin', 'operador'].includes(perfil?.rol)
 const puedeEditarDatosProtocolo = ['admin', 'operador', 'control_calidad'].includes(perfil?.rol)
 const recibeAvisosPrueba = ['admin', 'control_calidad', 'operador'].includes(perfil?.rol)
+const puedeDescargarProtocolosDiarios = ['analista', 'admin', 'operador', 'control_calidad'].includes(perfil?.rol)
+const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios
 const llamadosPendientes = datos.filter(
   (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
 )
@@ -292,6 +298,28 @@ useEffect(() => {
 
 function mostrarNotificacion(mensaje) {
   setNotificacion(mensaje)
+}
+
+function cerrarPanelesFlotantes() {
+  setMostrarLlamadosPendientes(false)
+  setMostrarMenuAcciones(false)
+}
+
+function cerrarPanelesYModulo() {
+  cerrarVentanasEmergentes()
+}
+
+function cerrarVentanasEmergentes({ conservarModulo = false } = {}) {
+  cerrarPanelesFlotantes()
+  setMostrarResumenMateriales(false)
+  setMostrarProtocoloEntrega(false)
+  setMostrarNuevoModulo(false)
+  setMostrarReintegrar(false)
+  setMostrarDescargaProtocolos(false)
+
+  if (!conservarModulo) {
+    limpiarEstadosModal()
+  }
 }
 
 useEffect(() => {
@@ -599,6 +627,7 @@ async function crearModulo() {
 
 function abrirIngresoModuloEnExtremo(linea, extremo) {
   if (!puedeAgregarModulos) return
+  cerrarVentanasEmergentes()
 
   const cantidadModulos = datos.filter((x) => Number(x.linea) === Number(linea) && x.serie).length
   if (cantidadModulos >= 9) {
@@ -660,7 +689,7 @@ async function prepararLineaParaIngreso(linea, extremo) {
 }
 
 function abrirReintegrarModulo() {
-  setMostrarMenuAcciones(false)
+  cerrarVentanasEmergentes()
   setMostrarReintegrar(true)
   setSerieReintegrar('')
   setHistorialSeleccionadoReintegrar(null)
@@ -671,6 +700,58 @@ function abrirReintegrarModulo() {
 function seleccionarHistorialParaReintegrar(item) {
   setHistorialSeleccionadoReintegrar(item)
   setSerieReintegrar(item?.serie || '')
+}
+
+function descargarProtocolosDiarios() {
+  if (!puedeDescargarProtocolosDiarios) return
+  cerrarVentanasEmergentes()
+  setFechaProtocolosDiarios(new Date().toISOString().slice(0, 10))
+  setMostrarDescargaProtocolos(true)
+}
+
+async function generarDescargaProtocolosDiarios() {
+  if (!puedeDescargarProtocolosDiarios || !fechaProtocolosDiarios || descargandoProtocolos) return
+
+  setDescargandoProtocolos(true)
+  try {
+    const inicio = `${fechaProtocolosDiarios}T00:00:00`
+    const fin = new Date(`${fechaProtocolosDiarios}T00:00:00`)
+    fin.setDate(fin.getDate() + 1)
+    const finTexto = fin.toISOString().slice(0, 19)
+
+    const [respuestaActivos, respuestaHistorial] = await Promise.all([
+      supabase
+        .from('modulos')
+        .select('*')
+        .gte('fecha_prueba_electrica', inicio)
+        .lt('fecha_prueba_electrica', finTexto),
+      supabase
+        .from('historial_modulos')
+        .select('*')
+        .gte('fecha_prueba_electrica', inicio)
+        .lt('fecha_prueba_electrica', finTexto),
+    ])
+
+    const error = respuestaActivos.error || respuestaHistorial.error
+    if (error) {
+      mostrarNotificacion('No se pudieron cargar los protocolos: ' + error.message)
+      return
+    }
+
+    const registros = [...(respuestaActivos.data || []), ...(respuestaHistorial.data || [])]
+      .sort((a, b) => String(a.serie || '').localeCompare(String(b.serie || '')))
+
+    if (registros.length === 0) {
+      mostrarNotificacion('No hay protocolos con fecha de prueba eléctrica para ese día')
+      return
+    }
+
+    await descargarProtocolosDiariosPdf(registros, fechaProtocolosDiarios)
+    setMostrarDescargaProtocolos(false)
+    mostrarNotificacion(`Se descargaron ${registros.length} protocolo(s)`)
+  } finally {
+    setDescargandoProtocolos(false)
+  }
 }
 
 async function reintegrarModuloFinalizado() {
@@ -771,6 +852,7 @@ async function reintegrarModuloFinalizado() {
 }
 
 function limpiarEstadosModal() {
+  cerrarPanelesFlotantes()
   setMostrarResumenMateriales(false)
   setModuloSeleccionado(null)
   setSerieEditada('')
@@ -1026,12 +1108,14 @@ async function cargarMaterialesModulo(moduloId) {
 
 async function abrirResumenMateriales() {
   if (!moduloSeleccionado?.id) return
+  cerrarVentanasEmergentes({ conservarModulo: true })
   await cargarMaterialesModulo(moduloSeleccionado.id)
   setMostrarResumenMateriales(true)
 }
 
 async function abrirProtocoloEntrega() {
   if (!moduloSeleccionado?.id || !puedeUsarProtocolo) return
+  cerrarVentanasEmergentes({ conservarModulo: true })
 
   const { data: modulo, error } = await supabase
     .from('modulos')
@@ -1407,6 +1491,7 @@ const ultimosFinalizados = [...historial]
   return (
     <>
       <div
+        onClick={cerrarPanelesFlotantes}
         style={{
           padding: '20px',
           width: '100%',
@@ -1451,7 +1536,12 @@ const ultimosFinalizados = [...historial]
           <>
             <button
               aria-label="Ver llamados a prueba eléctrica pendientes"
-              onClick={() => setMostrarLlamadosPendientes((visible) => !visible)}
+              onClick={(e) => {
+                e.stopPropagation()
+                const abrir = !mostrarLlamadosPendientes
+                cerrarVentanasEmergentes()
+                setMostrarLlamadosPendientes(abrir)
+              }}
               style={{
                 position: 'fixed',
                 left: '12px',
@@ -1494,6 +1584,7 @@ const ultimosFinalizados = [...historial]
 
             {mostrarLlamadosPendientes && (
               <div
+                onClick={(e) => e.stopPropagation()}
                 style={{
                   position: 'fixed',
                   left: '12px',
@@ -1537,11 +1628,16 @@ const ultimosFinalizados = [...historial]
           </>
         )}
 
-        {puedeAgregarModulos && (
+        {puedeVerMenuAcciones && (
           <>
             <button
               aria-label="Abrir menú de acciones"
-              onClick={() => setMostrarMenuAcciones((visible) => !visible)}
+              onClick={(e) => {
+                e.stopPropagation()
+                const abrir = !mostrarMenuAcciones
+                cerrarVentanasEmergentes()
+                setMostrarMenuAcciones(abrir)
+              }}
               style={{
                 position: 'fixed',
                 left: '12px',
@@ -1563,6 +1659,7 @@ const ultimosFinalizados = [...historial]
 
             {mostrarMenuAcciones && (
               <div
+                onClick={(e) => e.stopPropagation()}
                 style={{
                   position: 'fixed',
                   left: '12px',
@@ -1579,22 +1676,43 @@ const ultimosFinalizados = [...historial]
                   boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
                 }}
               >
-                <button
-                  type="button"
-                  onClick={abrirReintegrarModulo}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: '1px solid #555',
-                    background: '#1565c0',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                  }}
-                >
-                  Reintegrar
-                </button>
+                {puedeAgregarModulos && (
+                  <button
+                    type="button"
+                    onClick={abrirReintegrarModulo}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #555',
+                      background: '#1565c0',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Reintegrar
+                  </button>
+                )}
+                {puedeDescargarProtocolosDiarios && (
+                  <button
+                    type="button"
+                    onClick={descargarProtocolosDiarios}
+                    style={{
+                      width: '100%',
+                      marginTop: puedeAgregarModulos ? '8px' : 0,
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #555',
+                      background: '#2e7d32',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Descargar protocolos diarios
+                  </button>
+                )}
               </div>
             )}
           </>
@@ -1850,7 +1968,7 @@ const ultimosFinalizados = [...historial]
 </div>
 
 {mostrarVistaGeneral ? (
-  <div style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 1.2 }}>
+  <div onClick={cerrarPanelesYModulo} style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 1.2 }}>
     <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Vista general de todas las líneas</h2>
 
     {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
@@ -1875,7 +1993,10 @@ const ultimosFinalizados = [...historial]
           {puedeAgregarModulos && (
             <button
               type="button"
-              onClick={() => abrirIngresoModuloEnExtremo(linea, 'inicio')}
+              onClick={(e) => {
+                e.stopPropagation()
+                abrirIngresoModuloEnExtremo(linea, 'inicio')
+              }}
               style={{
                 flex: '0 0 34px',
                 minHeight: '60px',
@@ -1921,7 +2042,9 @@ const ultimosFinalizados = [...historial]
                 onDragEnd={() => {
                   setModuloEnDrag(null)
                 }}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
+                  cerrarVentanasEmergentes()
                   console.log('CLICK POSICION', pos)
 
                   if (pos.serie) {
@@ -1938,7 +2061,7 @@ const ultimosFinalizados = [...historial]
                     setFechaPruebaEditada(fechaParaInput(pos.fecha_prueba_electrica))
                     setNotaEditada(pos.nota || '')
 
-                    if (['electrico', 'visor', 'operador', 'admin'].includes(perfil?.rol)) {
+                    if (['electrico', 'visor', 'analista', 'operador', 'admin'].includes(perfil?.rol)) {
                       cargarMaterialesModulo(pos.id)
                     }
 
@@ -2001,7 +2124,10 @@ const ultimosFinalizados = [...historial]
           {puedeAgregarModulos && (
             <button
               type="button"
-              onClick={() => abrirIngresoModuloEnExtremo(linea, 'fin')}
+              onClick={(e) => {
+                e.stopPropagation()
+                abrirIngresoModuloEnExtremo(linea, 'fin')
+              }}
               style={{
                 flex: '0 0 34px',
                 minHeight: '60px',
@@ -2023,7 +2149,7 @@ const ultimosFinalizados = [...historial]
     ))}
   </div>
 ) : (
-  <>
+  <div onClick={cerrarPanelesYModulo}>
     {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
       <div key={linea} style={{ marginBottom: '30px' }}>
         <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontSize: '22px' }}>
@@ -2046,7 +2172,10 @@ const ultimosFinalizados = [...historial]
           {puedeAgregarModulos && (
             <button
               type="button"
-              onClick={() => abrirIngresoModuloEnExtremo(linea, 'inicio')}
+              onClick={(e) => {
+                e.stopPropagation()
+                abrirIngresoModuloEnExtremo(linea, 'inicio')
+              }}
               style={{
                 flex: '0 0 54px',
                 minHeight: '120px',
@@ -2093,7 +2222,9 @@ const ultimosFinalizados = [...historial]
                   setModuloEnDrag(null)
                 }}
 
-                onClick={() => {
+                onClick={(e) => {
+  e.stopPropagation()
+  cerrarVentanasEmergentes()
   console.log('CLICK POSICION', pos)
 
   if (pos.serie) {
@@ -2113,7 +2244,7 @@ const ultimosFinalizados = [...historial]
     setFechaPruebaEditada(fechaParaInput(pos.fecha_prueba_electrica))
     setNotaEditada(pos.nota || '')
 
-    if (['electrico', 'visor', 'operador', 'admin'].includes(perfil?.rol)) {
+    if (['electrico', 'visor', 'analista', 'operador', 'admin'].includes(perfil?.rol)) {
       cargarMaterialesModulo(pos.id)
     }
 
@@ -2181,7 +2312,10 @@ const ultimosFinalizados = [...historial]
           {puedeAgregarModulos && (
             <button
               type="button"
-              onClick={() => abrirIngresoModuloEnExtremo(linea, 'fin')}
+              onClick={(e) => {
+                e.stopPropagation()
+                abrirIngresoModuloEnExtremo(linea, 'fin')
+              }}
               style={{
                 flex: '0 0 54px',
                 minHeight: '120px',
@@ -2201,12 +2335,13 @@ const ultimosFinalizados = [...historial]
         </div>
       </div>
     ))}
-  </>
+  </div>
 )}
       
 
       {esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba) && puedeResolverPrueba && (
         <div
+          onClick={cerrarPanelesFlotantes}
           style={{
             position: 'fixed',
             top: '50%',
@@ -2682,7 +2817,7 @@ const ultimosFinalizados = [...historial]
     </button>
   )
 )}
-      {['visor', 'operador', 'admin'].includes(perfil?.rol) && (
+      {['visor', 'analista', 'operador', 'admin'].includes(perfil?.rol) && (
         <button
           onClick={abrirResumenMateriales}
           style={{ padding: '10px', flex: 1 }}
@@ -2713,6 +2848,7 @@ const ultimosFinalizados = [...historial]
 
 {mostrarResumenMateriales && moduloSeleccionado && (
   <div
+    onClick={cerrarPanelesFlotantes}
     style={{
       position: 'fixed',
       top: '50%',
@@ -2920,6 +3056,68 @@ const ultimosFinalizados = [...historial]
 {mostrarKPI && (
   <div className="kpi-grid">
     <div style={{ color: '#ccc' }}>KPIs próximos a implementarse</div>
+  </div>
+)}
+
+{mostrarDescargaProtocolos && puedeDescargarProtocolosDiarios && (
+  <div
+    style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      background: '#222',
+      padding: '20px',
+      borderRadius: '10px',
+      border: '1px solid white',
+      width: 'calc(100vw - 32px)',
+      maxWidth: '380px',
+      boxSizing: 'border-box',
+      zIndex: 3200,
+      color: 'white',
+      textAlign: 'left',
+    }}
+  >
+    <h2 style={{ marginTop: 0 }}>Descargar protocolos diarios</h2>
+    <p style={{ color: '#ccc', marginTop: 0 }}>
+      Selecciona la fecha de prueba eléctrica.
+    </p>
+
+    <label style={{ display: 'block', marginBottom: '16px' }}>
+      <strong>Fecha</strong>
+      <input
+        type="date"
+        value={fechaProtocolosDiarios}
+        onChange={(e) => setFechaProtocolosDiarios(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '10px',
+          marginTop: '6px',
+          boxSizing: 'border-box',
+        }}
+      />
+      <small style={{ display: 'block', color: '#bbb', marginTop: '5px' }}>
+        Formato visual: dd-mm-aaaa
+      </small>
+    </label>
+
+    <div style={{ display: 'flex', gap: '10px' }}>
+      <button
+        type="button"
+        onClick={generarDescargaProtocolosDiarios}
+        disabled={descargandoProtocolos}
+        style={{ flex: 1, padding: '12px', background: '#2e7d32', color: 'white' }}
+      >
+        {descargandoProtocolos ? 'Generando...' : 'Descargar'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setMostrarDescargaProtocolos(false)}
+        style={{ flex: 1, padding: '12px' }}
+      >
+        Cerrar
+      </button>
+    </div>
   </div>
 )}
 
