@@ -23,27 +23,42 @@ const camposMateriales = [
   ['Foco sobrep led 24w', ['Plafo led 24w'], 981, 1177],
 ]
 
-function crearDetalle(materiales) {
-  const formatearCantidad = (nuevo, reutilizado) => {
-    if (nuevo && reutilizado) return `${nuevo} / ${reutilizado} R`
-    if (reutilizado) return `${reutilizado} R`
-    return nuevo || ''
-  }
+function formatearCantidad(nuevo, reutilizado) {
+  if (nuevo && reutilizado) return `${nuevo} / ${reutilizado} R`
+  if (reutilizado) return `${reutilizado} R`
+  return nuevo || ''
+}
 
-  return Object.fromEntries(camposMateriales.map(([item, fuentes]) => {
-    const cantidades = fuentes.reduce((suma, clave) => {
-      const valor = materiales?.[clave]
-      if (typeof valor === 'object') {
-        return {
-          nuevo: suma.nuevo + Number(valor?.nuevo || 0),
-          reutilizado: suma.reutilizado + Number(valor?.reutilizado || 0),
-        }
+function calcularCantidades(materiales, fuentes) {
+  return fuentes.reduce((suma, clave) => {
+    const valor = materiales?.[clave]
+    if (typeof valor === 'object') {
+      return {
+        nuevo: suma.nuevo + Number(valor?.nuevo || 0),
+        reutilizado: suma.reutilizado + Number(valor?.reutilizado || 0),
       }
+    }
 
-      return { ...suma, nuevo: suma.nuevo + Number(valor || 0) }
-    }, { nuevo: 0, reutilizado: 0 })
+    return { ...suma, nuevo: suma.nuevo + Number(valor || 0) }
+  }, { nuevo: 0, reutilizado: 0 })
+}
 
-    return [item, { mantencion: formatearCantidad(cantidades.nuevo, cantidades.reutilizado), modificacion: '' }]
+function crearDetalleInicial(materiales, detalleGuardado = {}) {
+  return Object.fromEntries(camposMateriales.map(([item, fuentes]) => {
+    const cantidades = calcularCantidades(materiales, fuentes)
+    const detalleCalculado = { mantencion: formatearCantidad(cantidades.nuevo, cantidades.reutilizado), modificacion: '' }
+    const detallePrevio = detalleGuardado?.[item]
+
+    if (!detallePrevio) return [item, detalleCalculado]
+
+    const totalAnterior = cantidades.nuevo + cantidades.reutilizado
+    const mantencionPrevia = String(detallePrevio.mantencion ?? '').trim()
+    const modificacionPrevia = String(detallePrevio.modificacion ?? '').trim()
+    const eraSumaAutomaticaAnterior = totalAnterior > 0 && mantencionPrevia === String(totalAnterior) && !modificacionPrevia
+
+    if (eraSumaAutomaticaAnterior) return [item, detalleCalculado]
+
+    return [item, { ...detalleCalculado, ...detallePrevio }]
   }))
 }
 
@@ -56,7 +71,7 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
     fecha: new Date().toISOString().slice(0, 10), responsable: responsable || '', planosRevision: '', centroCosto: '', flexNaranjo: false, flexLibre: false, flexMetalico: false,
     eva: false, thhn: false, caleco: false, canalizado: '', aterrizado: '', te1: '', observCanalizado: '', observCableado: '', observaciones: '', firma: '',
     ...datosIniciales,
-    detalleMateriales: { ...crearDetalle(materiales), ...(datosIniciales?.detalleMateriales || {}) },
+    detalleMateriales: crearDetalleInicial(materiales, datosIniciales?.detalleMateriales),
   }))
   const [guardando, setGuardando] = useState(false)
   const [seleccionMaterial, setSeleccionMaterial] = useState(null)
