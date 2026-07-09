@@ -6,10 +6,10 @@ const camposMateriales = [
   ['Conduit 20mm', ['Conduit 20mm'], 375, 546], ['Conduit 25mm', ['Conduit 25mm'], 375, 568], ['Caja PVC 100x100x65', ['Caja PVC 100x100x65'], 375, 590],
   ['Caja metálica 100x100x65', ['Caja metálica 100x100x65'], 375, 632], ['Caja tabique LH', ['Caja tabique LH'], 375, 653], ['Tapa ciega - Pasac.', ['Tapa ciega - Pasac.'], 375, 675],
   ['Cable RZ1 2,5mm', ['Cable RZ1 2,5mm'], 375, 739], ['Cable RZ1 4mm', ['Cable RZ1 4mm'], 375, 760], ['Cable RZ1 6mm', ['Cable RZ1 6mm'], 375, 781],
+  ['Cordon flex 3 x 2.5/4mm', ['Cordon 3x4mm'], 375, 802], ['Cordon flex 3 x 6mm', ['Cordon 3 x 6mm'], 375, 823],
   ['Ampolleta LED', ['Ampolleta LED'], 375, 867], ['Plafón', ['Plafón'], 375, 888], ['Tubo LED', ['Tubo LED'], 375, 909],
   ['EQ. Herm. LED 40W (tubo/placa)', ['EQ. Herm. LED 40W (tubo/placa)'], 375, 931], ['Foco tortuga LED', ['Foco tortuga 60W', 'Foco tortuga LED'], 375, 952], ['Extractor', ['Extractor'], 375, 995],
-  ['Conduit 32mm', ['Conduit 32mm'], 375, 1235], ['Cordon flex 3 x 2.5/4mm', ['Cordon 3x4mm'], 981, 1235], ['Cable RZ-1 3x1.5mm2', ['Cordon 3x1.5mm'], 981, 1256],
-  ['Cordon flex 3 x 6mm', ['Cordon 3 x 6mm'], 981, 1277],
+  ['Conduit 32mm', ['Conduit 32mm'], 375, 1237], ['Cable RZ-1 3x1.5mm2', ['Cordon 3x1.5mm'], 981, 1215],
   ['Artefacto simple', ['Artefacto simple'], 981, 546], ['Artefacto doble', ['Artefacto doble'], 981, 568],
   ['Artefacto triple', ['Artefacto triple'], 981, 590], ['Tapa ciega artefacto', ['Tapa ciega artefacto'], 981, 611], ['Ench. Ind. 32A hembra', ['Ench. Ind. 32A hembra'], 981, 632],
   ['Ench. Ind. 32A macho', ['Ench. Ind. 32A macho'], 981, 653], ['Tab. PVC 24-36cc IP44', ['Tablero emb. IP44', 'Tablero sobr. IP44'], 981, 696],
@@ -17,10 +17,10 @@ const camposMateriales = [
   ['Aut. bifásico 2x10A', ['Aut. bifásico 2x10A'], 981, 803], ['Aut. bifásico 2x16A', ['Aut. bifásico 2x16A'], 981, 824], ['Aut. bifásico 2x20A', ['Aut. bifásico 2x20A'], 981, 846],
   ['Aut. bifásico 2x25A', ['Aut. bifásico 2x25A'], 981, 867],
   ['Diferencial 2x25A', ['Diferencial 2x25A'], 981, 888], ['Porta Fusible', ['Porta Fusible'], 981, 931], ['Luz Piloto', ['Luz Piloto'], 981, 952],
-  ['Repartidor 4x80A', ['Barra repartidora'], 981, 974], ['Falso polo', ['Falso polo'], 981, 1016],
-  ['BPC LH 100x45 + acces', ['BPC LH 100x45'], 375, 1113], ['Tapa idrobox IP65', ['Tapa idrobox IP65'], 375, 1156], ['Caja chuqui PVC', ['Caja chuqui'], 375, 1256],
-  ['Foco sobrep LED 18w', ['Plafo led 18w'], 981, 1113], ['Panel led 600x600 mm + Accesorio montaje panel led', ['Panel led 60x60 + soporte'], 981, 1134],
-  ['Foco sobrep led 24w', ['Plafo led 24w'], 981, 1177],
+  ['Repartidor 4x80A', ['Barra repartidora'], 981, 994], ['Falso polo', ['Falso polo'], 981, 1016],
+  ['BPC LH 100x45 + acces', ['BPC LH 100x45'], 375, 1126], ['Tapa idrobox IP65', ['Tapa idrobox IP65'], 375, 1148], ['Caja chuqui PVC', ['Caja chuqui'], 375, 1259],
+  ['Foco sobrep LED 18w', ['Plafo led 18w'], 981, 1082], ['Panel led 600x600 mm', ['Panel led 60x60 + soporte'], 981, 1104],
+  ['Accesorio Montaje Panel Led', ['Panel led 60x60 + soporte'], 981, 1126], ['Foco sobrep led 24w', ['Plafo led 24w'], 981, 1148],
 ]
 
 function formatearCantidad(nuevo, reutilizado) {
@@ -226,9 +226,11 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
       <MarcaX activa={datos.te1 === 'Sí'} onClick={() => opcion('te1', 'Sí')} style={{ left: 1100, top: 475, width: 81, height: 28 }} nombre="TE-1 sí" /><MarcaX activa={datos.te1 === 'No'} onClick={() => opcion('te1', 'No')} style={{ left: 1181, top: 475, width: 82, height: 28 }} nombre="TE-1 no" />
       {camposMateriales.map(([item,, x, y]) => {
         const saltoColumna = x < 700 ? 133 : 134
+        const detalleMaterial = datos.detalleMateriales?.[item] || {}
+        const tieneValores = Boolean(detalleMaterial.mantencion || detalleMaterial.modificacion)
         return <div key={item}>
-          {['mantencion', 'modificacion'].map((tipo, col) => <input key={`${item}-${tipo}`} className="pdf-material" style={{ left: x + col * saltoColumna, top: y, width: x < 700 ? 133 : (col ? 148 : 134), height: 21 }} value={datos.detalleMateriales?.[item]?.[tipo] ?? ''} onClick={(e) => seleccionarParteMaterial(e, item, tipo)} onChange={(e) => material(item, tipo, e.target.value)} />)}
-          <button type="button" className="pdf-material-swap" style={{ left: x + saltoColumna - 13, top: y + 1, width: 26, height: 19 }} onClick={() => intercambiarMaterial(item)} title="Cambiar entre Mantención y Modifica.">↔</button>
+          {['mantencion', 'modificacion'].map((tipo, col) => <input key={`${item}-${tipo}`} className="pdf-material" style={{ left: x + col * saltoColumna, top: y, width: x < 700 ? 133 : (col ? 148 : 134), height: 21 }} value={detalleMaterial?.[tipo] ?? ''} onClick={(e) => seleccionarParteMaterial(e, item, tipo)} onChange={(e) => material(item, tipo, e.target.value)} />)}
+          {tieneValores && <button type="button" className="pdf-material-swap" style={{ left: x + saltoColumna - 13, top: y + 1, width: 26, height: 19 }} onClick={() => intercambiarMaterial(item)} title="Cambiar entre Mantención y Modifica.">↔</button>}
         </div>
       })}
       <textarea className="pdf-campo" style={{ left: 37, top: 1421, width: 855, height: 59 }} value={datos.observaciones} onChange={(e) => cambiar('observaciones', e.target.value)} /><textarea className="pdf-campo" style={{ left: 892, top: 1421, width: 371, height: 59 }} value={datos.firma} onChange={(e) => cambiar('firma', e.target.value)} />
