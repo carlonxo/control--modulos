@@ -7,6 +7,9 @@ add column if not exists protocolo_entrega jsonb not null default '{}'::jsonb;
 alter table public.historial_modulos
 add column if not exists protocolo_entrega jsonb not null default '{}'::jsonb;
 
+alter table public.historial_modulos
+add column if not exists nota text;
+
 alter table public.modulos
 drop constraint if exists chk_estado;
 

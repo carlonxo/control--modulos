@@ -243,6 +243,13 @@ const [cargandoMateriales, setCargandoMateriales] = useState(false)
 const [avisoPruebaElectrica, setAvisoPruebaElectrica] = useState(null)
 const [mostrarLlamadosPendientes, setMostrarLlamadosPendientes] = useState(false)
 const [solicitantesPendientes, setSolicitantesPendientes] = useState({})
+const [mostrarMenuAcciones, setMostrarMenuAcciones] = useState(false)
+const [mostrarReintegrar, setMostrarReintegrar] = useState(false)
+const [serieReintegrar, setSerieReintegrar] = useState('')
+const [lineaReintegrar, setLineaReintegrar] = useState(1)
+const [extremoReintegrar, setExtremoReintegrar] = useState('fin')
+const [historialSeleccionadoReintegrar, setHistorialSeleccionadoReintegrar] = useState(null)
+const [reintegrandoModulo, setReintegrandoModulo] = useState(false)
 const [mostrarProtocoloEntrega, setMostrarProtocoloEntrega] = useState(false)
 const [datosProtocoloEntrega, setDatosProtocoloEntrega] = useState({})
 const [responsableProtocolo, setResponsableProtocolo] = useState('')
@@ -652,6 +659,117 @@ async function prepararLineaParaIngreso(linea, extremo) {
   return extremo === 'inicio' ? 1 : modulosLinea.length + 1
 }
 
+function abrirReintegrarModulo() {
+  setMostrarMenuAcciones(false)
+  setMostrarReintegrar(true)
+  setSerieReintegrar('')
+  setHistorialSeleccionadoReintegrar(null)
+  setLineaReintegrar(1)
+  setExtremoReintegrar('fin')
+}
+
+function seleccionarHistorialParaReintegrar(item) {
+  setHistorialSeleccionadoReintegrar(item)
+  setSerieReintegrar(item?.serie || '')
+}
+
+async function reintegrarModuloFinalizado() {
+  if (!puedeAgregarModulos || reintegrandoModulo) return
+
+  setReintegrandoModulo(true)
+  try {
+    let moduloHistorial = historialSeleccionadoReintegrar
+
+    if (!moduloHistorial) {
+      const serie = serieReintegrar.trim()
+      if (!serie) {
+        mostrarNotificacion('Debe seleccionar o ingresar una serie')
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('historial_modulos')
+        .select('*')
+        .eq('serie', serie)
+        .order('fecha_salida', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        mostrarNotificacion('No se pudo buscar el módulo: ' + error.message)
+        return
+      }
+
+      moduloHistorial = data
+    }
+
+    if (!moduloHistorial) {
+      mostrarNotificacion('No se encontró un módulo finalizado con esa serie')
+      return
+    }
+
+    const { data: activoExistente, error: errorActivo } = await supabase
+      .from('modulos')
+      .select('id')
+      .eq('serie', moduloHistorial.serie)
+      .maybeSingle()
+
+    if (errorActivo) {
+      mostrarNotificacion('No se pudo verificar el módulo activo: ' + errorActivo.message)
+      return
+    }
+
+    if (activoExistente) {
+      mostrarNotificacion('Ese módulo ya se encuentra activo en una línea')
+      return
+    }
+
+    const posicionDestino = await prepararLineaParaIngreso(lineaReintegrar, extremoReintegrar)
+    const { error: errorInsert } = await supabase
+      .from('modulos')
+      .insert([
+        {
+          serie: moduloHistorial.serie,
+          tipo: moduloHistorial.tipo,
+          proyecto: moduloHistorial.proyecto,
+          responsable: moduloHistorial.responsable,
+          fecha_ingreso: moduloHistorial.fecha_ingreso,
+          fecha_prueba_electrica: moduloHistorial.fecha_prueba_electrica,
+          protocolo_entrega: moduloHistorial.protocolo_entrega || {},
+          nota: moduloHistorial.nota || '',
+          estado: moduloHistorial.estado || 'Sin iniciar',
+          linea: lineaReintegrar,
+          posicion: posicionDestino,
+        },
+      ])
+
+    if (errorInsert) {
+      mostrarNotificacion('No se pudo reintegrar el módulo: ' + errorInsert.message)
+      await cargarTablero()
+      return
+    }
+
+    const { error: errorDelete } = await supabase
+      .from('historial_modulos')
+      .delete()
+      .eq('id', moduloHistorial.id)
+
+    if (errorDelete) {
+      mostrarNotificacion('Módulo reintegrado, pero no se pudo retirar del historial: ' + errorDelete.message)
+    } else {
+      mostrarNotificacion('Módulo reintegrado correctamente')
+    }
+
+    setMostrarReintegrar(false)
+    setHistorialSeleccionadoReintegrar(null)
+    setSerieReintegrar('')
+    await cargarTablero()
+    await cargarHistorial()
+  } finally {
+    setReintegrandoModulo(false)
+  }
+}
+
 function limpiarEstadosModal() {
   setMostrarResumenMateriales(false)
   setModuloSeleccionado(null)
@@ -985,24 +1103,51 @@ async function finalizarModulo() {
     return
   }
 
-  const { error: errorHistorial } = await supabase
+  const historialPayload = {
+    modulo_id: modulo.id,
+    serie: modulo.serie,
+    tipo: modulo.tipo,
+    proyecto: modulo.proyecto,
+    responsable: modulo.responsable,
+    fecha_ingreso: modulo.fecha_ingreso,
+    fecha_prueba_electrica: modulo.fecha_prueba_electrica,
+    protocolo_entrega: modulo.protocolo_entrega || {},
+    nota: modulo.nota || '',
+    fecha_salida: new Date().toISOString(),
+    estado: modulo.estado,
+    linea: modulo.linea,
+    posicion: modulo.posicion,
+  }
+
+  let { error: errorHistorial } = await supabase
     .from('historial_modulos')
-    .insert([
-      {
-        modulo_id: modulo.id,
-        serie: modulo.serie,
-        tipo: modulo.tipo,
-        proyecto: modulo.proyecto,
-        responsable: modulo.responsable,
-        fecha_ingreso: modulo.fecha_ingreso,
-        fecha_prueba_electrica: modulo.fecha_prueba_electrica,
-        protocolo_entrega: modulo.protocolo_entrega || {},
-        fecha_salida: new Date().toISOString(),
-        estado: modulo.estado,
-        linea: modulo.linea,
-        posicion: modulo.posicion,
-      },
-    ])
+    .insert([historialPayload])
+
+  if (errorHistorial?.message?.includes("'nota' column")) {
+    const payloadSinNota = { ...historialPayload }
+    delete payloadSinNota.nota
+    ;({ error: errorHistorial } = await supabase
+      .from('historial_modulos')
+      .insert([payloadSinNota]))
+  }
+
+  if (errorHistorial?.message?.includes('historial_ciclo_unico')) {
+    let { error: errorUpdateHistorial } = await supabase
+      .from('historial_modulos')
+      .update(historialPayload)
+      .eq('modulo_id', modulo.id)
+
+    if (errorUpdateHistorial?.message?.includes("'nota' column")) {
+      const payloadSinNota = { ...historialPayload }
+      delete payloadSinNota.nota
+      ;({ error: errorUpdateHistorial } = await supabase
+        .from('historial_modulos')
+        .update(payloadSinNota)
+        .eq('modulo_id', modulo.id))
+    }
+
+    errorHistorial = errorUpdateHistorial
+  }
 
   if (errorHistorial) {
     mostrarNotificacion(errorHistorial.message)
@@ -1252,6 +1397,11 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
   )
 }).length
 
+const ultimosFinalizados = [...historial]
+  .filter((item) => item.serie)
+  .sort((a, b) => new Date(b.fecha_salida || 0) - new Date(a.fecha_salida || 0))
+  .slice(0, 5)
+
   
 
   return (
@@ -1382,6 +1532,69 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                     </div>
                   ))
                 )}
+              </div>
+            )}
+          </>
+        )}
+
+        {puedeAgregarModulos && (
+          <>
+            <button
+              aria-label="Abrir menú de acciones"
+              onClick={() => setMostrarMenuAcciones((visible) => !visible)}
+              style={{
+                position: 'fixed',
+                left: '12px',
+                top: '12px',
+                width: '52px',
+                height: '52px',
+                borderRadius: '50%',
+                border: '2px solid white',
+                background: '#424242',
+                color: 'white',
+                fontSize: '24px',
+                zIndex: 2500,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+              }}
+            >
+              ...
+            </button>
+
+            {mostrarMenuAcciones && (
+              <div
+                style={{
+                  position: 'fixed',
+                  left: '12px',
+                  top: '72px',
+                  width: '220px',
+                  padding: '10px',
+                  boxSizing: 'border-box',
+                  border: '1px solid white',
+                  borderRadius: '10px',
+                  background: '#222',
+                  color: 'white',
+                  textAlign: 'left',
+                  zIndex: 2499,
+                  boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={abrirReintegrarModulo}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid #555',
+                    background: '#1565c0',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                  }}
+                >
+                  Reintegrar
+                </button>
               </div>
             )}
           </>
@@ -1674,7 +1887,7 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo al inicio de la línea"
+              title="Ingresar módulo por calle acopio"
             >
               +
             </button>
@@ -1800,7 +2013,7 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo al final de la línea"
+              title="Ingresar módulo por calle agua"
             >
               +
             </button>
@@ -1845,7 +2058,7 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo al inicio de la línea"
+              title="Ingresar módulo por calle acopio"
             >
               +
             </button>
@@ -1980,7 +2193,7 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo al final de la línea"
+              title="Ingresar módulo por calle agua"
             >
               +
             </button>
@@ -2583,6 +2796,125 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
     materialesSoloLectura={!puedeEditarProtocolo}
     onCerrar={() => setMostrarProtocoloEntrega(false)}
   />
+)}
+
+{mostrarReintegrar && puedeAgregarModulos && (
+  <div
+    style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      background: '#222',
+      padding: '20px',
+      borderRadius: '10px',
+      border: '1px solid white',
+      width: 'calc(100vw - 32px)',
+      maxWidth: '430px',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      zIndex: 3200,
+      color: 'white',
+      textAlign: 'left',
+    }}
+  >
+    <h2 style={{ marginTop: 0 }}>Reintegrar módulo</h2>
+    <p style={{ color: '#ccc', marginTop: 0 }}>
+      Selecciona uno de los últimos finalizados o ingresa una serie.
+    </p>
+
+    <div style={{ display: 'grid', gap: '8px', marginBottom: '14px' }}>
+      {ultimosFinalizados.length === 0 ? (
+        <p style={{ margin: 0 }}>No hay módulos finalizados recientes.</p>
+      ) : (
+        ultimosFinalizados.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => seleccionarHistorialParaReintegrar(item)}
+            style={{
+              padding: '10px',
+              borderRadius: '8px',
+              border: historialSeleccionadoReintegrar?.id === item.id ? '2px solid #64b5f6' : '1px solid #555',
+              background: historialSeleccionadoReintegrar?.id === item.id ? '#0d47a1' : '#333',
+              color: 'white',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <strong>{item.serie}</strong>
+            <span style={{ display: 'block', color: '#ccc', fontSize: '12px', marginTop: '2px' }}>
+              {item.tipo} · Salida {formatearFecha(item.fecha_salida) || 'sin fecha'}
+            </span>
+          </button>
+        ))
+      )}
+    </div>
+
+    <label style={{ display: 'block', marginBottom: '12px' }}>
+      <strong>Serie</strong>
+      <input
+        value={serieReintegrar}
+        onChange={(e) => {
+          setSerieReintegrar(e.target.value)
+          setHistorialSeleccionadoReintegrar(null)
+        }}
+        placeholder="Ingresar serie"
+        style={{
+          width: '100%',
+          padding: '9px',
+          marginTop: '5px',
+          boxSizing: 'border-box',
+        }}
+      />
+    </label>
+
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+      <label>
+        <strong>Línea</strong>
+        <select
+          value={lineaReintegrar}
+          onChange={(e) => setLineaReintegrar(Number(e.target.value))}
+          style={{ width: '100%', padding: '9px', marginTop: '5px' }}
+        >
+          {[1,2,3,4,5,6,7,8,9].map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        <strong>Ubicación</strong>
+        <select
+          value={extremoReintegrar}
+          onChange={(e) => setExtremoReintegrar(e.target.value)}
+          style={{ width: '100%', padding: '9px', marginTop: '5px' }}
+        >
+          <option value="inicio">Calle acopio</option>
+          <option value="fin">Calle agua</option>
+        </select>
+      </label>
+    </div>
+
+    <div style={{ display: 'flex', gap: '10px' }}>
+      <button
+        type="button"
+        onClick={reintegrarModuloFinalizado}
+        disabled={reintegrandoModulo}
+        style={{ flex: 1, padding: '12px', background: '#2e7d32', color: 'white' }}
+      >
+        {reintegrandoModulo ? 'Reintegrando...' : 'Reintegrar'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setMostrarReintegrar(false)}
+        style={{ flex: 1, padding: '12px' }}
+      >
+        Cerrar
+      </button>
+    </div>
+  </div>
 )}
 
 {mostrarKPI && (
