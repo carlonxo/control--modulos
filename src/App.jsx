@@ -899,6 +899,35 @@ async function finalizarModulo() {
   mostrarNotificacion('Módulo finalizado correctamente')
 }
 
+async function eliminarModuloSinRegistro() {
+  if (perfil?.rol !== 'admin' || !moduloSeleccionado?.id) return
+
+  const confirmado = window.confirm(
+    `¿Eliminar el módulo ${moduloSeleccionado.serie || ''} sin dejar registro? Esta acción no se puede deshacer.`
+  )
+
+  if (!confirmado) return
+
+  const { error } = await supabase
+    .from('modulos')
+    .delete()
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    mostrarNotificacion('No se pudo eliminar el módulo: ' + error.message)
+    return
+  }
+
+  setFormulariosElectricos((actuales) => {
+    const copia = { ...actuales }
+    delete copia[moduloSeleccionado.id]
+    return copia
+  })
+  await cargarTablero()
+  limpiarEstadosModal()
+  mostrarNotificacion('Módulo eliminado sin dejar registro')
+}
+
 async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   if (!moduloId) {
     mostrarNotificacion('Error: Módulo inválido')
@@ -1861,19 +1890,34 @@ const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) =
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
       <h2 style={{ margin: 0 }}>Módulo</h2>
       {perfil?.rol === 'admin' && (
-        <button
-          onClick={finalizarModulo}
-          style={{
-            background: '#d32f2f',
-            color: 'white',
-            padding: '10px 14px',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-          }}
-        >
-          Finalizar módulo
-        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button
+            onClick={eliminarModuloSinRegistro}
+            style={{
+              background: '#5d4037',
+              color: 'white',
+              padding: '10px 14px',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            Eliminar módulo
+          </button>
+          <button
+            onClick={finalizarModulo}
+            style={{
+              background: '#d32f2f',
+              color: 'white',
+              padding: '10px 14px',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            Finalizar módulo
+          </button>
+        </div>
       )}
     </div>
 
