@@ -22,7 +22,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Cableado',
-    items: ['Cable RZ1 2,5mm', 'Cable RZ1 4mm', 'Cable RZ1 6mm'],
+    items: ['Cable RZ1 2,5mm', 'Cable RZ1 4mm', 'Cable RZ1 6mm', 'Cordon 3x1.5mm', 'Cordon 3x4mm', 'Cordon 3 x 6mm'],
   },
   {
     nombre: 'Iluminación',
@@ -35,6 +35,10 @@ const seccionesFormularioElectrico = [
   {
     nombre: 'Tableros',
     items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Aut. bifásico 2x25A', 'Diferencial 2x25A', 'Luz Piloto', 'Porta Fusible', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
+  },
+  {
+    nombre: 'Especiales',
+    items: ['Panel led 60x60 + soporte', 'Plafo led 18w', 'Plafo led 24w', 'BPC LH 100x45', 'Tapa idrobox IP65', 'Caja chuqui'],
   },
 ]
 

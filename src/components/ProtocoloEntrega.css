@@ -10,15 +10,18 @@
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+.pdf-protocolo-escala { position: relative; margin: 0 auto; }
 .pdf-protocolo-pagina { position: relative; width: 1275px; height: 1650px; margin: 0 auto; background-size: 1275px 1650px; background-repeat: no-repeat; }
 .pdf-campo, .pdf-material { position: absolute; box-sizing: border-box; border: 1px solid transparent; border-radius: 0; background: rgba(255,255,210,.34); color: #111; font: 700 15px Arial,sans-serif; text-align: center; }
 .pdf-campo:focus, .pdf-material:focus { outline: 2px solid #1976d2; background: rgba(255,255,255,.92); }
 .pdf-campo:disabled { opacity: 1; color: #111; -webkit-text-fill-color: #111; }
 .pdf-material { padding: 0 3px; font-size: 13px; }
+.pdf-material-swap { position: absolute; z-index: 4; padding: 0; border: 1px solid #1565c0; border-radius: 8px; background: rgba(21,101,192,.92); color: white; font: 700 11px Arial,sans-serif; line-height: 1; cursor: pointer; }
+.pdf-material-swap:focus { outline: 2px solid #ffb300; }
 .pdf-marca-x { position: absolute; padding: 0; border: 0; border-radius: 0; background: rgba(255,255,210,.28); color: #111; font: 900 20px Arial,sans-serif; cursor: pointer; }
 .pdf-marca-x:focus { outline: 2px solid #1976d2; }
 .pdf-linea-horizontal { position: absolute; height: 1px; background: #111; pointer-events: none; z-index: 3; }
-@media (max-width: 960px) { .pdf-protocolo-pagina { margin: 0; } .protocolo-toolbar button { flex: 1; } }
+@media (max-width: 960px) { .pdf-protocolo-escala, .pdf-protocolo-pagina { margin: 0; } .protocolo-toolbar button { flex: 1; } }
 
 @media print {
   @page { size: letter portrait; margin: 0; }
@@ -56,12 +59,17 @@
     height: 1056px;
     overflow: hidden;
   }
+  .pdf-protocolo-escala {
+    width: 816px !important;
+    height: 1056px !important;
+    margin: 0 !important;
+  }
   .pdf-protocolo-pagina {
     position: absolute;
     top: 0;
     left: 0;
     margin: 0;
-    transform: scale(.64);
+    transform: scale(.64) !important;
     transform-origin: top left;
     break-after: avoid;
     page-break-after: avoid;
@@ -75,4 +83,5 @@
     outline: 0 !important;
     background: transparent !important;
   }
+  .pdf-material-swap { display: none !important; }
 }
