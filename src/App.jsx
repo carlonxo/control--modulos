@@ -29,6 +29,12 @@ function esTipoBodega(tipo) {
   return normalizarTexto(tipo).includes('bodega')
 }
 
+function esEstadoConObservacionAlerta(estado) {
+  return ['prueba electrica', 'en garantia', 'sin instalacion'].includes(
+    normalizarTexto(estado)
+  )
+}
+
 function fechaParaInput(valor) {
   if (!valor) return ''
   const fecha = new Date(valor)
@@ -245,6 +251,7 @@ const [avisoPruebaElectrica, setAvisoPruebaElectrica] = useState(null)
 const [mostrarLlamadosPendientes, setMostrarLlamadosPendientes] = useState(false)
 const [solicitantesPendientes, setSolicitantesPendientes] = useState({})
 const [mostrarMenuAcciones, setMostrarMenuAcciones] = useState(false)
+const [mostrarMenuModulo, setMostrarMenuModulo] = useState(false)
 const [mostrarReintegrar, setMostrarReintegrar] = useState(false)
 const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false)
 const [fechaProtocolosDiarios, setFechaProtocolosDiarios] = useState(new Date().toISOString().slice(0, 10))
@@ -258,6 +265,7 @@ const [mostrarProtocoloEntrega, setMostrarProtocoloEntrega] = useState(false)
 const [datosProtocoloEntrega, setDatosProtocoloEntrega] = useState({})
 const [responsableProtocolo, setResponsableProtocolo] = useState('')
 const solicitudesPendientesRef = useRef(new Set())
+const autoScrollArrastreRef = useRef(null)
 const esRolSoloLectura = ['visor', 'analista', 'electrico'].includes(perfil?.rol)
 const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
 const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
@@ -267,6 +275,8 @@ const puedeEditarDatosProtocolo = ['admin', 'operador', 'control_calidad'].inclu
 const recibeAvisosPrueba = ['admin', 'control_calidad', 'operador'].includes(perfil?.rol)
 const puedeDescargarProtocolosDiarios = ['analista', 'admin', 'operador', 'control_calidad'].includes(perfil?.rol)
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios
+const puedeVerMenuModulo = ['admin', 'operador'].includes(perfil?.rol)
+const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
 const llamadosPendientes = datos.filter(
   (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
 )
@@ -300,9 +310,49 @@ function mostrarNotificacion(mensaje) {
   setNotificacion(mensaje)
 }
 
+function detenerAutoScrollArrastre() {
+  if (autoScrollArrastreRef.current) {
+    window.cancelAnimationFrame(autoScrollArrastreRef.current)
+    autoScrollArrastreRef.current = null
+  }
+}
+
+function autoScrollLineaDuranteArrastre(contenedor, posicionX) {
+  if (!contenedor) return
+
+  const rect = contenedor.getBoundingClientRect()
+  const margenActivo = 90
+  const velocidadMaxima = 22
+  let velocidad = 0
+
+  if (posicionX < rect.left + margenActivo) {
+    const intensidad = (rect.left + margenActivo - posicionX) / margenActivo
+    velocidad = -Math.ceil(intensidad * velocidadMaxima)
+  } else if (posicionX > rect.right - margenActivo) {
+    const intensidad = (posicionX - (rect.right - margenActivo)) / margenActivo
+    velocidad = Math.ceil(intensidad * velocidadMaxima)
+  }
+
+  detenerAutoScrollArrastre()
+
+  if (!velocidad) return
+
+  const desplazar = () => {
+    contenedor.scrollLeft += velocidad
+    autoScrollArrastreRef.current = window.requestAnimationFrame(desplazar)
+  }
+
+  autoScrollArrastreRef.current = window.requestAnimationFrame(desplazar)
+}
+
+useEffect(() => {
+  return () => detenerAutoScrollArrastre()
+}, [])
+
 function cerrarPanelesFlotantes() {
   setMostrarLlamadosPendientes(false)
   setMostrarMenuAcciones(false)
+  setMostrarMenuModulo(false)
 }
 
 function cerrarPanelesYModulo() {
@@ -490,9 +540,15 @@ async function cargarPerfil() {
       return
     }
 
-    const { data: modulosData, error: modulosError } = await supabase
+    let { data: modulosData, error: modulosError } = await supabase
       .from('modulos')
-      .select('id, nota, fecha_prueba_electrica')
+      .select('id, nota, observacion_alerta, fecha_prueba_electrica')
+
+    if (modulosError?.message?.includes('observacion_alerta')) {
+      ;({ data: modulosData, error: modulosError } = await supabase
+        .from('modulos')
+        .select('id, nota, fecha_prueba_electrica'))
+    }
 
     if (modulosError) {
       console.error(modulosError)
@@ -503,6 +559,7 @@ async function cargarPerfil() {
     const mergedData = (tableroData || []).map((row) => ({
       ...row,
       nota: row.nota || modulosMap.get(row.id)?.nota || '',
+      observacion_alerta: row.observacion_alerta || modulosMap.get(row.id)?.observacion_alerta || '',
       fecha_prueba_electrica: row.fecha_prueba_electrica || modulosMap.get(row.id)?.fecha_prueba_electrica || null,
       solicitud_prueba: esSolicitudPruebaActiva(row.solicitud_prueba),
     }))
@@ -818,6 +875,7 @@ async function reintegrarModuloFinalizado() {
           fecha_prueba_electrica: moduloHistorial.fecha_prueba_electrica,
           protocolo_entrega: moduloHistorial.protocolo_entrega || {},
           nota: moduloHistorial.nota || '',
+          observacion_alerta: moduloHistorial.observacion_alerta || '',
           estado: moduloHistorial.estado || 'Sin iniciar',
           linea: lineaReintegrar,
           posicion: posicionDestino,
@@ -979,6 +1037,44 @@ async function solicitarPruebaElectrica() {
   setModuloSeleccionado(null)
 
   mostrarNotificacion('Solicitud de prueba eléctrica enviada')
+}
+
+async function dejarObservacionAlerta() {
+  if (!moduloSeleccionado?.id || !puedeDejarObservacionAlerta) return
+
+  const textoActual = moduloSeleccionado.observacion_alerta || ''
+  const observacion = window.prompt('Ingrese la observación del módulo:', textoActual)
+
+  if (observacion === null) return
+
+  const observacionLimpia = observacion.trim()
+
+  const { error } = await supabase
+    .from('modulos')
+    .update({ observacion_alerta: observacionLimpia })
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    mostrarNotificacion('No se pudo guardar la observación: ' + error.message)
+    return
+  }
+
+  setModuloSeleccionado((actual) => actual
+    ? { ...actual, observacion_alerta: observacionLimpia }
+    : actual
+  )
+  await cargarTablero()
+  setMostrarMenuModulo(false)
+  mostrarNotificacion(
+    observacionLimpia
+      ? 'Observación guardada'
+      : 'Observación eliminada'
+  )
+}
+
+function mostrarObservacionAlerta(modulo) {
+  if (!modulo?.observacion_alerta) return
+  window.alert(modulo.observacion_alerta)
 }
 
 async function cancelarSolicitudPruebaElectrica() {
@@ -1197,6 +1293,7 @@ async function finalizarModulo() {
     fecha_prueba_electrica: modulo.fecha_prueba_electrica,
     protocolo_entrega: modulo.protocolo_entrega || {},
     nota: modulo.nota || '',
+    observacion_alerta: modulo.observacion_alerta || '',
     fecha_salida: new Date().toISOString(),
     estado: modulo.estado,
     linea: modulo.linea,
@@ -1983,6 +2080,16 @@ const ultimosFinalizados = [...historial]
         </h3>
 
         <div
+          onDragOver={(e) => {
+            if (!moduloEnDrag) return
+            e.preventDefault()
+            autoScrollLineaDuranteArrastre(e.currentTarget, e.clientX)
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) {
+              detenerAutoScrollArrastre()
+            }
+          }}
           style={{
             display: 'flex',
             gap: '2px',
@@ -2032,6 +2139,7 @@ const ultimosFinalizados = [...historial]
                 onDrop={(e) => {
                   e.preventDefault()
                   e.currentTarget.style.opacity = '1'
+                  detenerAutoScrollArrastre()
                   const idValido = typeof moduloEnDrag?.id === 'string' && moduloEnDrag.id !== 'null' && moduloEnDrag.id.trim() !== ''
                   const esMismo = moduloEnDrag?.id === pos.id
                   if (idValido && !esMismo) {
@@ -2040,6 +2148,7 @@ const ultimosFinalizados = [...historial]
                   setModuloEnDrag(null)
                 }}
                 onDragEnd={() => {
+                  detenerAutoScrollArrastre()
                   setModuloEnDrag(null)
                 }}
                 onClick={(e) => {
@@ -2103,16 +2212,36 @@ const ultimosFinalizados = [...historial]
                     >
                       <strong>{pos.serie}</strong>
 
-                      {pos.nota && (
-                        <span
-                          title="Este módulo tiene una nota"
-                          style={{
-                            fontSize: '18px',
-                          }}
-                        >
-                          💬
-                        </span>
-                      )}
+                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                        {pos.observacion_alerta && (
+                          <span
+                            title="Ver observación"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              mostrarObservacionAlerta(pos)
+                            }}
+                            style={{
+                              fontSize: '18px',
+                              cursor: 'pointer',
+                              lineHeight: 1,
+                            }}
+                          >
+                            🚨
+                          </span>
+                        )}
+
+                        {pos.nota && (
+                          <span
+                            title="Este módulo tiene una nota"
+                            style={{
+                              fontSize: '18px',
+                              lineHeight: 1,
+                            }}
+                          >
+                            💬
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <div>{pos.tipo}</div>
                   </>
@@ -2162,6 +2291,16 @@ const ultimosFinalizados = [...historial]
         </h2>
 
         <div
+          onDragOver={(e) => {
+            if (!moduloEnDrag) return
+            e.preventDefault()
+            autoScrollLineaDuranteArrastre(e.currentTarget, e.clientX)
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) {
+              detenerAutoScrollArrastre()
+            }
+          }}
           style={{
             display: 'flex',
             gap: '10px',
@@ -2211,6 +2350,7 @@ const ultimosFinalizados = [...historial]
                 onDrop={(e) => {
                   e.preventDefault()
                   e.currentTarget.style.opacity = '1'
+                  detenerAutoScrollArrastre()
                   const idValido = typeof moduloEnDrag?.id === 'string' && moduloEnDrag.id !== 'null' && moduloEnDrag.id.trim() !== ''
                   const esMismo = moduloEnDrag?.id === pos.id
                   if (idValido && !esMismo) {
@@ -2219,6 +2359,7 @@ const ultimosFinalizados = [...historial]
                   setModuloEnDrag(null)
                 }}
                 onDragEnd={() => {
+                  detenerAutoScrollArrastre()
                   setModuloEnDrag(null)
                 }}
 
@@ -2289,16 +2430,36 @@ const ultimosFinalizados = [...historial]
                     >
                       <strong>{pos.serie}</strong>
 
-                      {pos.nota && (
-                        <span
-                          title="Este módulo tiene una nota"
-                          style={{
-                            fontSize: '18px',
-                          }}
-                        >
-                          💬
-                        </span>
-                      )}
+                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                        {pos.observacion_alerta && (
+                          <span
+                            title="Ver observación"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              mostrarObservacionAlerta(pos)
+                            }}
+                            style={{
+                              fontSize: '18px',
+                              cursor: 'pointer',
+                              lineHeight: 1,
+                            }}
+                          >
+                            🚨
+                          </span>
+                        )}
+
+                        {pos.nota && (
+                          <span
+                            title="Este módulo tiene una nota"
+                            style={{
+                              fontSize: '18px',
+                              lineHeight: 1,
+                            }}
+                          >
+                            💬
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <div>{pos.tipo}</div>
                     <div>{pos.proyecto}</div>
@@ -2451,36 +2612,163 @@ const ultimosFinalizados = [...historial]
   >
     <div style={{ marginBottom: '16px' }}>
       <h2 style={{ margin: '0 0 12px' }}>Módulo</h2>
-      {perfil?.rol === 'admin' && (
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
-          <button
-            onClick={eliminarModuloSinRegistro}
-            style={{
-              background: '#5d4037',
-              color: 'white',
-              padding: '10px 14px',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              flex: 1,
-            }}
-          >
-            Eliminar módulo
-          </button>
-          <button
-            onClick={finalizarModulo}
-            style={{
-              background: '#d32f2f',
-              color: 'white',
-              padding: '10px 14px',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              flex: 1,
-            }}
-          >
-            Finalizar módulo
-          </button>
+      {puedeVerMenuModulo && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ position: 'relative', flex: '0 0 auto' }}>
+            <button
+              type="button"
+              aria-label="Opciones del módulo"
+              onClick={(e) => {
+                e.stopPropagation()
+                setMostrarMenuModulo((actual) => !actual)
+              }}
+              style={{
+                width: '44px',
+                height: '44px',
+                background: 'transparent',
+                color: 'white',
+                padding: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                lineHeight: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Opciones del módulo"
+            >
+              <svg
+                viewBox="0 0 64 64"
+                width="34"
+                height="34"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <line x1="16" y1="8" x2="16" y2="56" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+                <circle cx="16" cy="42" r="9" fill="currentColor" />
+                <line x1="32" y1="8" x2="32" y2="56" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+                <circle cx="32" cy="20" r="9" fill="currentColor" />
+                <line x1="48" y1="8" x2="48" y2="56" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+                <circle cx="48" cy="34" r="9" fill="currentColor" />
+              </svg>
+            </button>
+
+            {mostrarMenuModulo && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 'calc(100% + 6px)',
+                  width: '170px',
+                  background: '#111',
+                  border: '1px solid #555',
+                  borderRadius: '8px',
+                  padding: '6px',
+                  boxShadow: '0 8px 18px rgba(0,0,0,0.35)',
+                  zIndex: 1200,
+                  boxSizing: 'border-box',
+                }}
+              >
+                {perfil?.rol === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarMenuModulo(false)
+                      eliminarModuloSinRegistro()
+                    }}
+                    style={{
+                      width: '100%',
+                      background: '#5d4037',
+                      color: 'white',
+                      padding: '10px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontWeight: 700,
+                      marginBottom: '6px',
+                    }}
+                  >
+                    Eliminar módulo
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={
+                    esEstadoPruebaElectrica(moduloSeleccionado?.estado) ||
+                    esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba)
+                  }
+                  onClick={() => {
+                    setMostrarMenuModulo(false)
+                    solicitarPruebaElectrica()
+                  }}
+                  style={{
+                    width: '100%',
+                    background: '#1976d2',
+                    color: 'white',
+                    padding: '10px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor:
+                      esEstadoPruebaElectrica(moduloSeleccionado?.estado) ||
+                      esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba)
+                        ? 'not-allowed'
+                        : 'pointer',
+                    textAlign: 'left',
+                    fontWeight: 700,
+                    opacity:
+                      esEstadoPruebaElectrica(moduloSeleccionado?.estado) ||
+                      esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba)
+                        ? 0.65
+                        : 1,
+                    marginBottom: puedeDejarObservacionAlerta ? '6px' : 0,
+                  }}
+                >
+                  Llamar a prueba eléctrica ⚡
+                </button>
+
+                {puedeDejarObservacionAlerta && (
+                  <button
+                    type="button"
+                    onClick={dejarObservacionAlerta}
+                    style={{
+                      width: '100%',
+                      background: '#b71c1c',
+                      color: 'white',
+                      padding: '10px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Dejar observación 🚨
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {perfil?.rol === 'admin' && (
+            <button
+              onClick={finalizarModulo}
+              style={{
+                background: '#d32f2f',
+                color: 'white',
+                padding: '10px 14px',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                flex: '0 0 180px',
+                maxWidth: '55%',
+              }}
+            >
+              Finalizar módulo
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -11,6 +11,12 @@ alter table public.historial_modulos
 add column if not exists nota text;
 
 alter table public.modulos
+add column if not exists observacion_alerta text;
+
+alter table public.historial_modulos
+add column if not exists observacion_alerta text;
+
+alter table public.modulos
 drop constraint if exists chk_estado;
 
 alter table public.modulos
