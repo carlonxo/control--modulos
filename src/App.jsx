@@ -246,6 +246,7 @@ const [nombreSolicitante, setNombreSolicitante] = useState('')
 const [rolSolicitante, setRolSolicitante] = useState('')
 const [formulariosElectricos, setFormulariosElectricos] = useState({})
 const [mostrarResumenMateriales, setMostrarResumenMateriales] = useState(false)
+const [mostrarEditorMateriales, setMostrarEditorMateriales] = useState(false)
 const [cargandoMateriales, setCargandoMateriales] = useState(false)
 const [avisoPruebaElectrica, setAvisoPruebaElectrica] = useState(null)
 const [mostrarLlamadosPendientes, setMostrarLlamadosPendientes] = useState(false)
@@ -264,6 +265,8 @@ const [reintegrandoModulo, setReintegrandoModulo] = useState(false)
 const [mostrarProtocoloEntrega, setMostrarProtocoloEntrega] = useState(false)
 const [datosProtocoloEntrega, setDatosProtocoloEntrega] = useState({})
 const [responsableProtocolo, setResponsableProtocolo] = useState('')
+const [protocoloSoloLecturaBusqueda, setProtocoloSoloLecturaBusqueda] = useState(false)
+const [protocoloDesdeHistorial, setProtocoloDesdeHistorial] = useState(false)
 const solicitudesPendientesRef = useRef(new Set())
 const autoScrollArrastreRef = useRef(null)
 const esRolSoloLectura = ['visor', 'analista', 'electrico'].includes(perfil?.rol)
@@ -362,7 +365,10 @@ function cerrarPanelesYModulo() {
 function cerrarVentanasEmergentes({ conservarModulo = false } = {}) {
   cerrarPanelesFlotantes()
   setMostrarResumenMateriales(false)
+  setMostrarEditorMateriales(false)
   setMostrarProtocoloEntrega(false)
+  setProtocoloSoloLecturaBusqueda(false)
+  setProtocoloDesdeHistorial(false)
   setMostrarNuevoModulo(false)
   setMostrarReintegrar(false)
   setMostrarDescargaProtocolos(false)
@@ -596,6 +602,7 @@ async function buscarSerie() {
       .from('historial_modulos')
       .select('*')
       .eq('serie', serie)
+      .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
       .order('fecha_salida', { ascending: false })
       .limit(5),
     supabase
@@ -912,6 +919,9 @@ async function reintegrarModuloFinalizado() {
 function limpiarEstadosModal() {
   cerrarPanelesFlotantes()
   setMostrarResumenMateriales(false)
+  setMostrarEditorMateriales(false)
+  setProtocoloSoloLecturaBusqueda(false)
+  setProtocoloDesdeHistorial(false)
   setModuloSeleccionado(null)
   setSerieEditada('')
   setTipoEditado('')
@@ -1209,9 +1219,60 @@ async function abrirResumenMateriales() {
   setMostrarResumenMateriales(true)
 }
 
+async function abrirEditorMateriales() {
+  if (!moduloSeleccionado?.id || !puedeVerMenuModulo) return
+  cerrarVentanasEmergentes({ conservarModulo: true })
+  await cargarMaterialesModulo(moduloSeleccionado.id)
+  setMostrarMenuModulo(false)
+  setMostrarEditorMateriales(true)
+}
+
+function actualizarMaterialFormulario(item, tipo, valor) {
+  const moduloId = moduloSeleccionado?.id
+  if (!moduloId) return
+
+  setFormulariosElectricos((actuales) => ({
+    ...actuales,
+    [moduloId]: {
+      ...(actuales[moduloId] || {}),
+      [item]: {
+        ...(
+          typeof actuales[moduloId]?.[item] === 'object'
+            ? actuales[moduloId][item]
+            : { nuevo: actuales[moduloId]?.[item] || '', reutilizado: '' }
+        ),
+        [tipo]: valor,
+      },
+    },
+  }))
+}
+
+async function guardarMaterialesModulo() {
+  if (!moduloSeleccionado?.id || !puedeVerMenuModulo) return
+
+  const materiales = formulariosElectricos[moduloSeleccionado.id] || {}
+  const { error } = await supabase
+    .from('modulos')
+    .update({ materiales })
+    .eq('id', moduloSeleccionado.id)
+
+  if (error) {
+    mostrarNotificacion('No se pudieron guardar los materiales: ' + error.message)
+    return
+  }
+
+  setModuloSeleccionado((actual) => actual
+    ? { ...actual, materiales }
+    : actual
+  )
+  mostrarNotificacion('Materiales guardados correctamente')
+}
+
 async function abrirProtocoloEntrega() {
   if (!moduloSeleccionado?.id || !puedeUsarProtocolo) return
   cerrarVentanasEmergentes({ conservarModulo: true })
+  setProtocoloSoloLecturaBusqueda(false)
+  setProtocoloDesdeHistorial(false)
 
   const { data: modulo, error } = await supabase
     .from('modulos')
@@ -1245,11 +1306,58 @@ async function abrirProtocoloEntrega() {
   setMostrarProtocoloEntrega(true)
 }
 
-async function guardarProtocoloEntrega(protocolo) {
-  if (!moduloSeleccionado?.id || !puedeEditarDatosProtocolo) return
+async function abrirProtocoloDesdeBusqueda(item) {
+  if (!item?.id || !puedeUsarProtocolo) return
 
+  cerrarVentanasEmergentes({ conservarModulo: true })
+  setMostrarMenuModulo(false)
+
+  if (item.esActual) {
+    const { data: modulo, error } = await supabase
+      .from('modulos')
+      .select('*')
+      .eq('id', item.id)
+      .single()
+
+    if (error) {
+      mostrarNotificacion('No se pudo cargar el protocolo: ' + error.message)
+      return
+    }
+
+    setModuloSeleccionado(modulo)
+    setFormulariosElectricos((actuales) => ({
+      ...actuales,
+      [modulo.id]: modulo?.materiales || {},
+    }))
+    setDatosProtocoloEntrega(modulo?.protocolo_entrega || {})
+    setResponsableProtocolo(modulo?.protocolo_entrega?.responsable || modulo?.responsable || '')
+    setProtocoloSoloLecturaBusqueda(false)
+    setProtocoloDesdeHistorial(false)
+    setMostrarProtocoloEntrega(true)
+    return
+  }
+
+  setModuloSeleccionado(item)
+  setFormulariosElectricos((actuales) => ({
+    ...actuales,
+    [item.id]: item?.materiales || {},
+  }))
+  setDatosProtocoloEntrega(item?.protocolo_entrega || {})
+  setResponsableProtocolo(item?.protocolo_entrega?.responsable || item?.responsable || '')
+  setProtocoloSoloLecturaBusqueda(perfil?.rol !== 'admin')
+  setProtocoloDesdeHistorial(true)
+  setMostrarProtocoloEntrega(true)
+}
+
+async function guardarProtocoloEntrega(protocolo) {
+  if (!moduloSeleccionado?.id) return
+
+  if (protocoloDesdeHistorial && perfil?.rol !== 'admin') return
+  if (!protocoloDesdeHistorial && !puedeEditarDatosProtocolo) return
+
+  const tablaDestino = protocoloDesdeHistorial ? 'historial_modulos' : 'modulos'
   const { error } = await supabase
-    .from('modulos')
+    .from(tablaDestino)
     .update({
       protocolo_entrega: protocolo,
       materiales: protocolo.materiales || {},
@@ -1266,6 +1374,22 @@ async function guardarProtocoloEntrega(protocolo) {
     ...actuales,
     [moduloSeleccionado.id]: protocolo.materiales || {},
   }))
+  setModuloSeleccionado((actual) => actual
+    ? {
+        ...actual,
+        protocolo_entrega: protocolo,
+        materiales: protocolo.materiales || {},
+      }
+    : actual
+  )
+  if (protocoloDesdeHistorial) {
+    setResultadoBusqueda((actuales) => actuales.map((item) => (
+      item.id === moduloSeleccionado.id && !item.esActual
+        ? { ...item, protocolo_entrega: protocolo, materiales: protocolo.materiales || {} }
+        : item
+    )))
+    await cargarHistorial()
+  }
   mostrarNotificacion('Protocolo guardado correctamente')
 }
 
@@ -2032,32 +2156,70 @@ const ultimosFinalizados = [...historial]
         marginTop: '10px',
         padding: '10px',
         border: '1px solid #555',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '16px',
+        flexWrap: 'wrap',
       }}
     >
-      <div>
-        <strong>Serie:</strong> {item.serie}
-      </div>
-
-      <div>
-        <strong>Fecha prueba:</strong>{' '}
-        {item.fecha_prueba_electrica
-          ? formatearFecha(item.fecha_prueba_electrica)
-          : 'Sin registro'}
-      </div>
-
-      {item.esActual && (
-        <div style={{ marginTop: '4px', color: '#81c784', fontWeight: 700 }}>
-          (Actualmente en línea {item.linea})
+      <div style={{ flex: '1 1 260px', textAlign: 'center' }}>
+        <div style={{ color: item.esActual ? '#81c784' : '#ffcc80', fontWeight: 800, marginBottom: '4px' }}>
+          {item.esActual ? 'Registro actual' : 'Registro histórico'}
         </div>
+
+        <div>
+          <strong>Serie:</strong> {item.serie}
+        </div>
+
+        <div>
+          <strong>Fecha prueba:</strong>{' '}
+          {item.fecha_prueba_electrica
+            ? formatearFecha(item.fecha_prueba_electrica)
+            : 'Sin registro'}
+        </div>
+
+        {item.esActual && (
+          <div style={{ marginTop: '4px', color: '#81c784', fontWeight: 700 }}>
+            (Actualmente en línea {item.linea})
+          </div>
+        )}
+
+        {!item.esActual && item.fecha_salida && (
+          <div>
+            <strong>Fecha salida:</strong> {formatearFecha(item.fecha_salida)}
+          </div>
+        )}
+
+        <div>
+          <strong>Proyecto:</strong> {item.proyecto}
+        </div>
+
+        <div>
+          <strong>Responsable:</strong> {item.responsable}
+        </div>
+      </div>
+
+      {puedeUsarProtocolo && (
+        <button
+          type="button"
+          onClick={() => abrirProtocoloDesdeBusqueda(item)}
+          style={{
+            flex: '0 0 118px',
+            padding: '10px',
+            borderRadius: '8px',
+            border: '1px solid #777',
+            background: '#333',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 700,
+            lineHeight: 1.2,
+          }}
+        >
+          <span style={{ display: 'block' }}>Ver protocolo</span>
+          <span style={{ display: 'block', fontSize: '24px', marginTop: '4px' }}>📜</span>
+        </button>
       )}
-
-      <div>
-        <strong>Proyecto:</strong> {item.proyecto}
-      </div>
-
-      <div>
-        <strong>Responsable:</strong> {item.responsable}
-      </div>
     </div>
   ))}
 </div>
@@ -2536,7 +2698,7 @@ const ultimosFinalizados = [...historial]
               onClick={abrirResumenMateriales}
               style={{ width: '100%', marginBottom: '10px', padding: '12px' }}
             >
-              Materiales
+              Resumen materiales
             </button>
           )}
 
@@ -2696,6 +2858,25 @@ const ultimosFinalizados = [...historial]
 
                 <button
                   type="button"
+                  onClick={abrirEditorMateriales}
+                  style={{
+                    width: '100%',
+                    background: '#455a64',
+                    color: 'white',
+                    padding: '10px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: 700,
+                    marginBottom: '6px',
+                  }}
+                >
+                  Materiales 📝
+                </button>
+
+                <button
+                  type="button"
                   disabled={
                     esEstadoPruebaElectrica(moduloSeleccionado?.estado) ||
                     esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba)
@@ -2809,25 +2990,7 @@ const ultimosFinalizados = [...historial]
 
         <FormularioElectrico
           valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
-          onChange={(item, tipo, valor) => {
-            const moduloId = moduloSeleccionado?.id
-            if (!moduloId) return
-
-            setFormulariosElectricos((actuales) => ({
-              ...actuales,
-              [moduloId]: {
-                ...(actuales[moduloId] || {}),
-                [item]: {
-                  ...(
-                    typeof actuales[moduloId]?.[item] === 'object'
-                      ? actuales[moduloId][item]
-                      : { nuevo: actuales[moduloId]?.[item] || '', reutilizado: '' }
-                  ),
-                  [tipo]: valor,
-                },
-              },
-            }))
-          }}
+          onChange={actualizarMaterialFormulario}
         />
       </>
     ) : (
@@ -3110,7 +3273,7 @@ const ultimosFinalizados = [...historial]
           onClick={abrirResumenMateriales}
           style={{ padding: '10px', flex: 1 }}
         >
-          Materiales
+          Resumen materiales
         </button>
       )}
       {puedeUsarProtocolo && (
@@ -3208,6 +3371,71 @@ const ultimosFinalizados = [...historial]
   </div>
 )}
 
+{mostrarEditorMateriales && moduloSeleccionado && puedeVerMenuModulo && (
+  <div
+    onClick={cerrarPanelesFlotantes}
+    style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: 'calc(100vw - 32px)',
+      maxWidth: '460px',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      padding: '20px',
+      background: '#222',
+      border: '1px solid white',
+      borderRadius: '10px',
+      zIndex: 1200,
+      color: 'white',
+      textAlign: 'left',
+    }}
+  >
+    <h2 style={{ marginTop: 0 }}>Materiales 📝 — {moduloSeleccionado.serie}</h2>
+
+    {cargandoMateriales ? (
+      <p>Cargando...</p>
+    ) : (
+      <FormularioElectrico
+        valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
+        onChange={actualizarMaterialFormulario}
+      />
+    )}
+
+    <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
+      <button
+        type="button"
+        onClick={guardarMaterialesModulo}
+        disabled={cargandoMateriales}
+        style={{
+          flex: 1,
+          padding: '12px',
+          background: '#2e7d32',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: cargandoMateriales ? 'not-allowed' : 'pointer',
+        }}
+      >
+        Guardar materiales
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setMostrarEditorMateriales(false)}
+        style={{
+          flex: 1,
+          padding: '12px',
+        }}
+      >
+        Cerrar
+      </button>
+    </div>
+  </div>
+)}
+
 {mostrarProtocoloEntrega && moduloSeleccionado && (
   <ProtocoloEntrega
     key={moduloSeleccionado.id}
@@ -3216,9 +3444,13 @@ const ultimosFinalizados = [...historial]
     datosIniciales={datosProtocoloEntrega}
     materiales={formulariosElectricos[moduloSeleccionado.id] || {}}
     onGuardar={guardarProtocoloEntrega}
-    soloLectura={!puedeEditarDatosProtocolo}
-    materialesSoloLectura={!puedeEditarProtocolo}
-    onCerrar={() => setMostrarProtocoloEntrega(false)}
+    soloLectura={protocoloSoloLecturaBusqueda || (protocoloDesdeHistorial ? perfil?.rol !== 'admin' : !puedeEditarDatosProtocolo)}
+    materialesSoloLectura={protocoloSoloLecturaBusqueda || (protocoloDesdeHistorial ? perfil?.rol !== 'admin' : !puedeEditarProtocolo)}
+    onCerrar={() => {
+      setMostrarProtocoloEntrega(false)
+      setProtocoloSoloLecturaBusqueda(false)
+      setProtocoloDesdeHistorial(false)
+    }}
   />
 )}
 

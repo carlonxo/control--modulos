@@ -34,6 +34,112 @@ function formatearCantidad(nuevo, reutilizado) {
   return nuevo || ''
 }
 
+function normalizarNumero(valor) {
+  const numero = Number(String(valor || '').replace(',', '.').replace(/[^\d.-]/g, ''))
+  return Number.isFinite(numero) ? numero : 0
+}
+
+function parsearCantidadProtocolo(valor) {
+  return String(valor || '')
+    .split('/')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+    .reduce((total, parte) => {
+      const cantidad = normalizarNumero(parte)
+      if (!cantidad) return total
+
+      if (/\br\b/i.test(parte)) {
+        return { ...total, reutilizado: total.reutilizado + cantidad }
+      }
+
+      return { ...total, nuevo: total.nuevo + cantidad }
+    }, { nuevo: 0, reutilizado: 0 })
+}
+
+function sumarCantidades(...cantidades) {
+  return cantidades.reduce((total, cantidad) => ({
+    nuevo: total.nuevo + Number(cantidad?.nuevo || 0),
+    reutilizado: total.reutilizado + Number(cantidad?.reutilizado || 0),
+  }), { nuevo: 0, reutilizado: 0 })
+}
+
+function tieneCantidad(cantidad) {
+  return Number(cantidad?.nuevo || 0) > 0 || Number(cantidad?.reutilizado || 0) > 0
+}
+
+function normalizarCantidadGuardada(valor) {
+  if (valor && typeof valor === 'object') {
+    return {
+      nuevo: String(valor.nuevo ?? '').trim(),
+      reutilizado: String(valor.reutilizado ?? '').trim(),
+    }
+  }
+
+  return {
+    nuevo: String(valor ?? '').trim(),
+    reutilizado: '',
+  }
+}
+
+function cantidadAMaterial(cantidad) {
+  return {
+    nuevo: cantidad.nuevo ? String(cantidad.nuevo) : '',
+    reutilizado: cantidad.reutilizado ? String(cantidad.reutilizado) : '',
+  }
+}
+
+function elegirMaterialDestino(fuentes, materialesBase) {
+  return fuentes.find((fuente) => tieneCantidad(normalizarCantidadGuardada(materialesBase?.[fuente]))) || fuentes[0]
+}
+
+function crearMaterialesDesdeDetalle(detalleMateriales = {}, materialesBase = {}) {
+  const materialesCalculados = { ...materialesBase }
+  const aportesPorMaterial = {}
+
+  camposMateriales.forEach(([item, fuentes]) => {
+    const detalle = detalleMateriales?.[item] || {}
+    const cantidad = sumarCantidades(
+      parsearCantidadProtocolo(detalle.mantencion),
+      parsearCantidadProtocolo(detalle.modificacion)
+    )
+
+    const destino = elegirMaterialDestino(fuentes, materialesBase)
+    if (!destino) return
+
+    if (!aportesPorMaterial[destino]) aportesPorMaterial[destino] = []
+    aportesPorMaterial[destino].push(cantidad)
+  })
+
+  Object.entries(aportesPorMaterial).forEach(([material, aportes]) => {
+    const cantidad = aportes.reduce((mayor, aporte) => ({
+      nuevo: Math.max(mayor.nuevo, Number(aporte.nuevo || 0)),
+      reutilizado: Math.max(mayor.reutilizado, Number(aporte.reutilizado || 0)),
+    }), { nuevo: 0, reutilizado: 0 })
+
+    materialesCalculados[material] = cantidadAMaterial(cantidad)
+  })
+
+  return materialesCalculados
+}
+
+function cantidadesIguales(a, b) {
+  const cantidadA = normalizarCantidadGuardada(a)
+  const cantidadB = normalizarCantidadGuardada(b)
+  return cantidadA.nuevo === cantidadB.nuevo && cantidadA.reutilizado === cantidadB.reutilizado
+}
+
+function materialesVinculadosCoinciden(materialesActuales = {}, materialesDesdeDetalle = {}) {
+  const materialesVinculados = new Set(camposMateriales.flatMap(([, fuentes]) => fuentes))
+  return [...materialesVinculados].every((material) => (
+    cantidadesIguales(materialesActuales?.[material], materialesDesdeDetalle?.[material])
+  ))
+}
+
+function materialesVinculadosTienenValores(materiales = {}) {
+  const materialesVinculados = new Set(camposMateriales.flatMap(([, fuentes]) => fuentes))
+  return [...materialesVinculados].some((material) => tieneCantidad(normalizarCantidadGuardada(materiales?.[material])))
+}
+
 function calcularCantidades(materiales, fuentes) {
   return fuentes.reduce((suma, clave) => {
     const valor = materiales?.[clave]
@@ -49,21 +155,21 @@ function calcularCantidades(materiales, fuentes) {
 }
 
 function crearDetalleInicial(materiales, detalleGuardado = {}) {
+  if (
+    detalleGuardado &&
+    Object.keys(detalleGuardado).length > 0 &&
+    (
+      !materialesVinculadosTienenValores(materiales) ||
+      materialesVinculadosCoinciden(materiales, crearMaterialesDesdeDetalle(detalleGuardado, materiales))
+    )
+  ) {
+    return detalleGuardado
+  }
+
   return Object.fromEntries(camposMateriales.map(([item, fuentes]) => {
     const cantidades = calcularCantidades(materiales, fuentes)
     const detalleCalculado = { mantencion: formatearCantidad(cantidades.nuevo, cantidades.reutilizado), modificacion: '' }
-    const detallePrevio = detalleGuardado?.[item]
-
-    if (!detallePrevio) return [item, detalleCalculado]
-
-    const totalAnterior = cantidades.nuevo + cantidades.reutilizado
-    const mantencionPrevia = String(detallePrevio.mantencion ?? '').trim()
-    const modificacionPrevia = String(detallePrevio.modificacion ?? '').trim()
-    const eraSumaAutomaticaAnterior = totalAnterior > 0 && mantencionPrevia === String(totalAnterior) && !modificacionPrevia
-
-    if (eraSumaAutomaticaAnterior) return [item, detalleCalculado]
-
-    return [item, { ...detalleCalculado, ...detallePrevio }]
+    return [item, detalleCalculado]
   }))
 }
 
@@ -240,7 +346,11 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
   })
   const guardar = async () => {
     if (soloLectura) return
-    setGuardando(true); await onGuardar({ ...datos, materiales }); setGuardando(false)
+    const materialesActualizados = materialesSoloLectura
+      ? materiales
+      : crearMaterialesDesdeDetalle(datos.detalleMateriales, materiales)
+
+    setGuardando(true); await onGuardar({ ...datos, materiales: materialesActualizados }); setGuardando(false)
   }
   const imprimir = () => {
     const tituloAnterior = document.title

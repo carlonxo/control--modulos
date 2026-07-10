@@ -2,28 +2,76 @@ import plantillaProtocolo from '../assets/protocolo-entrega-base.png'
 import { formatearFecha } from '../utils/fechas'
 
 const camposMateriales = [
-  ['Conduit 20mm', 375, 546], ['Conduit 25mm', 375, 568], ['Caja PVC 100x100x65', 375, 590],
-  ['Caja metálica 100x100x65', 375, 632], ['Caja tabique LH', 375, 653], ['Tapa ciega - Pasac.', 375, 675],
-  ['Cable RZ1 2,5mm', 375, 739], ['Cable RZ1 4mm', 375, 760], ['Cable RZ1 6mm', 375, 781],
-  ['Cordon flex 3 x 2.5/4mm', 375, 802], ['Cordon flex 3 x 6mm', 375, 823],
-  ['Ampolleta LED', 375, 867], ['Plafón', 375, 888], ['Tubo LED', 375, 909],
-  ['EQ. Herm. LED 40W (tubo/placa)', 375, 931], ['Foco tortuga LED', 375, 952], ['Extractor', 375, 995],
-  ['Conduit 32mm', 375, 1237], ['Cable RZ-1 3x1.5mm2', 981, 1215],
-  ['Artefacto simple', 981, 546], ['Artefacto doble', 981, 568], ['Artefacto triple', 981, 590],
-  ['Tapa ciega artefacto', 981, 611], ['Ench. Ind. 32A hembra', 981, 632], ['Ench. Ind. 32A macho', 981, 653],
-  ['Tab. PVC 24-36cc IP44', 981, 696], ['Tablero IP65', 981, 739], ['Tablero armado', 981, 760],
-  ['Aut. monof. 10-16-20A', 981, 781], ['Aut. bifásico 2x10A', 981, 803], ['Aut. bifásico 2x16A', 981, 824],
-  ['Aut. bifásico 2x20A', 981, 846], ['Aut. bifásico 2x25A', 981, 867], ['Diferencial 2x25A', 981, 888],
-  ['Porta Fusible', 981, 931], ['Luz Piloto', 981, 952], ['Repartidor 4x80A', 981, 994], ['Falso polo', 981, 1016],
-  ['BPC LH 100x45 + acces', 375, 1126], ['Tapa idrobox IP65', 375, 1148], ['Caja chuqui PVC', 375, 1259],
-  ['Foco sobrep LED 18w', 981, 1082], ['Panel led 600x600 mm', 981, 1104],
-  ['Accesorio Montaje Panel Led', 981, 1126], ['Foco sobrep led 24w', 981, 1148],
+  ['Conduit 20mm', ['Conduit 20mm'], 375, 546], ['Conduit 25mm', ['Conduit 25mm'], 375, 568], ['Caja PVC 100x100x65', ['Caja PVC 100x100x65'], 375, 590],
+  ['Caja metálica 100x100x65', ['Caja metálica 100x100x65'], 375, 632], ['Caja tabique LH', ['Caja tabique LH'], 375, 653], ['Tapa ciega - Pasac.', ['Tapa ciega - Pasac.'], 375, 675],
+  ['Cable RZ1 2,5mm', ['Cable RZ1 2,5mm'], 375, 739], ['Cable RZ1 4mm', ['Cable RZ1 4mm'], 375, 760], ['Cable RZ1 6mm', ['Cable RZ1 6mm'], 375, 781],
+  ['Cordon flex 3 x 2.5/4mm', ['Cordon 3x4mm'], 375, 802], ['Cordon flex 3 x 6mm', ['Cordon 3 x 6mm'], 375, 823],
+  ['Ampolleta LED', ['Ampolleta LED'], 375, 867], ['Plafón', ['Plafón'], 375, 888], ['Tubo LED', ['Tubo LED'], 375, 909],
+  ['EQ. Herm. LED 40W (tubo/placa)', ['EQ. Herm. LED 40W (tubo/placa)'], 375, 931], ['Foco tortuga LED', ['Foco tortuga 60W', 'Foco tortuga LED'], 375, 952], ['Extractor', ['Extractor'], 375, 995],
+  ['Conduit 32mm', ['Conduit 32mm'], 375, 1237], ['Cable RZ-1 3x1.5mm2', ['Cordon 3x1.5mm'], 981, 1215],
+  ['Artefacto simple', ['Artefacto simple'], 981, 546], ['Artefacto doble', ['Artefacto doble'], 981, 568],
+  ['Artefacto triple', ['Artefacto triple'], 981, 590], ['Tapa ciega artefacto', ['Tapa ciega artefacto'], 981, 611], ['Ench. Ind. 32A hembra', ['Ench. Ind. 32A hembra'], 981, 632],
+  ['Ench. Ind. 32A macho', ['Ench. Ind. 32A macho'], 981, 653], ['Tab. PVC 24-36cc IP44', ['Tablero emb. IP44', 'Tablero sobr. IP44'], 981, 696],
+  ['Tablero IP65', ['Tablero IP65 18p', 'Tablero IP65 24p'], 981, 739], ['Tablero armado', ['Tablero armado'], 981, 760], ['Aut. monof. 10-16-20A', ['Aut. monof. 10-16-20A'], 981, 781],
+  ['Aut. bifásico 2x10A', ['Aut. bifásico 2x10A'], 981, 803], ['Aut. bifásico 2x16A', ['Aut. bifásico 2x16A'], 981, 824], ['Aut. bifásico 2x20A', ['Aut. bifásico 2x20A'], 981, 846],
+  ['Aut. bifásico 2x25A', ['Aut. bifásico 2x25A'], 981, 867],
+  ['Diferencial 2x25A', ['Diferencial 2x25A'], 981, 888], ['Porta Fusible', ['Porta Fusible'], 981, 931], ['Luz Piloto', ['Luz Piloto'], 981, 952],
+  ['Repartidor 4x80A', ['Barra repartidora'], 981, 994], ['Falso polo', ['Falso polo'], 981, 1016],
+  ['BPC LH 100x45 + acces', ['BPC LH 100x45'], 375, 1126], ['Tapa idrobox IP65', ['Tapa idrobox IP65'], 375, 1148], ['Caja chuqui PVC', ['Caja chuqui'], 375, 1259],
+  ['Foco sobrep LED 18w', ['Plafo led 18w'], 981, 1082], ['Panel led 600x600 mm', ['Panel led 60x60 + soporte'], 981, 1104],
+  ['Accesorio Montaje Panel Led', ['Panel led 60x60 + soporte'], 981, 1126], ['Foco sobrep led 24w', ['Plafo led 24w'], 981, 1148],
 ]
 
 const anchoProtocolo = 1275
 const altoProtocolo = 1650
 const anchoCartaPdf = 612
 const altoCartaPdf = 792
+
+function formatearCantidad(nuevo, reutilizado) {
+  if (nuevo && reutilizado) return `${nuevo} / ${reutilizado} R`
+  if (reutilizado) return `${reutilizado} R`
+  return nuevo || ''
+}
+
+function calcularCantidades(materiales, fuentes) {
+  return fuentes.reduce((suma, clave) => {
+    const valor = materiales?.[clave]
+    if (valor && typeof valor === 'object') {
+      return {
+        nuevo: suma.nuevo + Number(valor?.nuevo || 0),
+        reutilizado: suma.reutilizado + Number(valor?.reutilizado || 0),
+      }
+    }
+
+    return { ...suma, nuevo: suma.nuevo + Number(valor || 0) }
+  }, { nuevo: 0, reutilizado: 0 })
+}
+
+function tieneMaterialesVinculados(materiales = {}) {
+  const materialesVinculados = new Set(camposMateriales.flatMap(([, fuentes]) => fuentes))
+  return [...materialesVinculados].some((material) => {
+    const valor = materiales?.[material]
+    if (valor && typeof valor === 'object') {
+      return Number(valor.nuevo || 0) > 0 || Number(valor.reutilizado || 0) > 0
+    }
+
+    return Number(valor || 0) > 0
+  })
+}
+
+function crearDetalleInicial(materiales, detalleGuardado = {}) {
+  if (!tieneMaterialesVinculados(materiales) && detalleGuardado && Object.keys(detalleGuardado).length > 0) {
+    return detalleGuardado
+  }
+
+  return Object.fromEntries(camposMateriales.map(([item, fuentes]) => {
+    const cantidades = calcularCantidades(materiales, fuentes)
+    return [item, {
+      mantencion: formatearCantidad(cantidades.nuevo, cantidades.reutilizado),
+      modificacion: '',
+    }]
+  }))
+}
 
 function cargarImagen(src) {
   return new Promise((resolve, reject) => {
@@ -164,7 +212,7 @@ function dibujarX(ctx, activa, area) {
 
 function jpegProtocolo(ctx, imagenBase, registro) {
   const datos = registro.protocolo_entrega || {}
-  const detalleMateriales = datos.detalleMateriales || {}
+  const detalleMateriales = crearDetalleInicial(registro.materiales || {}, datos.detalleMateriales || {})
 
   ctx.fillStyle = '#fff'
   ctx.fillRect(0, 0, anchoProtocolo, altoProtocolo)
@@ -198,7 +246,7 @@ function jpegProtocolo(ctx, imagenBase, registro) {
   dibujarX(ctx, datos.te1 === 'Sí', { left: 1100, top: 475, width: 81, height: 28 })
   dibujarX(ctx, datos.te1 === 'No', { left: 1181, top: 475, width: 82, height: 28 })
 
-  camposMateriales.forEach(([item, x, y]) => {
+  camposMateriales.forEach(([item,, x, y]) => {
     const saltoColumna = x < 700 ? 133 : 134
     const detalle = detalleMateriales[item] || {}
     dibujarTexto(ctx, detalle.mantencion, { left: x, top: y, width: x < 700 ? 133 : 134, height: 21 }, { font: '700 13px Arial' })
