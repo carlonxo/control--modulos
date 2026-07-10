@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import plantillaProtocolo from '../assets/protocolo-entrega-base.png'
 import './ProtocoloEntrega.css'
 
-const camposMateriales = [
+export const camposMateriales = [
   ['Conduit 20mm', ['Conduit 20mm'], 375, 546], ['Conduit 25mm', ['Conduit 25mm'], 375, 568], ['Caja PVC 100x100x65', ['Caja PVC 100x100x65'], 375, 590],
   ['Caja metálica 100x100x65', ['Caja metálica 100x100x65'], 375, 632], ['Caja tabique LH', ['Caja tabique LH'], 375, 653], ['Tapa ciega - Pasac.', ['Tapa ciega - Pasac.'], 375, 675],
   ['Cable RZ1 2,5mm', ['Cable RZ1 2,5mm'], 375, 739], ['Cable RZ1 4mm', ['Cable RZ1 4mm'], 375, 760], ['Cable RZ1 6mm', ['Cable RZ1 6mm'], 375, 781],
@@ -39,7 +39,7 @@ function normalizarNumero(valor) {
   return Number.isFinite(numero) ? numero : 0
 }
 
-function parsearCantidadProtocolo(valor) {
+export function parsearCantidadProtocolo(valor) {
   return String(valor || '')
     .split('/')
     .map((parte) => parte.trim())
@@ -246,9 +246,9 @@ function descargarBlob(blob, nombreArchivo) {
   URL.revokeObjectURL(url)
 }
 
-export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, materiales, onGuardar, soloLectura = false, materialesSoloLectura = false, onCerrar }) {
+export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, materiales, onGuardar, soloLectura = false, materialesSoloLectura = false, moduloEditable = false, onCerrar }) {
   const [datos, setDatos] = useState(() => ({
-    fecha: new Date().toISOString().slice(0, 10), responsable: responsable || '', planosRevision: '', centroCosto: '', flexNaranjo: false, flexLibre: false, flexMetalico: false,
+    fecha: new Date().toISOString().slice(0, 10), serie: modulo?.serie || '', tipo: modulo?.tipo || '', linea: modulo?.linea || '', proyecto: modulo?.proyecto || '', responsable: responsable || '', planosRevision: '', centroCosto: '', flexNaranjo: false, flexLibre: false, flexMetalico: false,
     eva: false, thhn: false, caleco: false, canalizado: '', aterrizado: '', te1: '', observCanalizado: '', observCableado: '', observaciones: '', firma: '',
     ...datosIniciales,
     detalleMateriales: crearDetalleInicial(materiales, datosIniciales?.detalleMateriales),
@@ -437,11 +437,11 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
       ctx.fillRect(37, 1277, 606, 1)
 
       dibujarTexto(ctx, datos.fecha, { left: 280, top: 190, width: 405, height: 31 })
-      dibujarTexto(ctx, modulo.serie, { left: 959, top: 190, width: 304, height: 31 })
+      dibujarTexto(ctx, moduloEditable ? datos.serie : modulo.serie, { left: 959, top: 190, width: 304, height: 31 })
       dibujarTexto(ctx, datos.responsable, { left: 280, top: 221, width: 405, height: 37 })
-      dibujarTexto(ctx, modulo.tipo, { left: 959, top: 221, width: 304, height: 37 })
-      dibujarTexto(ctx, modulo.linea, { left: 280, top: 258, width: 405, height: 38 })
-      dibujarTexto(ctx, modulo.proyecto, { left: 959, top: 258, width: 304, height: 38 })
+      dibujarTexto(ctx, moduloEditable ? datos.tipo : modulo.tipo, { left: 959, top: 221, width: 304, height: 37 })
+      dibujarTexto(ctx, moduloEditable ? datos.linea : modulo.linea, { left: 280, top: 258, width: 405, height: 38 })
+      dibujarTexto(ctx, moduloEditable ? datos.proyecto : modulo.proyecto, { left: 959, top: 258, width: 304, height: 38 })
       dibujarTexto(ctx, datos.planosRevision, { left: 280, top: 296, width: 405, height: 44 })
       dibujarTexto(ctx, datos.centroCosto, { left: 959, top: 296, width: 304, height: 44 })
 
@@ -473,7 +473,7 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
 
       const jpegBase64 = canvas.toDataURL('image/jpeg', 0.95).split(',')[1]
       const pdf = crearPdfDesdeJpeg(base64ABinario(jpegBase64))
-      descargarBlob(pdf, `${nombreArchivoSeguro(modulo?.serie)}.pdf`)
+      descargarBlob(pdf, `${nombreArchivoSeguro(moduloEditable ? datos.serie : modulo?.serie)}.pdf`)
     } finally {
       setDescargando(false)
     }
@@ -517,9 +517,9 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
       <button onClick={onCerrar}>Cerrar</button>
     </div>
     <div className="protocolo-visor"><div className="pdf-protocolo-escala" style={{ width: 1275 * escalaProtocolo, height: 1650 * escalaProtocolo }}><div className="pdf-protocolo-pagina" style={{ backgroundImage: `url(${plantillaProtocolo})`, transform: `scale(${escalaProtocolo})`, transformOrigin: 'top left' }}>
-      {campo('fecha', { left: 280, top: 190, width: 405, height: 31 }, { type: 'date' })}<input className="pdf-campo" style={{ left: 959, top: 190, width: 304, height: 31 }} value={modulo.serie || ''} disabled />
-      {campo('responsable', { left: 280, top: 221, width: 405, height: 37 })}<input className="pdf-campo" style={{ left: 959, top: 221, width: 304, height: 37 }} value={modulo.tipo || ''} disabled />
-      <input className="pdf-campo" style={{ left: 280, top: 258, width: 405, height: 38 }} value={modulo.linea || ''} disabled /><input className="pdf-campo" style={{ left: 959, top: 258, width: 304, height: 38 }} value={modulo.proyecto || ''} disabled />
+      {campo('fecha', { left: 280, top: 190, width: 405, height: 31 }, { type: 'date' })}{moduloEditable ? campo('serie', { left: 959, top: 190, width: 304, height: 31 }) : <input className="pdf-campo" style={{ left: 959, top: 190, width: 304, height: 31 }} value={modulo.serie || ''} disabled />}
+      {campo('responsable', { left: 280, top: 221, width: 405, height: 37 })}{moduloEditable ? campo('tipo', { left: 959, top: 221, width: 304, height: 37 }) : <input className="pdf-campo" style={{ left: 959, top: 221, width: 304, height: 37 }} value={modulo.tipo || ''} disabled />}
+      {moduloEditable ? campo('linea', { left: 280, top: 258, width: 405, height: 38 }) : <input className="pdf-campo" style={{ left: 280, top: 258, width: 405, height: 38 }} value={modulo.linea || ''} disabled />}{moduloEditable ? campo('proyecto', { left: 959, top: 258, width: 304, height: 38 }) : <input className="pdf-campo" style={{ left: 959, top: 258, width: 304, height: 38 }} value={modulo.proyecto || ''} disabled />}
       {campo('planosRevision', { left: 280, top: 296, width: 405, height: 44 })}{campo('centroCosto', { left: 959, top: 296, width: 304, height: 44 })}
       <div className="pdf-linea-horizontal" style={{ left: 37, top: 258, width: 1226 }} />
       <div className="pdf-linea-horizontal" style={{ left: 37, top: 1277, width: 606 }} />

@@ -19,6 +19,19 @@ add column if not exists observacion_alerta text;
 alter table public.historial_modulos
 add column if not exists observacion_alerta text;
 
+create table if not exists public.protocolos_manuales (
+  id uuid primary key default gen_random_uuid(),
+  serie text,
+  tipo text,
+  proyecto text,
+  responsable text,
+  fecha_prueba_electrica timestamp with time zone not null,
+  protocolo_entrega jsonb not null default '{}'::jsonb,
+  materiales jsonb not null default '{}'::jsonb,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+
 create table if not exists public.material_precios (
   material text primary key,
   id_art integer,

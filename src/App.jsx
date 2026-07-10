@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from './services/supabase'
 import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
-import ProtocoloEntrega from './components/ProtocoloEntrega'
+import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
 import { formatearFecha } from './utils/fechas'
 import { descargarProtocolosDiariosPdf } from './services/protocolosDiariosPdf'
@@ -149,6 +149,17 @@ const catalogoPreciosProtocolo = [
 ]
 
 const seccionesCatalogoPrecios = [...new Set(catalogoPreciosProtocolo.map((item) => item.seccion))]
+const valorBaseManoObraMantencion = 18900
+const encabezadosProtocolosMensuales = [
+  { clave: 'ver', lineas: ['Ver'], align: 'center' },
+  { clave: 'serie', lineas: ['Serie'] },
+  { clave: 'fecha', lineas: ['Fecha'] },
+  { clave: 'tipo', lineas: ['Tipo', 'Modulo'] },
+  { clave: 'mantencion', lineas: ['Valor', 'mantencion'] },
+  { clave: 'modificacion', lineas: ['Valor', 'modificacion'] },
+  { clave: 'total', lineas: ['Valor', 'total'] },
+  { clave: 'idOt', lineas: ['ID.', 'OT'] },
+]
 
 function formatearPrecioMaterial(valor) {
   const numero = Number(String(valor ?? '').replace(/[^\d]/g, ''))
@@ -158,6 +169,110 @@ function formatearPrecioMaterial(valor) {
 
 function limpiarPrecioMaterial(valor) {
   return String(valor ?? '').replace(/[^\d]/g, '')
+}
+
+function normalizarTextoComparacion(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+}
+
+const equivalenciasPrecioProtocolo = {
+  [normalizarTextoComparacion('Conduit 20mm')]: 'Ducto Flex/Rig 20mm LH (Incl Acc)',
+  [normalizarTextoComparacion('Conduit 25mm')]: 'Ducto Flex/Rig 25mm LH (Incl Acc)',
+  [normalizarTextoComparacion('Caja metálica 100x100x65')]: 'Caja Metálica 100x100x65',
+  [normalizarTextoComparacion('Caja tabique LH')]: 'Caja Tabique 3 Puestos LH',
+  [normalizarTextoComparacion('Tapa ciega - Pasac.')]: 'Tapa Ciega - Plástica / Metálica',
+  [normalizarTextoComparacion('Cordon flex 3 x 2.5/4mm')]: 'Cable RZ1 3x2.5 / 4mm (Ilu-Term)',
+  [normalizarTextoComparacion('Cordon flex 3 x 6mm')]: 'Cable RZ1 3x6mm (Alimentación)',
+  [normalizarTextoComparacion('Plafón')]: 'Foco Led 12W Sob',
+  [normalizarTextoComparacion('Extractor')]: 'Instalación Extractor',
+  [normalizarTextoComparacion('Conduit 32mm')]: 'Ducto Flex/Rig 32mm LH (Incl Acc)',
+  [normalizarTextoComparacion('Artefacto simple')]: 'Artefacto Simple',
+  [normalizarTextoComparacion('Artefacto doble')]: 'Artefacto Doble',
+  [normalizarTextoComparacion('Artefacto triple')]: 'Artefacto Triple',
+  [normalizarTextoComparacion('Tapa ciega artefacto')]: 'Tapa Ciega + Soporte',
+  [normalizarTextoComparacion('Ench. Ind. 32A hembra')]: 'Ench Hembra Indep 32A',
+  [normalizarTextoComparacion('Ench. Ind. 32A macho')]: 'Enchufe Mch Indep 32A',
+  [normalizarTextoComparacion('Tablero IP65')]: 'Tablero PVC IP65',
+  [normalizarTextoComparacion('Tablero armado')]: 'Inst Tab. TOP (Armado)',
+  [normalizarTextoComparacion('Aut. monof. 10-16-20A')]: 'Aut. Monof 10-16-20A',
+  [normalizarTextoComparacion('Aut. bifásico 2x10A')]: 'Auto. Bifásico 2x10A',
+  [normalizarTextoComparacion('Aut. bifásico 2x16A')]: 'Auto. Bifásico 2x16A',
+  [normalizarTextoComparacion('Aut. bifásico 2x20A')]: 'Auto. Bifásico 2x20A',
+  [normalizarTextoComparacion('Aut. bifásico 2x25A')]: 'Auto. Bifásico 2x25-32A',
+  [normalizarTextoComparacion('Porta Fusible')]: 'Porta Fusibles',
+  [normalizarTextoComparacion('Repartidor 4x80A')]: 'Repartidor 4x80A',
+  [normalizarTextoComparacion('Falso polo')]: 'Falso Polo 1Mts',
+  [normalizarTextoComparacion('BPC LH 100x45 + acces')]: 'BPC LH 100x45 + Acces',
+  [normalizarTextoComparacion('Tapa idrobox IP65')]: 'Tapa Idrobox IP55',
+  [normalizarTextoComparacion('Foco sobrep LED 18w')]: 'Foco Sobrep LED 18W',
+  [normalizarTextoComparacion('Panel led 600x600 mm')]: 'Panel Led 600x600mm',
+  [normalizarTextoComparacion('Accesorio Montaje Panel Led')]: 'Accesorio Mtaje Panel Led',
+  [normalizarTextoComparacion('Foco sobrep led 24w')]: 'Foco Sobrep LED 24W',
+}
+
+function obtenerMaterialPrecioParaProtocolo(itemProtocolo) {
+  const clave = normalizarTextoComparacion(itemProtocolo)
+  const directo = catalogoPreciosProtocolo.find((item) => normalizarTextoComparacion(item.material) === clave)
+  if (directo) return directo.material
+  return equivalenciasPrecioProtocolo[clave] || itemProtocolo
+}
+
+function calcularCantidadNuevaProtocolo(valor) {
+  return Number(parsearCantidadProtocolo(valor)?.nuevo || 0)
+}
+
+function formatearFechaInput(fecha) {
+  const ano = fecha.getFullYear()
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0')
+  const dia = String(fecha.getDate()).padStart(2, '0')
+  return `${ano}-${mes}-${dia}`
+}
+
+function obtenerValorInicialRangoProtocolo(rango) {
+  const hoy = new Date()
+  if (rango === 'dia') return formatearFechaInput(hoy)
+  if (rango === 'semana') {
+    const fecha = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+    const diaSemana = fecha.getDay() || 7
+    fecha.setDate(fecha.getDate() + 4 - diaSemana)
+    const anoSemana = fecha.getFullYear()
+    const inicioAnoSemana = new Date(anoSemana, 0, 1)
+    const semana = Math.ceil((((fecha - inicioAnoSemana) / 86400000) + 1) / 7)
+    return `${anoSemana}-W${String(semana).padStart(2, '0')}`
+  }
+  return formatearFechaInput(hoy).slice(0, 7)
+}
+
+function obtenerRangoFechasProtocolos(rango, valor) {
+  if (rango === 'dia') {
+    const inicio = new Date(`${valor}T00:00:00`)
+    const fin = new Date(inicio)
+    fin.setDate(fin.getDate() + 1)
+    return { inicio: `${valor}T00:00:00`, fin: fin.toISOString().slice(0, 19) }
+  }
+
+  if (rango === 'semana') {
+    const [anoTexto, semanaTexto = 'W1'] = String(valor || '').split('-W')
+    const ano = Number(anoTexto)
+    const semana = Number(semanaTexto)
+    const primerDiaAno = new Date(ano, 0, 1)
+    const diaSemana = primerDiaAno.getDay() || 7
+    const lunesSemana1 = new Date(ano, 0, 1 + (diaSemana <= 4 ? 1 - diaSemana : 8 - diaSemana))
+    const inicio = new Date(lunesSemana1)
+    inicio.setDate(lunesSemana1.getDate() + (semana - 1) * 7)
+    const fin = new Date(inicio)
+    fin.setDate(fin.getDate() + 7)
+    return { inicio: `${formatearFechaInput(inicio)}T00:00:00`, fin: fin.toISOString().slice(0, 19) }
+  }
+
+  const inicio = `${valor}-01T00:00:00`
+  const fin = new Date(`${valor}-01T00:00:00`)
+  fin.setMonth(fin.getMonth() + 1)
+  return { inicio, fin: fin.toISOString().slice(0, 19) }
 }
 
 function FormularioElectrico({ valores, onChange }) {
@@ -332,10 +447,16 @@ const [mostrarMenuModulo, setMostrarMenuModulo] = useState(false)
 const [mostrarReintegrar, setMostrarReintegrar] = useState(false)
 const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false)
 const [mostrarPreciosMateriales, setMostrarPreciosMateriales] = useState(false)
+const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(false)
 const [preciosMateriales, setPreciosMateriales] = useState({})
 const [cargandoPreciosMateriales, setCargandoPreciosMateriales] = useState(false)
 const [guardandoPreciosMateriales, setGuardandoPreciosMateriales] = useState(false)
 const [precioMaterialEnEdicion, setPrecioMaterialEnEdicion] = useState(null)
+const [rangoProtocolosMensuales, setRangoProtocolosMensuales] = useState('mes')
+const [fechaProtocolosMensuales, setFechaProtocolosMensuales] = useState(new Date().toISOString().slice(0, 7))
+const [protocolosMensuales, setProtocolosMensuales] = useState([])
+const [cargandoProtocolosMensuales, setCargandoProtocolosMensuales] = useState(false)
+const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [fechaProtocolosDiarios, setFechaProtocolosDiarios] = useState(new Date().toISOString().slice(0, 10))
 const [descargandoProtocolos, setDescargandoProtocolos] = useState(false)
 const [serieReintegrar, setSerieReintegrar] = useState('')
@@ -348,6 +469,7 @@ const [datosProtocoloEntrega, setDatosProtocoloEntrega] = useState({})
 const [responsableProtocolo, setResponsableProtocolo] = useState('')
 const [protocoloSoloLecturaBusqueda, setProtocoloSoloLecturaBusqueda] = useState(false)
 const [protocoloDesdeHistorial, setProtocoloDesdeHistorial] = useState(false)
+const [protocoloManualMensual, setProtocoloManualMensual] = useState(false)
 const solicitudesPendientesRef = useRef(new Set())
 const autoScrollArrastreRef = useRef(null)
 const esRolSoloLectura = ['visor', 'analista', 'electrico'].includes(perfil?.rol)
@@ -360,11 +482,16 @@ const recibeAvisosPrueba = ['admin', 'control_calidad', 'operador'].includes(per
 const puedeDescargarProtocolosDiarios = ['analista', 'admin', 'operador', 'control_calidad'].includes(perfil?.rol)
 const puedeVerPreciosMateriales = ['operador', 'analista', 'admin'].includes(perfil?.rol)
 const puedeEditarPreciosMateriales = ['analista', 'admin'].includes(perfil?.rol)
+const puedeVerProtocolosMensuales = ['analista', 'admin'].includes(perfil?.rol)
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
 const puedeVerMenuModulo = ['admin', 'operador'].includes(perfil?.rol)
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
 const llamadosPendientes = datos.filter(
   (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
+)
+const ingresosProtocolosMensuales = protocolosMensuales.reduce(
+  (total, registro) => total + Number(registro.valorTotal || 0),
+  0
 )
 const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
 const resumenMateriales = Object.entries(materialesModuloSeleccionado)
@@ -452,6 +579,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false } = {}) {
   setMostrarProtocoloEntrega(false)
   setProtocoloSoloLecturaBusqueda(false)
   setProtocoloDesdeHistorial(false)
+  setProtocoloManualMensual(false)
   setMostrarNuevoModulo(false)
   setMostrarReintegrar(false)
   setMostrarDescargaProtocolos(false)
@@ -867,8 +995,9 @@ async function cargarPreciosMateriales() {
 
   if (error) {
     mostrarNotificacion('No se pudieron cargar los precios: ' + error.message)
-    setPreciosMateriales(Object.fromEntries(catalogoPreciosProtocolo.map((item) => [item.material, item.precio])))
-    return
+    const preciosPorDefecto = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [item.material, item.precio]))
+    setPreciosMateriales(preciosPorDefecto)
+    return preciosPorDefecto
   }
 
   const preciosGuardados = Object.fromEntries((data || []).map((item) => [
@@ -876,10 +1005,12 @@ async function cargarPreciosMateriales() {
     item.precio ?? '',
   ]))
 
-  setPreciosMateriales(Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
+  const preciosCompletos = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
     item.material,
     preciosGuardados[item.material] ?? item.precio,
-  ])))
+  ]))
+  setPreciosMateriales(preciosCompletos)
+  return preciosCompletos
 }
 
 async function abrirPreciosMateriales() {
@@ -888,6 +1019,178 @@ async function abrirPreciosMateriales() {
   setMostrarMenuAcciones(false)
   setMostrarPreciosMateriales(true)
   await cargarPreciosMateriales()
+}
+
+function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) {
+  const detalleMateriales = registro?.protocolo_entrega?.detalleMateriales || {}
+  const preciosBase = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
+    item.material,
+    Number(limpiarPrecioMaterial(precios[item.material] ?? item.precio) || 0),
+  ]))
+
+  return camposMateriales.reduce((totales, [itemProtocolo]) => {
+    const detalle = detalleMateriales[itemProtocolo] || {}
+    const materialPrecio = obtenerMaterialPrecioParaProtocolo(itemProtocolo)
+    const precioUnitario = preciosBase[materialPrecio] ?? 0
+    const cantidadMantencion = calcularCantidadNuevaProtocolo(detalle.mantencion)
+    const cantidadModificacion = calcularCantidadNuevaProtocolo(detalle.modificacion)
+
+    return {
+      mantencion: totales.mantencion + cantidadMantencion * precioUnitario,
+      modificacion: totales.modificacion + cantidadModificacion * precioUnitario,
+    }
+  }, { mantencion: valorBaseManoObraMantencion, modificacion: 0 })
+}
+
+function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
+  const valores = calcularValoresProtocoloMensual(registro, precios)
+  return {
+    ...registro,
+    origen,
+    esActual: origen === 'actual',
+    valorMantencion: valores.mantencion,
+    valorModificacion: valores.modificacion,
+    valorTotal: valores.mantencion + valores.modificacion,
+    idOt: registro?.protocolo_entrega?.id_ot || registro?.protocolo_entrega?.idOt || '',
+  }
+}
+
+async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango = rangoProtocolosMensuales) {
+  if (!puedeVerProtocolosMensuales || !valor) return
+
+  setCargandoProtocolosMensuales(true)
+  const preciosParaCalculo = Object.keys(preciosMateriales).length === 0
+    ? await cargarPreciosMateriales()
+    : preciosMateriales
+
+  const { inicio, fin: finTexto } = obtenerRangoFechasProtocolos(rango, valor)
+
+  const [respuestaActivos, respuestaHistorial, respuestaManuales] = await Promise.all([
+    supabase
+      .from('modulos')
+      .select('id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales')
+      .gte('fecha_prueba_electrica', inicio)
+      .lt('fecha_prueba_electrica', finTexto),
+    supabase
+      .from('historial_modulos')
+      .select('id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales')
+      .gte('fecha_prueba_electrica', inicio)
+      .lt('fecha_prueba_electrica', finTexto),
+    supabase
+      .from('protocolos_manuales')
+      .select('id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales')
+      .gte('fecha_prueba_electrica', inicio)
+      .lt('fecha_prueba_electrica', finTexto),
+  ])
+
+  setCargandoProtocolosMensuales(false)
+
+  const tablaManualNoExiste = respuestaManuales.error?.message?.includes('protocolos_manuales')
+  const error = respuestaActivos.error || respuestaHistorial.error || (tablaManualNoExiste ? null : respuestaManuales.error)
+  if (error) {
+    mostrarNotificacion('No se pudieron cargar los protocolos mensuales: ' + error.message)
+    return
+  }
+
+  const preciosActuales = Object.keys(preciosParaCalculo || {}).length > 0
+    ? preciosParaCalculo
+    : Object.fromEntries(catalogoPreciosProtocolo.map((item) => [item.material, item.precio]))
+
+  const registros = [
+    ...(respuestaActivos.data || []).map((item) => prepararRegistroProtocoloMensual(item, 'actual', preciosActuales)),
+    ...(respuestaHistorial.data || []).map((item) => prepararRegistroProtocoloMensual(item, 'historial', preciosActuales)),
+    ...((tablaManualNoExiste ? [] : respuestaManuales.data) || []).map((item) => prepararRegistroProtocoloMensual(item, 'manual', preciosActuales)),
+  ].sort((a, b) => new Date(b.fecha_prueba_electrica || 0) - new Date(a.fecha_prueba_electrica || 0))
+
+  setProtocolosMensuales(registros)
+}
+
+async function abrirProtocolosMensuales() {
+  if (!puedeVerProtocolosMensuales) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setMostrarProtocolosMensuales(true)
+  await cargarProtocolosMensuales()
+}
+
+function fechaInicialProtocoloManual() {
+  const hoy = new Date().toISOString().slice(0, 10)
+  if (!fechaProtocolosMensuales) return hoy
+  if (rangoProtocolosMensuales === 'dia') return fechaProtocolosMensuales
+  const { inicio, fin } = obtenerRangoFechasProtocolos(rangoProtocolosMensuales, fechaProtocolosMensuales)
+  const inicioFecha = inicio.slice(0, 10)
+  const finFecha = fin.slice(0, 10)
+  return hoy >= inicioFecha && hoy < finFecha ? hoy : inicioFecha
+}
+
+function abrirIngresoManualProtocolo() {
+  if (!puedeVerProtocolosMensuales) return
+
+  const fecha = fechaInicialProtocoloManual()
+  const moduloManual = {
+    id: `manual-nuevo-${Date.now()}`,
+    origen: 'manual',
+    serie: '',
+    tipo: '',
+    proyecto: '',
+    responsable: perfil?.nombre || '',
+    linea: '',
+    materiales: {},
+    protocolo_entrega: {
+      fecha,
+      responsable: perfil?.nombre || '',
+      serie: '',
+      tipo: '',
+      proyecto: '',
+      linea: '',
+      detalleMateriales: {},
+      materiales: {},
+    },
+  }
+
+  setModuloSeleccionado(moduloManual)
+  setFormulariosElectricos((actuales) => ({
+    ...actuales,
+    [moduloManual.id]: {},
+  }))
+  setDatosProtocoloEntrega(moduloManual.protocolo_entrega)
+  setResponsableProtocolo(perfil?.nombre || '')
+  setProtocoloSoloLecturaBusqueda(false)
+  setProtocoloDesdeHistorial(false)
+  setProtocoloManualMensual(true)
+  setMostrarProtocoloEntrega(true)
+}
+
+async function guardarIdOtProtocoloMensual(registro, valor) {
+  if (!puedeVerProtocolosMensuales || !registro?.id) return
+
+  const tablaDestino = registro.origen === 'manual'
+    ? 'protocolos_manuales'
+    : registro.origen === 'historial'
+      ? 'historial_modulos'
+      : 'modulos'
+  const protocoloActualizado = {
+    ...(registro.protocolo_entrega || {}),
+    id_ot: valor,
+  }
+
+  const { error } = await supabase
+    .from(tablaDestino)
+    .update({ protocolo_entrega: protocoloActualizado })
+    .eq('id', registro.id)
+
+  if (error) {
+    mostrarNotificacion('No se pudo guardar el ID OT: ' + error.message)
+    return
+  }
+
+  setProtocolosMensuales((actuales) => actuales.map((item) => (
+    item.id === registro.id && item.origen === registro.origen
+      ? { ...item, idOt: valor, protocolo_entrega: protocoloActualizado }
+      : item
+  )))
+  setIdOtEnEdicion(null)
+  mostrarNotificacion('ID OT guardado')
 }
 
 function actualizarPrecioMaterial(material, valor) {
@@ -1073,6 +1376,7 @@ function limpiarEstadosModal() {
   setMostrarEditorMateriales(false)
   setProtocoloSoloLecturaBusqueda(false)
   setProtocoloDesdeHistorial(false)
+  setProtocoloManualMensual(false)
   setModuloSeleccionado(null)
   setSerieEditada('')
   setTipoEditado('')
@@ -1463,6 +1767,28 @@ async function abrirProtocoloDesdeBusqueda(item) {
   cerrarVentanasEmergentes({ conservarModulo: true })
   setMostrarMenuModulo(false)
 
+  if (item.origen === 'manual') {
+    setModuloSeleccionado(item)
+    setFormulariosElectricos((actuales) => ({
+      ...actuales,
+      [item.id]: item?.materiales || {},
+    }))
+    setDatosProtocoloEntrega({
+      ...(item?.protocolo_entrega || {}),
+      serie: item?.protocolo_entrega?.serie || item?.serie || '',
+      tipo: item?.protocolo_entrega?.tipo || item?.tipo || '',
+      proyecto: item?.protocolo_entrega?.proyecto || item?.proyecto || '',
+      responsable: item?.protocolo_entrega?.responsable || item?.responsable || '',
+      fecha: item?.protocolo_entrega?.fecha || fechaParaInput(item?.fecha_prueba_electrica),
+    })
+    setResponsableProtocolo(item?.protocolo_entrega?.responsable || item?.responsable || '')
+    setProtocoloSoloLecturaBusqueda(false)
+    setProtocoloDesdeHistorial(false)
+    setProtocoloManualMensual(true)
+    setMostrarProtocoloEntrega(true)
+    return
+  }
+
   if (item.esActual) {
     const { data: modulo, error } = await supabase
       .from('modulos')
@@ -1502,6 +1828,57 @@ async function abrirProtocoloDesdeBusqueda(item) {
 
 async function guardarProtocoloEntrega(protocolo) {
   if (!moduloSeleccionado?.id) return
+
+  if (protocoloManualMensual) {
+    if (!puedeVerProtocolosMensuales) return
+
+    const fechaProtocolo = protocolo.fecha || new Date().toISOString().slice(0, 10)
+    const protocoloNormalizado = {
+      ...protocolo,
+      serie: protocolo.serie || moduloSeleccionado.serie || '',
+      tipo: protocolo.tipo || moduloSeleccionado.tipo || '',
+      proyecto: protocolo.proyecto || moduloSeleccionado.proyecto || '',
+      linea: protocolo.linea || moduloSeleccionado.linea || '',
+      responsable: protocolo.responsable || moduloSeleccionado.responsable || perfil?.nombre || '',
+    }
+    const payloadManual = {
+      serie: protocoloNormalizado.serie,
+      tipo: protocoloNormalizado.tipo,
+      proyecto: protocoloNormalizado.proyecto,
+      responsable: protocoloNormalizado.responsable,
+      fecha_prueba_electrica: `${fechaProtocolo}T00:00:00`,
+      protocolo_entrega: protocoloNormalizado,
+      materiales: protocoloNormalizado.materiales || {},
+    }
+
+    const esManualExistente = moduloSeleccionado.origen === 'manual' && !String(moduloSeleccionado.id).startsWith('manual-nuevo-')
+    const consulta = esManualExistente
+      ? supabase.from('protocolos_manuales').update(payloadManual).eq('id', moduloSeleccionado.id).select().single()
+      : supabase.from('protocolos_manuales').insert([payloadManual]).select().single()
+
+    const { data, error } = await consulta
+
+    if (error) {
+      mostrarNotificacion('No se pudo guardar el protocolo manual: ' + error.message)
+      return
+    }
+
+    const registroGuardado = data || { ...payloadManual, id: moduloSeleccionado.id, origen: 'manual' }
+    setModuloSeleccionado({
+      ...registroGuardado,
+      origen: 'manual',
+      esActual: false,
+    })
+    setDatosProtocoloEntrega(protocoloNormalizado)
+    setFormulariosElectricos((actuales) => ({
+      ...actuales,
+      [registroGuardado.id]: protocoloNormalizado.materiales || {},
+    }))
+    setProtocoloManualMensual(true)
+    await cargarProtocolosMensuales(fechaProtocolosMensuales)
+    mostrarNotificacion('Protocolo manual guardado correctamente')
+    return
+  }
 
   if (protocoloDesdeHistorial && perfil?.rol !== 'admin') return
   if (!protocoloDesdeHistorial && !puedeEditarDatosProtocolo) return
@@ -1555,6 +1932,29 @@ async function finalizarModulo() {
 
   if (errorModulo) {
     mostrarNotificacion(errorModulo.message)
+    return
+  }
+
+  if (normalizarTexto(modulo.estado) === 'sin instalacion') {
+    const { error: errorDeleteSinInstalacion } = await supabase
+      .from('modulos')
+      .delete()
+      .eq('id', modulo.id)
+
+    if (errorDeleteSinInstalacion) {
+      mostrarNotificacion(errorDeleteSinInstalacion.message)
+      return
+    }
+
+    setFormulariosElectricos((actuales) => {
+      const copia = { ...actuales }
+      delete copia[modulo.id]
+      return copia
+    })
+
+    await cargarTablero()
+    limpiarEstadosModal()
+    mostrarNotificacion('Módulo sin instalacion retirado sin registro')
     return
   }
 
@@ -2151,6 +2551,21 @@ const ultimosFinalizados = [...historial]
   >
     {mostrarVistaGeneral ? 'Ver por línea' : 'Vista general'}
   </button>
+  {puedeVerProtocolosMensuales && (
+    <button
+      onClick={abrirProtocolosMensuales}
+      style={{
+        padding: '10px 20px',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        background: '#455a64',
+        color: 'white',
+        border: '1px solid #78909c',
+      }}
+    >
+      Protocolos mensuales
+    </button>
+  )}
 </div>
 
 {mostrarKPI && (
@@ -3606,6 +4021,227 @@ const ultimosFinalizados = [...historial]
   </div>
 )}
 
+{mostrarProtocolosMensuales && puedeVerProtocolosMensuales && (
+  <div
+    onClick={cerrarPanelesFlotantes}
+    style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: 'calc(100vw - 24px)',
+      maxWidth: '1180px',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      padding: '20px',
+      background: '#222',
+      border: '1px solid white',
+      borderRadius: '10px',
+      zIndex: 1300,
+      color: 'white',
+      textAlign: 'left',
+    }}
+  >
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+      <h2 style={{ margin: 0 }}>Protocolos mensuales</h2>
+      <div style={{ display: 'grid', gap: '8px', minWidth: '150px' }}>
+        <button
+          type="button"
+          onClick={() => setMostrarProtocolosMensuales(false)}
+          style={{
+            padding: '9px 14px',
+            borderRadius: '8px',
+            border: '1px solid #777',
+            background: '#555',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 700,
+          }}
+        >
+          Cerrar
+        </button>
+        <button
+          type="button"
+          onClick={abrirIngresoManualProtocolo}
+          style={{
+            padding: '9px 14px',
+            borderRadius: '8px',
+            border: '1px solid #66bb6a',
+            background: '#1b5e20',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 700,
+          }}
+        >
+          Ingreso manual
+        </button>
+      </div>
+    </div>
+
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '10px',
+        padding: '12px 16px',
+        marginBottom: '16px',
+        borderRadius: '10px',
+        background: '#1b5e20',
+        border: '1px solid #66bb6a',
+        color: 'white',
+        fontWeight: 800,
+        fontSize: '18px',
+      }}
+    >
+      <span>💰 ingresos</span>
+      <span>{formatearPrecioMaterial(ingresosProtocolosMensuales)}</span>
+    </div>
+
+    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
+      <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <select
+          value={rangoProtocolosMensuales}
+          onChange={(e) => {
+            const nuevoRango = e.target.value
+            setRangoProtocolosMensuales(nuevoRango)
+            setFechaProtocolosMensuales(obtenerValorInicialRangoProtocolo(nuevoRango))
+          }}
+          style={{ padding: '8px', fontWeight: 700 }}
+          title="Cambiar rango"
+        >
+          <option value="dia">Dia</option>
+          <option value="semana">Semana</option>
+          <option value="mes">Mes</option>
+        </select>
+        <input
+          type={rangoProtocolosMensuales === 'dia' ? 'date' : rangoProtocolosMensuales === 'semana' ? 'week' : 'month'}
+          value={fechaProtocolosMensuales}
+          onChange={(e) => setFechaProtocolosMensuales(e.target.value)}
+          style={{ padding: '8px' }}
+        />
+      </label>
+      <button
+        type="button"
+        onClick={() => cargarProtocolosMensuales(fechaProtocolosMensuales, rangoProtocolosMensuales)}
+        disabled={cargandoProtocolosMensuales}
+        style={{
+          padding: '9px 14px',
+          borderRadius: '8px',
+          border: '1px solid #777',
+          background: '#1565c0',
+          color: 'white',
+          cursor: cargandoProtocolosMensuales ? 'not-allowed' : 'pointer',
+          fontWeight: 700,
+        }}
+      >
+        {cargandoProtocolosMensuales ? 'Cargando...' : 'Actualizar'}
+      </button>
+    </div>
+
+    {protocolosMensuales.length === 0 && !cargandoProtocolosMensuales ? (
+      <p style={{ color: '#ccc' }}>No hay protocolos con fecha de prueba electrica en el rango seleccionado.</p>
+    ) : (
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px' }}>
+          <thead>
+            <tr style={{ background: '#333' }}>
+              {encabezadosProtocolosMensuales.map((encabezado) => (
+                <th key={encabezado.clave} style={{ padding: '8px 10px', border: '1px solid #555', textAlign: encabezado.align || 'left', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
+                  {encabezado.lineas.map((linea) => (
+                    <span key={linea} style={{ display: 'block' }}>{linea}</span>
+                  ))}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {protocolosMensuales.map((registro) => {
+              const claveRegistro = `${registro.origen}-${registro.id}`
+              return (
+                <tr key={claveRegistro}>
+                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => abrirProtocoloDesdeBusqueda(registro)}
+                      title="Ver protocolo"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontSize: '24px',
+                      }}
+                    >
+                      📜
+                    </button>
+                  </td>
+                  <td style={{ padding: '8px', border: '1px solid #444', fontWeight: 700 }}>{registro.serie}</td>
+                  <td style={{ padding: '8px', border: '1px solid #444' }}>
+                    {registro.fecha_prueba_electrica ? formatearFecha(registro.fecha_prueba_electrica) : '-'}
+                  </td>
+                  <td style={{ padding: '8px', border: '1px solid #444' }}>{registro.tipo || '-'}</td>
+                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>{formatearPrecioMaterial(registro.valorMantencion)}</td>
+                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>{formatearPrecioMaterial(registro.valorModificacion)}</td>
+                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right', fontWeight: 800 }}>{formatearPrecioMaterial(registro.valorTotal)}</td>
+                  <td style={{ padding: '8px', border: '1px solid #444' }}>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={registro.idOt}
+                        disabled={idOtEnEdicion !== claveRegistro}
+                        onChange={(e) => setProtocolosMensuales((actuales) => actuales.map((item) => (
+                          item.id === registro.id && item.origen === registro.origen
+                            ? { ...item, idOt: e.target.value }
+                            : item
+                        )))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') guardarIdOtProtocoloMensual(registro, e.currentTarget.value)
+                        }}
+                        style={{
+                          width: '120px',
+                          padding: '7px',
+                          background: idOtEnEdicion === claveRegistro ? 'white' : '#ddd',
+                          color: '#111',
+                          border: '1px solid #777',
+                          borderRadius: '6px',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (idOtEnEdicion === claveRegistro) {
+                            guardarIdOtProtocoloMensual(registro, registro.idOt)
+                          } else {
+                            setIdOtEnEdicion(claveRegistro)
+                          }
+                        }}
+                        title={idOtEnEdicion === claveRegistro ? 'Guardar ID OT' : 'Editar ID OT'}
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '8px',
+                          border: '1px solid #777',
+                          background: idOtEnEdicion === claveRegistro ? '#2e7d32' : '#333',
+                          color: 'white',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {idOtEnEdicion === claveRegistro ? '✓' : '✏️'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+  </div>
+)}
+
 {mostrarPreciosMateriales && puedeVerPreciosMateriales && (
   <div
     onClick={cerrarPanelesFlotantes}
@@ -3762,12 +4398,14 @@ const ultimosFinalizados = [...historial]
     datosIniciales={datosProtocoloEntrega}
     materiales={formulariosElectricos[moduloSeleccionado.id] || {}}
     onGuardar={guardarProtocoloEntrega}
-    soloLectura={protocoloSoloLecturaBusqueda || (protocoloDesdeHistorial ? perfil?.rol !== 'admin' : !puedeEditarDatosProtocolo)}
-    materialesSoloLectura={protocoloSoloLecturaBusqueda || (protocoloDesdeHistorial ? perfil?.rol !== 'admin' : !puedeEditarProtocolo)}
+    soloLectura={protocoloManualMensual ? false : protocoloSoloLecturaBusqueda || (protocoloDesdeHistorial ? perfil?.rol !== 'admin' : !puedeEditarDatosProtocolo)}
+    materialesSoloLectura={protocoloManualMensual ? false : protocoloSoloLecturaBusqueda || (protocoloDesdeHistorial ? perfil?.rol !== 'admin' : !puedeEditarProtocolo)}
+    moduloEditable={protocoloManualMensual}
     onCerrar={() => {
       setMostrarProtocoloEntrega(false)
       setProtocoloSoloLecturaBusqueda(false)
       setProtocoloDesdeHistorial(false)
+      setProtocoloManualMensual(false)
     }}
   />
 )}
