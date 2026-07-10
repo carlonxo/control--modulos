@@ -457,6 +457,7 @@ const [fechaProtocolosMensuales, setFechaProtocolosMensuales] = useState(new Dat
 const [protocolosMensuales, setProtocolosMensuales] = useState([])
 const [cargandoProtocolosMensuales, setCargandoProtocolosMensuales] = useState(false)
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
+const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
 const [fechaProtocolosDiarios, setFechaProtocolosDiarios] = useState(new Date().toISOString().slice(0, 10))
 const [descargandoProtocolos, setDescargandoProtocolos] = useState(false)
 const [serieReintegrar, setSerieReintegrar] = useState('')
@@ -585,6 +586,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false } = {}) {
   setMostrarDescargaProtocolos(false)
   setMostrarPreciosMateriales(false)
   setPrecioMaterialEnEdicion(null)
+  setDetalleCobroSeleccionado(null)
 
   if (!conservarModulo) {
     limpiarEstadosModal()
@@ -1034,12 +1036,25 @@ function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) 
     const precioUnitario = preciosBase[materialPrecio] ?? 0
     const cantidadMantencion = calcularCantidadNuevaProtocolo(detalle.mantencion)
     const cantidadModificacion = calcularCantidadNuevaProtocolo(detalle.modificacion)
+    const subtotalMantencion = cantidadMantencion * precioUnitario
+    const subtotalModificacion = cantidadModificacion * precioUnitario
 
     return {
-      mantencion: totales.mantencion + cantidadMantencion * precioUnitario,
-      modificacion: totales.modificacion + cantidadModificacion * precioUnitario,
+      mantencion: totales.mantencion + subtotalMantencion,
+      modificacion: totales.modificacion + subtotalModificacion,
+      detalleMantencion: subtotalMantencion > 0
+        ? [...totales.detalleMantencion, { material: itemProtocolo, materialPrecio, cantidad: cantidadMantencion, precioUnitario, subtotal: subtotalMantencion }]
+        : totales.detalleMantencion,
+      detalleModificacion: subtotalModificacion > 0
+        ? [...totales.detalleModificacion, { material: itemProtocolo, materialPrecio, cantidad: cantidadModificacion, precioUnitario, subtotal: subtotalModificacion }]
+        : totales.detalleModificacion,
     }
-  }, { mantencion: valorBaseManoObraMantencion, modificacion: 0 })
+  }, {
+    mantencion: valorBaseManoObraMantencion,
+    modificacion: 0,
+    detalleMantencion: [{ material: 'Mano de obra base', cantidad: 1, precioUnitario: valorBaseManoObraMantencion, subtotal: valorBaseManoObraMantencion }],
+    detalleModificacion: [],
+  })
 }
 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
@@ -1051,8 +1066,54 @@ function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMat
     valorMantencion: valores.mantencion,
     valorModificacion: valores.modificacion,
     valorTotal: valores.mantencion + valores.modificacion,
+    detalleCobro: {
+      mantencion: valores.detalleMantencion,
+      modificacion: valores.detalleModificacion,
+    },
     idOt: registro?.protocolo_entrega?.id_ot || registro?.protocolo_entrega?.idOt || '',
   }
+}
+
+function abrirDetalleCobro(registro, tipo) {
+  const detalleMantencion = registro.detalleCobro?.mantencion || []
+  const detalleModificacion = registro.detalleCobro?.modificacion || []
+  const lineas = tipo === 'mantencion'
+    ? detalleMantencion
+    : tipo === 'modificacion'
+      ? detalleModificacion
+      : [...detalleMantencion, ...detalleModificacion]
+  const total = lineas.reduce((suma, item) => suma + Number(item.subtotal || 0), 0)
+
+  setDetalleCobroSeleccionado({
+    tipo,
+    serie: registro.serie,
+    lineas,
+    total,
+  })
+}
+
+function BotonValorCobro({ registro, tipo, children, destacado = false }) {
+  return (
+    <button
+      type="button"
+      onClick={() => abrirDetalleCobro(registro, tipo)}
+      style={{
+        width: '100%',
+        padding: '4px 6px',
+        border: 'none',
+        background: 'transparent',
+        color: 'white',
+        cursor: 'pointer',
+        textAlign: 'right',
+        fontWeight: destacado ? 800 : 600,
+        textDecoration: 'underline',
+        textUnderlineOffset: '3px',
+      }}
+      title="Ver detalle del cobro"
+    >
+      {children}
+    </button>
+  )
 }
 
 async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango = rangoProtocolosMensuales) {
@@ -4181,9 +4242,21 @@ const ultimosFinalizados = [...historial]
                     {registro.fecha_prueba_electrica ? formatearFecha(registro.fecha_prueba_electrica) : '-'}
                   </td>
                   <td style={{ padding: '8px', border: '1px solid #444' }}>{registro.tipo || '-'}</td>
-                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>{formatearPrecioMaterial(registro.valorMantencion)}</td>
-                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>{formatearPrecioMaterial(registro.valorModificacion)}</td>
-                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right', fontWeight: 800 }}>{formatearPrecioMaterial(registro.valorTotal)}</td>
+                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>
+                    <BotonValorCobro registro={registro} tipo="mantencion">
+                      {formatearPrecioMaterial(registro.valorMantencion)}
+                    </BotonValorCobro>
+                  </td>
+                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>
+                    <BotonValorCobro registro={registro} tipo="modificacion">
+                      {formatearPrecioMaterial(registro.valorModificacion)}
+                    </BotonValorCobro>
+                  </td>
+                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right', fontWeight: 800 }}>
+                    <BotonValorCobro registro={registro} tipo="total" destacado>
+                      {formatearPrecioMaterial(registro.valorTotal)}
+                    </BotonValorCobro>
+                  </td>
                   <td style={{ padding: '8px', border: '1px solid #444' }}>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                       <input
@@ -4386,6 +4459,102 @@ const ultimosFinalizados = [...historial]
       >
         Cerrar
       </button>
+    </div>
+  </div>
+)}
+
+{detalleCobroSeleccionado && (
+  <div
+    onClick={cerrarPanelesFlotantes}
+    style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: 'calc(100vw - 32px)',
+      maxWidth: '560px',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      padding: '18px',
+      background: '#222',
+      border: '1px solid white',
+      borderRadius: '10px',
+      zIndex: 1500,
+      color: 'white',
+      textAlign: 'left',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+    }}
+  >
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start', marginBottom: '12px' }}>
+      <div>
+        <h3 style={{ margin: 0 }}>Detalle de cobro</h3>
+        <div style={{ color: '#ccc', marginTop: '4px' }}>
+          Serie: {detalleCobroSeleccionado.serie || '-'}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => setDetalleCobroSeleccionado(null)}
+        style={{
+          padding: '8px 12px',
+          borderRadius: '8px',
+          border: '1px solid #777',
+          background: '#555',
+          color: 'white',
+          cursor: 'pointer',
+        }}
+      >
+        Cerrar
+      </button>
+    </div>
+
+    {detalleCobroSeleccionado.lineas.length === 0 ? (
+      <p style={{ color: '#ccc' }}>No hay cobros asociados a este valor.</p>
+    ) : (
+      <div style={{ display: 'grid', gap: '8px' }}>
+        {detalleCobroSeleccionado.lineas.map((item, index) => (
+          <div
+            key={`${item.material}-${index}`}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto',
+              gap: '8px',
+              padding: '10px',
+              border: '1px solid #444',
+              borderRadius: '8px',
+              background: '#2b2b2b',
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 800 }}>{item.material}</div>
+              <div style={{ color: '#ccc', fontSize: '13px', marginTop: '3px' }}>
+                {item.cantidad} x {formatearPrecioMaterial(item.precioUnitario)}
+                {item.materialPrecio && item.materialPrecio !== item.material ? ` · precio: ${item.materialPrecio}` : ''}
+              </div>
+            </div>
+            <div style={{ fontWeight: 800, textAlign: 'right' }}>
+              {formatearPrecioMaterial(item.subtotal)}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: '14px',
+        paddingTop: '12px',
+        borderTop: '1px solid #555',
+        fontWeight: 900,
+        fontSize: '18px',
+      }}
+    >
+      <span>Total detalle</span>
+      <span>{formatearPrecioMaterial(detalleCobroSeleccionado.total)}</span>
     </div>
   </div>
 )}
