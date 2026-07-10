@@ -84,6 +84,82 @@ const seccionesFormularioElectrico = [
   },
 ]
 
+const todosLosMateriales = seccionesFormularioElectrico.flatMap((seccion) => seccion.items)
+
+const catalogoPreciosProtocolo = [
+  { seccion: 'Canalización', material: 'Ducto Flex/Rig 20mm LH (Incl Acc)', idArt: 323, precio: 1932 },
+  { seccion: 'Canalización', material: 'Ducto Flex/Rig 25mm LH (Incl Acc)', idArt: 1681, precio: 2782 },
+  { seccion: 'Canalización', material: 'Caja PVC 100x100x65', idArt: 244, precio: 2377 },
+  { seccion: 'Canalización', material: 'Caja Metálica 100x65x65 / Chuqui', idArt: 322, precio: 2378 },
+  { seccion: 'Canalización', material: 'Caja Metálica 100x100x65', idArt: 1704, precio: 3120 },
+  { seccion: 'Canalización', material: 'Caja Tabique 3 Puestos LH', idArt: 1680, precio: 1900 },
+  { seccion: 'Canalización', material: 'Tapa Ciega - Plástica / Metálica', idArt: 1684, precio: 480 },
+  { seccion: 'Canalización', material: 'Prensa Estopa 16-21mm', idArt: 1683, precio: 1458 },
+  { seccion: 'Cableado', material: 'Cable RZ1 2,5mm (Alum + Ench)', idArt: 248, precio: 353 },
+  { seccion: 'Cableado', material: 'Cable RZ1 4mm (Termo)', idArt: 249, precio: 493 },
+  { seccion: 'Cableado', material: 'Cable RZ1 6mm (Alimentación)', idArt: 1687, precio: 710 },
+  { seccion: 'Cableado', material: 'Cable RZ1 3x2.5 / 4mm (Ilu-Term)', idArt: 252, precio: 2872 },
+  { seccion: 'Cableado', material: 'Cable RZ1 3x6mm (Alimentación)', idArt: 1685, precio: 3460 },
+  { seccion: 'Iluminación básica', material: 'Ampolleta LED', idArt: 254, precio: 3180 },
+  { seccion: 'Iluminación básica', material: 'Foco Led 12W Sob', idArt: 259, precio: 6702 },
+  { seccion: 'Iluminación básica', material: 'Tubo Led', idArt: 255, precio: 3180 },
+  { seccion: 'Iluminación básica', material: 'Eq. Herm. Led 40w (Tubo/Placa)', idArt: 256, precio: 18559 },
+  { seccion: 'Iluminación básica', material: 'Foco Tortuga Led', idArt: 258, precio: 7733 },
+  { seccion: 'Accesorios', material: 'Instalación Extractor', idArt: 273, precio: 0 },
+  { seccion: 'Artefactos tableros', material: 'Artefacto Simple', idArt: 263, precio: 1856 },
+  { seccion: 'Artefactos tableros', material: 'Artefacto Doble', idArt: 264, precio: 2578 },
+  { seccion: 'Artefactos tableros', material: 'Artefacto Triple', idArt: 265, precio: 3299 },
+  { seccion: 'Artefactos tableros', material: 'Tapa Ciega + Soporte', idArt: 266, precio: 0 },
+  { seccion: 'Artefactos tableros', material: 'Ench Hembra Indep 32A', idArt: 267, precio: 5639 },
+  { seccion: 'Artefactos tableros', material: 'Enchufe Mch Indep 32A', idArt: 1693, precio: 9250 },
+  { seccion: 'Tableros', material: 'Tab. PVC 24-36cc IP44', idArt: 1700, precio: 25300 },
+  { seccion: 'Tableros', material: 'Tab. PVC 8-12-18cc IP44', idArt: 270, precio: 17279 },
+  { seccion: 'Tableros', material: 'Tablero PVC IP65', idArt: 1701, precio: 56279 },
+  { seccion: 'Tableros', material: 'Inst Tab. TOP (Armado)', idArt: 17, precio: 70000 },
+  { seccion: 'Tableros', material: 'Aut. Monof 10-16-20A', idArt: 268, precio: 2578 },
+  { seccion: 'Tableros', material: 'Auto. Bifásico 2x10A', idArt: 1705, precio: 6740 },
+  { seccion: 'Tableros', material: 'Auto. Bifásico 2x16A', idArt: 1706, precio: 6950 },
+  { seccion: 'Tableros', material: 'Auto. Bifásico 2x20A', idArt: 1707, precio: 7308 },
+  { seccion: 'Tableros', material: 'Auto. Bifásico 2x25-32A', idArt: 1708, precio: 8450 },
+  { seccion: 'Tableros', material: 'Diferencial 2x25A', idArt: 269, precio: 8673 },
+  { seccion: 'Tableros', material: 'Diferencial 2x40A', idArt: 1709, precio: 13520 },
+  { seccion: 'Tableros', material: 'Porta Fusibles', idArt: 1698, precio: 1850 },
+  { seccion: 'Tableros', material: 'Luz Piloto', idArt: 1697, precio: 2100 },
+  { seccion: 'Tableros', material: 'Barra Monofásica 4cto', idArt: 271, precio: 1577 },
+  { seccion: 'Tableros', material: 'Repartidor 4x80A', idArt: 1699, precio: 4200 },
+  { seccion: 'Tableros', material: 'Falso Polo 1Mts', idArt: 272, precio: 1237 },
+  { seccion: 'Moldura plástica', material: 'Mold Bca C/T 20x10 x 2mt + Acces', idArt: 325, precio: 2000 },
+  { seccion: 'Bandeja plástica', material: 'BPC LH 100x45 + Acces', idArt: 1694, precio: 25200 },
+  { seccion: 'Bandeja plástica', material: 'Tapa Idrobox IP55', idArt: 1692, precio: 11033 },
+  { seccion: 'Eq. iluminación', material: 'Foco Sobrep LED 18W', idArt: 1712, precio: 8940 },
+  { seccion: 'Eq. iluminación', material: 'Panel Led 600x600mm', idArt: 1690, precio: 1690 },
+  { seccion: 'Eq. iluminación', material: 'Accesorio Mtaje Panel Led', idArt: 1688, precio: 15200 },
+  { seccion: 'Eq. iluminación', material: 'Foco Sobrep LED 24W', idArt: 1713, precio: 14320 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Tub Flexible Metálica c/acces', idArt: 1711, precio: 3390 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Tubería EMT c/accesorio', idArt: 1710, precio: 3900 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Ducto Flex/Rig 32mm LH (Incl Acc)', idArt: 1682, precio: 3744 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Caja Chuqui PVC', idArt: 324, precio: 1200 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Int. Difer. Legrand 2x10A 10mA', idArt: 1695, precio: 102500 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Int. Difer. Legrand 2x16A 10mA', idArt: 1696, precio: 24200 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Cordón Flex 3x18 AWG', idArt: 250, precio: 919 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Cable RZ-1 3x1.5mm2', idArt: 251, precio: 1658 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Cable RZ-1 5x4mm2', idArt: 1686, precio: 4620 },
+  { seccion: 'SPT', material: 'Barra Coperw 5/8 Inc. Con', idArt: 1702, precio: 12540 },
+  { seccion: 'SPT', material: 'Camarilla Registro PVC', idArt: 1703, precio: 5600 },
+]
+
+const seccionesCatalogoPrecios = [...new Set(catalogoPreciosProtocolo.map((item) => item.seccion))]
+
+function formatearPrecioMaterial(valor) {
+  const numero = Number(String(valor ?? '').replace(/[^\d]/g, ''))
+  if (!numero) return '$ 0'
+  return `$ ${numero.toLocaleString('es-CL')}`
+}
+
+function limpiarPrecioMaterial(valor) {
+  return String(valor ?? '').replace(/[^\d]/g, '')
+}
+
 function FormularioElectrico({ valores, onChange }) {
   return (
     <div style={{ display: 'grid', gap: '8px', marginBottom: '14px', textAlign: 'left' }}>
@@ -255,6 +331,11 @@ const [mostrarMenuAcciones, setMostrarMenuAcciones] = useState(false)
 const [mostrarMenuModulo, setMostrarMenuModulo] = useState(false)
 const [mostrarReintegrar, setMostrarReintegrar] = useState(false)
 const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false)
+const [mostrarPreciosMateriales, setMostrarPreciosMateriales] = useState(false)
+const [preciosMateriales, setPreciosMateriales] = useState({})
+const [cargandoPreciosMateriales, setCargandoPreciosMateriales] = useState(false)
+const [guardandoPreciosMateriales, setGuardandoPreciosMateriales] = useState(false)
+const [precioMaterialEnEdicion, setPrecioMaterialEnEdicion] = useState(null)
 const [fechaProtocolosDiarios, setFechaProtocolosDiarios] = useState(new Date().toISOString().slice(0, 10))
 const [descargandoProtocolos, setDescargandoProtocolos] = useState(false)
 const [serieReintegrar, setSerieReintegrar] = useState('')
@@ -277,7 +358,9 @@ const puedeEditarProtocolo = ['admin', 'operador'].includes(perfil?.rol)
 const puedeEditarDatosProtocolo = ['admin', 'operador', 'control_calidad'].includes(perfil?.rol)
 const recibeAvisosPrueba = ['admin', 'control_calidad', 'operador'].includes(perfil?.rol)
 const puedeDescargarProtocolosDiarios = ['analista', 'admin', 'operador', 'control_calidad'].includes(perfil?.rol)
-const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios
+const puedeVerPreciosMateriales = ['operador', 'analista', 'admin'].includes(perfil?.rol)
+const puedeEditarPreciosMateriales = ['analista', 'admin'].includes(perfil?.rol)
+const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
 const puedeVerMenuModulo = ['admin', 'operador'].includes(perfil?.rol)
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
 const llamadosPendientes = datos.filter(
@@ -372,6 +455,8 @@ function cerrarVentanasEmergentes({ conservarModulo = false } = {}) {
   setMostrarNuevoModulo(false)
   setMostrarReintegrar(false)
   setMostrarDescargaProtocolos(false)
+  setMostrarPreciosMateriales(false)
+  setPrecioMaterialEnEdicion(null)
 
   if (!conservarModulo) {
     limpiarEstadosModal()
@@ -771,6 +856,72 @@ function descargarProtocolosDiarios() {
   cerrarVentanasEmergentes()
   setFechaProtocolosDiarios(new Date().toISOString().slice(0, 10))
   setMostrarDescargaProtocolos(true)
+}
+
+async function cargarPreciosMateriales() {
+  setCargandoPreciosMateriales(true)
+  const { data, error } = await supabase
+    .from('material_precios')
+    .select('material, precio')
+  setCargandoPreciosMateriales(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudieron cargar los precios: ' + error.message)
+    setPreciosMateriales(Object.fromEntries(catalogoPreciosProtocolo.map((item) => [item.material, item.precio])))
+    return
+  }
+
+  const preciosGuardados = Object.fromEntries((data || []).map((item) => [
+    item.material,
+    item.precio ?? '',
+  ]))
+
+  setPreciosMateriales(Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
+    item.material,
+    preciosGuardados[item.material] ?? item.precio,
+  ])))
+}
+
+async function abrirPreciosMateriales() {
+  if (!puedeVerPreciosMateriales) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setMostrarPreciosMateriales(true)
+  await cargarPreciosMateriales()
+}
+
+function actualizarPrecioMaterial(material, valor) {
+  setPreciosMateriales((actuales) => ({
+    ...actuales,
+    [material]: limpiarPrecioMaterial(valor),
+  }))
+}
+
+async function guardarPreciosMateriales() {
+  if (!puedeEditarPreciosMateriales || guardandoPreciosMateriales) return
+
+  setGuardandoPreciosMateriales(true)
+  const filas = catalogoPreciosProtocolo.map((item) => ({
+    material: item.material,
+    id_art: item.idArt,
+    seccion: item.seccion,
+    precio: Number(limpiarPrecioMaterial(preciosMateriales[item.material]) || 0),
+    updated_at: new Date().toISOString(),
+  }))
+
+  const { error } = await supabase
+    .from('material_precios')
+    .upsert(filas, { onConflict: 'material' })
+
+  setGuardandoPreciosMateriales(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudieron guardar los precios: ' + error.message)
+    return
+  }
+
+  setPrecioMaterialEnEdicion(null)
+  mostrarNotificacion('Precios de materiales guardados correctamente')
 }
 
 async function generarDescargaProtocolosDiarios() {
@@ -1932,6 +2083,25 @@ const ultimosFinalizados = [...historial]
                     }}
                   >
                     Descargar protocolos diarios
+                  </button>
+                )}
+                {puedeVerPreciosMateriales && (
+                  <button
+                    type="button"
+                    onClick={abrirPreciosMateriales}
+                    style={{
+                      width: '100%',
+                      marginTop: (puedeAgregarModulos || puedeDescargarProtocolosDiarios) ? '8px' : 0,
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #555',
+                      background: '#6a1b9a',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Precios materiales
                   </button>
                 )}
               </div>
@@ -3429,6 +3599,154 @@ const ultimosFinalizados = [...historial]
           flex: 1,
           padding: '12px',
         }}
+      >
+        Cerrar
+      </button>
+    </div>
+  </div>
+)}
+
+{mostrarPreciosMateriales && puedeVerPreciosMateriales && (
+  <div
+    onClick={cerrarPanelesFlotantes}
+    style={{
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: 'calc(100vw - 32px)',
+      maxWidth: '520px',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      padding: '20px',
+      background: '#222',
+      border: '1px solid white',
+      borderRadius: '10px',
+      zIndex: 1300,
+      color: 'white',
+      textAlign: 'left',
+    }}
+  >
+    <h2 style={{ marginTop: 0 }}>Precios materiales</h2>
+    <p style={{ marginTop: 0, color: '#ccc' }}>
+      {puedeEditarPreciosMateriales
+        ? 'Estos precios quedan como catálogo global para cálculos futuros.'
+        : 'Consulta de precios de materiales.'}
+    </p>
+
+    {cargandoPreciosMateriales ? (
+      <p>Cargando precios...</p>
+    ) : (
+      <div style={{ display: 'grid', gap: '8px' }}>
+        {seccionesCatalogoPrecios.map((seccion, index) => (
+          <details
+            key={seccion}
+            defaultOpen={index === 0}
+            style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}
+          >
+            <summary
+              style={{
+                padding: '10px 12px',
+                background: '#333',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {seccion}
+            </summary>
+
+            <div style={{ padding: '8px 10px' }}>
+              {catalogoPreciosProtocolo
+                .filter((item) => item.seccion === seccion)
+                .map((item) => (
+                <div
+                  key={item.material}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: puedeEditarPreciosMateriales
+                      ? '72px minmax(0, 1fr) 120px 42px'
+                      : '72px minmax(0, 1fr) 120px',
+                    gap: '10px',
+                    alignItems: 'center',
+                    padding: '7px 0',
+                    borderBottom: '1px solid #444',
+                  }}
+                >
+                  <strong style={{ color: '#bbb', fontSize: '13px' }}>
+                    {item.idArt}
+                  </strong>
+                  <span style={{ lineHeight: 1.2 }}>{item.material}</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={formatearPrecioMaterial(preciosMateriales[item.material])}
+                    onChange={(e) => actualizarPrecioMaterial(item.material, e.target.value)}
+                    disabled={!puedeEditarPreciosMateriales || precioMaterialEnEdicion !== item.material}
+                    placeholder="$ 0"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      boxSizing: 'border-box',
+                      textAlign: 'right',
+                      opacity: puedeEditarPreciosMateriales ? 1 : 0.8,
+                      background: precioMaterialEnEdicion === item.material ? 'white' : '#ddd',
+                      color: '#111',
+                    }}
+                  />
+                  {puedeEditarPreciosMateriales && (
+                    <button
+                      type="button"
+                      onClick={() => setPrecioMaterialEnEdicion((actual) => (
+                        actual === item.material ? null : item.material
+                      ))}
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '8px',
+                        border: '1px solid #777',
+                        background: precioMaterialEnEdicion === item.material ? '#fbc02d' : '#333',
+                        color: precioMaterialEnEdicion === item.material ? '#111' : 'white',
+                        cursor: 'pointer',
+                        fontSize: '18px',
+                      }}
+                      title="Editar precio"
+                    >
+                      ✏️
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
+    )}
+
+    <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
+      {puedeEditarPreciosMateriales && (
+        <button
+          type="button"
+          onClick={guardarPreciosMateriales}
+          disabled={cargandoPreciosMateriales || guardandoPreciosMateriales}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: '#2e7d32',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: cargandoPreciosMateriales || guardandoPreciosMateriales ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {guardandoPreciosMateriales ? 'Guardando...' : 'Guardar precios'}
+        </button>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setMostrarPreciosMateriales(false)}
+        style={{ flex: 1, padding: '12px' }}
       >
         Cerrar
       </button>
