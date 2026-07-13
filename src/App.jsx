@@ -1209,7 +1209,7 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
       .lt('fecha_prueba_electrica', finTexto),
     supabase
       .from('historial_modulos')
-      .select('id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales')
+      .select('id, modulo_id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales')
       .gte('fecha_prueba_electrica', inicio)
       .lt('fecha_prueba_electrica', finTexto),
     supabase
@@ -1305,24 +1305,65 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
     : registro.origen === 'historial'
       ? 'historial_modulos'
       : 'modulos'
-  const protocoloActualizado = {
-    ...(registro.protocolo_entrega || {}),
-    id_ot: valor,
+
+  const columnasIdOt = registro.origen === 'historial'
+    ? 'id, modulo_id, protocolo_entrega, materiales'
+    : 'id, protocolo_entrega, materiales'
+
+  let { data: registroActual, error: errorCarga } = await supabase
+    .from(tablaDestino)
+    .select(columnasIdOt)
+    .eq('id', registro.id)
+    .maybeSingle()
+
+  if (!errorCarga && !registroActual && registro.origen === 'historial' && registro.modulo_id) {
+    ;({ data: registroActual, error: errorCarga } = await supabase
+      .from(tablaDestino)
+      .select(columnasIdOt)
+      .eq('modulo_id', registro.modulo_id)
+      .maybeSingle())
   }
 
-  const { error } = await supabase
+  if (errorCarga) {
+    mostrarNotificacion('No se pudo cargar el protocolo para guardar ID OT: ' + errorCarga.message)
+    return
+  }
+
+  if (!registroActual) {
+    mostrarNotificacion('No se encontró el protocolo para guardar ID OT')
+    return
+  }
+
+  const protocoloActualizado = {
+    ...(registroActual.protocolo_entrega || {}),
+    id_ot: valor,
+    idOt: valor,
+  }
+
+  const { data: registroGuardado, error } = await supabase
     .from(tablaDestino)
     .update({ protocolo_entrega: protocoloActualizado })
-    .eq('id', registro.id)
+    .eq('id', registroActual.id)
+    .select(columnasIdOt)
+    .maybeSingle()
 
   if (error) {
     mostrarNotificacion('No se pudo guardar el ID OT: ' + error.message)
     return
   }
 
+  if (!registroGuardado?.protocolo_entrega) {
+    mostrarNotificacion('No se pudo confirmar el guardado del ID OT')
+    return
+  }
+
   setProtocolosMensuales((actuales) => actuales.map((item) => (
-    item.id === registro.id && item.origen === registro.origen
-      ? { ...item, idOt: valor, protocolo_entrega: protocoloActualizado }
+    item.origen === registro.origen && (
+      item.id === registro.id ||
+      item.id === registroGuardado.id ||
+      item.modulo_id === registroGuardado.modulo_id
+    )
+      ? { ...item, ...registroGuardado, idOt: valor, protocolo_entrega: registroGuardado.protocolo_entrega }
       : item
   )))
   setIdOtEnEdicion(null)
@@ -2006,7 +2047,24 @@ async function guardarProtocoloEntrega(protocolo) {
       return
     }
 
-    const registroGuardado = data || { ...payloadManual, id: moduloSeleccionado.id, origen: 'manual' }
+    let registroGuardado = data || { ...payloadManual, id: moduloSeleccionado.id, origen: 'manual' }
+    const { data: manualVerificado, error: errorVerificacionManual } = await supabase
+      .from('protocolos_manuales')
+      .select('*')
+      .eq('id', registroGuardado.id)
+      .maybeSingle()
+
+    if (errorVerificacionManual) {
+      mostrarNotificacion('El protocolo manual se guardó, pero no se pudo verificar: ' + errorVerificacionManual.message)
+      return
+    }
+
+    if (!manualVerificado?.protocolo_entrega) {
+      mostrarNotificacion('No se pudo verificar que el protocolo manual quedara guardado')
+      return
+    }
+
+    registroGuardado = manualVerificado
     setModuloSeleccionado({
       ...registroGuardado,
       origen: 'manual',
@@ -2069,6 +2127,25 @@ async function guardarProtocoloEntrega(protocolo) {
     mostrarNotificacion('No se pudo confirmar el guardado del protocolo')
     return
   }
+
+  const idRegistroGuardado = registroGuardado.id || moduloSeleccionado.id
+  const { data: registroVerificado, error: errorVerificacion } = await supabase
+    .from(tablaDestino)
+    .select('*')
+    .eq('id', idRegistroGuardado)
+    .maybeSingle()
+
+  if (errorVerificacion) {
+    mostrarNotificacion('El protocolo se guardó, pero no se pudo verificar: ' + errorVerificacion.message)
+    return
+  }
+
+  if (!registroVerificado?.protocolo_entrega) {
+    mostrarNotificacion('No se pudo verificar que el protocolo quedara guardado')
+    return
+  }
+
+  registroGuardado = registroVerificado
 
   const protocoloGuardado = registroGuardado.protocolo_entrega || protocolo
   const materialesGuardados = registroGuardado.materiales || protocolo.materiales || {}

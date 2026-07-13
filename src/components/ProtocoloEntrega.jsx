@@ -523,7 +523,7 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
       {!soloLectura && <button className="protocolo-guardar" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar protocolo'}</button>}
       <button className="protocolo-descargar" onClick={descargar} disabled={descargando}>{descargando ? 'Generando PDF...' : 'Descargar PDF'}</button>
       <button className="protocolo-imprimir" onClick={imprimir}>Imprimir</button>
-      <button onClick={onCerrar}>Cerrar</button>
+      <button onClick={onCerrar} disabled={guardando}>Cerrar</button>
     </div>
     <div className="protocolo-visor"><div className="pdf-protocolo-escala" style={{ width: 1275 * escalaProtocolo, height: 1650 * escalaProtocolo }}><div className="pdf-protocolo-pagina" style={{ backgroundImage: `url(${plantillaProtocolo})`, transform: `scale(${escalaProtocolo})`, transformOrigin: 'top left' }}>
       {campo('fecha', { left: 280, top: 190, width: 405, height: 31 }, { type: 'date' })}{moduloEditable ? campo('serie', { left: 959, top: 190, width: 304, height: 31 }) : <input className="pdf-campo" style={{ left: 959, top: 190, width: 304, height: 31 }} value={modulo.serie || ''} disabled />}
