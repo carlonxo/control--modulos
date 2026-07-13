@@ -105,11 +105,11 @@ const catalogoPreciosProtocolo = [
   { seccion: 'Iluminación básica', material: 'Tubo Led', idArt: 255, precio: 3180 },
   { seccion: 'Iluminación básica', material: 'Eq. Herm. Led 40w (Tubo/Placa)', idArt: 256, precio: 18559 },
   { seccion: 'Iluminación básica', material: 'Foco Tortuga Led', idArt: 258, precio: 7733 },
-  { seccion: 'Accesorios', material: 'Instalación Extractor', idArt: 273, precio: 0 },
+  { seccion: 'Accesorios', material: 'Instalación Extractor', idArt: 273, precio: 3500 },
   { seccion: 'Artefactos tableros', material: 'Artefacto Simple', idArt: 263, precio: 1856 },
   { seccion: 'Artefactos tableros', material: 'Artefacto Doble', idArt: 264, precio: 2578 },
   { seccion: 'Artefactos tableros', material: 'Artefacto Triple', idArt: 265, precio: 3299 },
-  { seccion: 'Artefactos tableros', material: 'Tapa Ciega + Soporte', idArt: 266, precio: 0 },
+  { seccion: 'Artefactos tableros', material: 'Tapa Ciega + Soporte', idArt: 266, precio: 722 },
   { seccion: 'Artefactos tableros', material: 'Ench Hembra Indep 32A', idArt: 267, precio: 5639 },
   { seccion: 'Artefactos tableros', material: 'Enchufe Mch Indep 32A', idArt: 1693, precio: 9250 },
   { seccion: 'Tableros', material: 'Tab. PVC 24-36cc IP44', idArt: 1700, precio: 25300 },
@@ -173,6 +173,13 @@ function limpiarPrecioMaterial(valor) {
 
 function normalizarTextoComparacion(valor) {
   return String(valor || '')
+    .replace(/Ã¡/gi, 'a')
+    .replace(/Ã©/gi, 'e')
+    .replace(/Ã­/gi, 'i')
+    .replace(/Ã³/gi, 'o')
+    .replace(/Ãº/gi, 'u')
+    .replace(/Ã±/gi, 'n')
+    .replace(/Â/g, '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
@@ -185,6 +192,9 @@ const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Caja metálica 100x100x65')]: 'Caja Metálica 100x100x65',
   [normalizarTextoComparacion('Caja tabique LH')]: 'Caja Tabique 3 Puestos LH',
   [normalizarTextoComparacion('Tapa ciega - Pasac.')]: 'Tapa Ciega - Plástica / Metálica',
+  [normalizarTextoComparacion('Cable RZ1 2,5mm')]: 'Cable RZ1 2,5mm (Alum + Ench)',
+  [normalizarTextoComparacion('Cable RZ1 4mm')]: 'Cable RZ1 4mm (Termo)',
+  [normalizarTextoComparacion('Cable RZ1 6mm')]: 'Cable RZ1 6mm (Alimentación)',
   [normalizarTextoComparacion('Cordon flex 3 x 2.5/4mm')]: 'Cable RZ1 3x2.5 / 4mm (Ilu-Term)',
   [normalizarTextoComparacion('Cordon flex 3 x 6mm')]: 'Cable RZ1 3x6mm (Alimentación)',
   [normalizarTextoComparacion('Plafón')]: 'Foco Led 12W Sob',
@@ -221,8 +231,22 @@ function obtenerMaterialPrecioParaProtocolo(itemProtocolo) {
   return equivalenciasPrecioProtocolo[clave] || itemProtocolo
 }
 
-function calcularCantidadNuevaProtocolo(valor) {
-  return Number(parsearCantidadProtocolo(valor)?.nuevo || 0)
+function calcularCobroCantidadProtocolo(valor, precioUnitario) {
+  const cantidad = parsearCantidadProtocolo(valor)
+  const nuevo = Number(cantidad?.nuevo || 0)
+  const reutilizado = Number(cantidad?.reutilizado || 0)
+  const subtotalNuevo = nuevo * precioUnitario
+  const subtotalReutilizado = reutilizado * (precioUnitario / 2)
+
+  return {
+    nuevo,
+    reutilizado,
+    precioNuevo: precioUnitario,
+    precioReutilizado: precioUnitario / 2,
+    subtotalNuevo,
+    subtotalReutilizado,
+    subtotal: subtotalNuevo + subtotalReutilizado,
+  }
 }
 
 function formatearFechaInput(fecha) {
@@ -1029,24 +1053,37 @@ function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) 
     item.material,
     Number(limpiarPrecioMaterial(precios[item.material] ?? item.precio) || 0),
   ]))
+  const preciosBaseNormalizados = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
+    normalizarTextoComparacion(item.material),
+    Number(limpiarPrecioMaterial(precios[item.material] ?? item.precio) || 0),
+  ]))
+  Object.entries(precios || {}).forEach(([material, precio]) => {
+    preciosBaseNormalizados[normalizarTextoComparacion(material)] = Number(limpiarPrecioMaterial(precio) || 0)
+  })
 
   return camposMateriales.reduce((totales, [itemProtocolo]) => {
     const detalle = detalleMateriales[itemProtocolo] || {}
     const materialPrecio = obtenerMaterialPrecioParaProtocolo(itemProtocolo)
-    const precioUnitario = preciosBase[materialPrecio] ?? 0
-    const cantidadMantencion = calcularCantidadNuevaProtocolo(detalle.mantencion)
-    const cantidadModificacion = calcularCantidadNuevaProtocolo(detalle.modificacion)
-    const subtotalMantencion = cantidadMantencion * precioUnitario
-    const subtotalModificacion = cantidadModificacion * precioUnitario
+    const precioUnitario = preciosBase[materialPrecio] ?? preciosBaseNormalizados[normalizarTextoComparacion(materialPrecio)] ?? 0
+    const cobroMantencion = calcularCobroCantidadProtocolo(detalle.mantencion, precioUnitario)
+    const cobroModificacion = calcularCobroCantidadProtocolo(detalle.modificacion, precioUnitario)
+    const detalleMantencionItem = [
+      cobroMantencion.subtotalNuevo > 0 ? { material: itemProtocolo, materialPrecio, cantidad: cobroMantencion.nuevo, precioUnitario: cobroMantencion.precioNuevo, subtotal: cobroMantencion.subtotalNuevo, tipoCantidad: 'Nuevo' } : null,
+      cobroMantencion.subtotalReutilizado > 0 ? { material: `${itemProtocolo} reutilizado`, materialPrecio, cantidad: cobroMantencion.reutilizado, precioUnitario: cobroMantencion.precioReutilizado, subtotal: cobroMantencion.subtotalReutilizado, tipoCantidad: 'Reutilizado 50%' } : null,
+    ].filter(Boolean)
+    const detalleModificacionItem = [
+      cobroModificacion.subtotalNuevo > 0 ? { material: itemProtocolo, materialPrecio, cantidad: cobroModificacion.nuevo, precioUnitario: cobroModificacion.precioNuevo, subtotal: cobroModificacion.subtotalNuevo, tipoCantidad: 'Nuevo' } : null,
+      cobroModificacion.subtotalReutilizado > 0 ? { material: `${itemProtocolo} reutilizado`, materialPrecio, cantidad: cobroModificacion.reutilizado, precioUnitario: cobroModificacion.precioReutilizado, subtotal: cobroModificacion.subtotalReutilizado, tipoCantidad: 'Reutilizado 50%' } : null,
+    ].filter(Boolean)
 
     return {
-      mantencion: totales.mantencion + subtotalMantencion,
-      modificacion: totales.modificacion + subtotalModificacion,
-      detalleMantencion: subtotalMantencion > 0
-        ? [...totales.detalleMantencion, { material: itemProtocolo, materialPrecio, cantidad: cantidadMantencion, precioUnitario, subtotal: subtotalMantencion }]
+      mantencion: totales.mantencion + cobroMantencion.subtotal,
+      modificacion: totales.modificacion + cobroModificacion.subtotal,
+      detalleMantencion: detalleMantencionItem.length > 0
+        ? [...totales.detalleMantencion, ...detalleMantencionItem]
         : totales.detalleMantencion,
-      detalleModificacion: subtotalModificacion > 0
-        ? [...totales.detalleModificacion, { material: itemProtocolo, materialPrecio, cantidad: cantidadModificacion, precioUnitario, subtotal: subtotalModificacion }]
+      detalleModificacion: detalleModificacionItem.length > 0
+        ? [...totales.detalleModificacion, ...detalleModificacionItem]
         : totales.detalleModificacion,
     }
   }, {
@@ -4263,6 +4300,7 @@ const ultimosFinalizados = [...historial]
                         type="text"
                         value={registro.idOt}
                         disabled={idOtEnEdicion !== claveRegistro}
+                        placeholder="-"
                         onChange={(e) => setProtocolosMensuales((actuales) => actuales.map((item) => (
                           item.id === registro.id && item.origen === registro.origen
                             ? { ...item, idOt: e.target.value }
@@ -4272,12 +4310,15 @@ const ultimosFinalizados = [...historial]
                           if (e.key === 'Enter') guardarIdOtProtocoloMensual(registro, e.currentTarget.value)
                         }}
                         style={{
-                          width: '120px',
-                          padding: '7px',
-                          background: idOtEnEdicion === claveRegistro ? 'white' : '#ddd',
-                          color: '#111',
-                          border: '1px solid #777',
+                          width: '110px',
+                          padding: idOtEnEdicion === claveRegistro ? '7px' : '0',
+                          background: idOtEnEdicion === claveRegistro ? 'white' : 'transparent',
+                          color: idOtEnEdicion === claveRegistro ? '#111' : 'white',
+                          border: idOtEnEdicion === claveRegistro ? '1px solid #777' : '1px solid transparent',
                           borderRadius: '6px',
+                          font: 'inherit',
+                          fontWeight: 700,
+                          opacity: 1,
                         }}
                       />
                       <button
@@ -4291,13 +4332,14 @@ const ultimosFinalizados = [...historial]
                         }}
                         title={idOtEnEdicion === claveRegistro ? 'Guardar ID OT' : 'Editar ID OT'}
                         style={{
-                          width: '36px',
-                          height: '36px',
-                          borderRadius: '8px',
-                          border: '1px solid #777',
-                          background: idOtEnEdicion === claveRegistro ? '#2e7d32' : '#333',
+                          width: '30px',
+                          height: '30px',
+                          borderRadius: '50%',
+                          border: idOtEnEdicion === claveRegistro ? '1px solid #66bb6a' : '1px solid #555',
+                          background: idOtEnEdicion === claveRegistro ? '#2e7d32' : 'transparent',
                           color: 'white',
                           cursor: 'pointer',
+                          fontSize: '14px',
                         }}
                       >
                         {idOtEnEdicion === claveRegistro ? '✓' : '✏️'}
@@ -4530,6 +4572,7 @@ const ultimosFinalizados = [...historial]
               <div style={{ fontWeight: 800 }}>{item.material}</div>
               <div style={{ color: '#ccc', fontSize: '13px', marginTop: '3px' }}>
                 {item.cantidad} x {formatearPrecioMaterial(item.precioUnitario)}
+                {item.tipoCantidad ? ` · ${item.tipoCantidad}` : ''}
                 {item.materialPrecio && item.materialPrecio !== item.material ? ` · precio: ${item.materialPrecio}` : ''}
               </div>
             </div>
