@@ -39,6 +39,10 @@ function normalizarNumero(valor) {
   return Number.isFinite(numero) ? numero : 0
 }
 
+function esCantidadReutilizada(valor) {
+  return /(^|[\d\s.,-])r\b|reutiliz/i.test(String(valor || ''))
+}
+
 export function parsearCantidadProtocolo(valor) {
   return String(valor || '')
     .split('/')
@@ -48,7 +52,7 @@ export function parsearCantidadProtocolo(valor) {
       const cantidad = normalizarNumero(parte)
       if (!cantidad) return total
 
-      if (/\br\b/i.test(parte)) {
+      if (esCantidadReutilizada(parte)) {
         return { ...total, reutilizado: total.reutilizado + cantidad }
       }
 
