@@ -2038,49 +2038,80 @@ async function guardarProtocoloEntrega(protocolo) {
   if (!protocoloDesdeHistorial && !puedeEditarDatosProtocolo) return
 
   const tablaDestino = protocoloDesdeHistorial ? 'historial_modulos' : 'modulos'
-  const { error } = await supabase
+  const payloadProtocolo = {
+    protocolo_entrega: protocolo,
+    materiales: protocolo.materiales || {},
+  }
+
+  let { data: registroGuardado, error } = await supabase
     .from(tablaDestino)
-    .update({
-      protocolo_entrega: protocolo,
-      materiales: protocolo.materiales || {},
-    })
+    .update(payloadProtocolo)
     .eq('id', moduloSeleccionado.id)
+    .select()
+    .maybeSingle()
+
+  if (!error && !registroGuardado && protocoloDesdeHistorial) {
+    const idModuloHistorial = moduloSeleccionado.modulo_id || moduloSeleccionado.id
+    ;({ data: registroGuardado, error } = await supabase
+      .from(tablaDestino)
+      .update(payloadProtocolo)
+      .eq('modulo_id', idModuloHistorial)
+      .select()
+      .maybeSingle())
+  }
 
   if (error) {
     mostrarNotificacion('No se pudo guardar el protocolo: ' + error.message)
     return
   }
 
-  setDatosProtocoloEntrega(protocolo)
+  if (!registroGuardado) {
+    mostrarNotificacion('No se pudo confirmar el guardado del protocolo')
+    return
+  }
+
+  const protocoloGuardado = registroGuardado.protocolo_entrega || protocolo
+  const materialesGuardados = registroGuardado.materiales || protocolo.materiales || {}
+
+  setDatosProtocoloEntrega(protocoloGuardado)
   setVersionProtocoloEntrega((version) => version + 1)
   setFormulariosElectricos((actuales) => ({
     ...actuales,
-    [moduloSeleccionado.id]: protocolo.materiales || {},
+    [moduloSeleccionado.id]: materialesGuardados,
   }))
   setModuloSeleccionado((actual) => actual
     ? {
         ...actual,
-        protocolo_entrega: protocolo,
-        materiales: protocolo.materiales || {},
+        ...registroGuardado,
+        protocolo_entrega: protocoloGuardado,
+        materiales: materialesGuardados,
       }
     : actual
   )
   if (protocoloDesdeHistorial) {
     setProtocolosMensuales((actuales) => actuales.map((item) => (
-      item.id === moduloSeleccionado.id && item.origen === 'historial'
-        ? prepararRegistroProtocoloMensual({ ...item, protocolo_entrega: protocolo, materiales: protocolo.materiales || {} }, 'historial', preciosMateriales)
+      item.origen === 'historial' && (
+        item.id === moduloSeleccionado.id ||
+        item.id === registroGuardado.id ||
+        item.modulo_id === registroGuardado.modulo_id
+      )
+        ? prepararRegistroProtocoloMensual({ ...item, ...registroGuardado, protocolo_entrega: protocoloGuardado, materiales: materialesGuardados }, 'historial', preciosMateriales)
         : item
     )))
     setResultadoBusqueda((actuales) => actuales.map((item) => (
-      item.id === moduloSeleccionado.id && !item.esActual
-        ? { ...item, protocolo_entrega: protocolo, materiales: protocolo.materiales || {} }
+      !item.esActual && (
+        item.id === moduloSeleccionado.id ||
+        item.id === registroGuardado.id ||
+        item.modulo_id === registroGuardado.modulo_id
+      )
+        ? { ...item, ...registroGuardado, protocolo_entrega: protocoloGuardado, materiales: materialesGuardados }
         : item
     )))
     await cargarHistorial()
   } else {
     setProtocolosMensuales((actuales) => actuales.map((item) => (
       item.id === moduloSeleccionado.id && item.origen === 'actual'
-        ? prepararRegistroProtocoloMensual({ ...item, protocolo_entrega: protocolo, materiales: protocolo.materiales || {} }, 'actual', preciosMateriales)
+        ? prepararRegistroProtocoloMensual({ ...item, ...registroGuardado, protocolo_entrega: protocoloGuardado, materiales: materialesGuardados }, 'actual', preciosMateriales)
         : item
     )))
   }
