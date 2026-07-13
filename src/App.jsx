@@ -532,6 +532,7 @@ const [notaEditada, setNotaEditada] = useState('')
 const [nombreSolicitante, setNombreSolicitante] = useState('')
 const [rolSolicitante, setRolSolicitante] = useState('')
 const [formulariosElectricos, setFormulariosElectricos] = useState({})
+const [materialesEditados, setMaterialesEditados] = useState({})
 const [mostrarResumenMateriales, setMostrarResumenMateriales] = useState(false)
 const [mostrarEditorMateriales, setMostrarEditorMateriales] = useState(false)
 const [cargandoMateriales, setCargandoMateriales] = useState(false)
@@ -686,16 +687,40 @@ function cerrarPanelesYModulo() {
   cerrarVentanasEmergentes()
 }
 
+function hayMaterialesPendientes(moduloId = moduloSeleccionado?.id) {
+  return Boolean(moduloId && Object.keys(materialesEditados[moduloId] || {}).length > 0)
+}
+
+function cerrarEditorMateriales({ forzar = false } = {}) {
+  if (!forzar && hayMaterialesPendientes()) {
+    const confirmar = window.confirm('Hay cambios de materiales sin guardar. ¿Cerrar de todas formas?')
+    if (!confirmar) return
+  }
+  if (moduloSeleccionado?.id) {
+    setMaterialesEditados((actuales) => {
+      const copia = { ...actuales }
+      delete copia[moduloSeleccionado.id]
+      return copia
+    })
+  }
+  setMostrarEditorMateriales(false)
+}
+
 function limpiarBusquedaSerie() {
   setSerieBusqueda('')
   setResultadoBusqueda([])
   setBusquedaRealizada(false)
 }
 
-function cerrarVentanasEmergentes({ conservarModulo = false } = {}) {
+function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateriales = false } = {}) {
   cerrarPanelesFlotantes()
+  const bloqueoCierreMateriales = mostrarEditorMateriales && hayMaterialesPendientes() && !forzarCerrarMateriales
   setMostrarResumenMateriales(false)
-  setMostrarEditorMateriales(false)
+  if (bloqueoCierreMateriales) {
+    mostrarNotificacion('Hay materiales sin guardar. Guarda o cierra el editor antes de tocar el tablero.')
+  } else {
+    setMostrarEditorMateriales(false)
+  }
   setMostrarProtocoloEntrega(false)
   setProtocoloSoloLecturaBusqueda(false)
   setProtocoloDesdeHistorial(false)
@@ -707,7 +732,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false } = {}) {
   setPrecioMaterialEnEdicion(null)
   setDetalleCobroSeleccionado(null)
 
-  if (!conservarModulo) {
+  if (!conservarModulo && !bloqueoCierreMateriales) {
     limpiarEstadosModal()
   }
 }
@@ -2321,6 +2346,10 @@ async function cargarMaterialesModulo(moduloId) {
     ...actuales,
     [moduloId]: data?.materiales || {},
   }))
+  setMaterialesEditados((actuales) => ({
+    ...actuales,
+    [moduloId]: {},
+  }))
 }
 
 async function abrirResumenMateriales() {
@@ -2356,16 +2385,58 @@ function actualizarMaterialFormulario(item, tipo, valor) {
       },
     },
   }))
+  setMaterialesEditados((actuales) => ({
+    ...actuales,
+    [moduloId]: {
+      ...(actuales[moduloId] || {}),
+      [item]: {
+        ...(actuales[moduloId]?.[item] || {}),
+        [tipo]: true,
+      },
+    },
+  }))
 }
 
 async function guardarMaterialesModulo() {
   if (!moduloSeleccionado?.id || !puedeVerMenuModulo) return
 
-  const materiales = formulariosElectricos[moduloSeleccionado.id] || {}
+  const moduloId = moduloSeleccionado.id
+  const materialesLocales = formulariosElectricos[moduloId] || {}
+  const camposEditados = materialesEditados[moduloId] || {}
+
+  const { data: registroActual, error: errorCarga } = await supabase
+    .from('modulos')
+    .select('materiales')
+    .eq('id', moduloId)
+    .single()
+
+  if (errorCarga) {
+    mostrarNotificacion('No se pudieron cargar los materiales actuales: ' + errorCarga.message)
+    return
+  }
+
+  const materialesFusionados = { ...(registroActual?.materiales || {}) }
+  Object.entries(camposEditados).forEach(([item, tiposEditados]) => {
+    const valorActual = materialesFusionados[item]
+    const valorLocal = materialesLocales[item]
+    const baseItem = typeof valorActual === 'object' && valorActual !== null
+      ? { ...valorActual }
+      : { nuevo: valorActual || '', reutilizado: '' }
+    const localItem = typeof valorLocal === 'object' && valorLocal !== null
+      ? valorLocal
+      : { nuevo: valorLocal || '', reutilizado: '' }
+
+    Object.keys(tiposEditados || {}).forEach((tipo) => {
+      baseItem[tipo] = localItem[tipo] ?? ''
+    })
+
+    materialesFusionados[item] = baseItem
+  })
+
   const { error } = await supabase
     .from('modulos')
-    .update({ materiales })
-    .eq('id', moduloSeleccionado.id)
+    .update({ materiales: materialesFusionados })
+    .eq('id', moduloId)
 
   if (error) {
     mostrarNotificacion('No se pudieron guardar los materiales: ' + error.message)
@@ -2373,9 +2444,17 @@ async function guardarMaterialesModulo() {
   }
 
   setModuloSeleccionado((actual) => actual
-    ? { ...actual, materiales }
+    ? { ...actual, materiales: materialesFusionados }
     : actual
   )
+  setFormulariosElectricos((actuales) => ({
+    ...actuales,
+    [moduloId]: materialesFusionados,
+  }))
+  setMaterialesEditados((actuales) => ({
+    ...actuales,
+    [moduloId]: {},
+  }))
   mostrarNotificacion('Materiales guardados correctamente')
 }
 
@@ -2910,6 +2989,48 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       await moverRegistro(moduloActual.id, lineaDestinoParsed, posicionDestinoParsed)
       await cargarTablero()
       mostrarNotificacion('Módulo insertado correctamente')
+      return
+    }
+
+    if (lineaOrigen !== lineaDestinoParsed) {
+      const modulosLineaDestino = modulosActivos
+        .filter((x) => Number(x.linea) === lineaDestinoParsed && String(x.id) !== String(moduloId))
+        .sort((a, b) => Number(a.posicion) - Number(b.posicion))
+
+      if (modulosLineaDestino.length >= 9) {
+        mostrarNotificacion(`La línea ${lineaDestinoParsed} ya está completa`)
+        return
+      }
+
+      const posicionInsercion = Math.max(1, Math.min(posicionDestinoParsed, modulosLineaDestino.length + 1))
+
+      await moverRegistro(moduloActual.id, lineaOrigen, posicionTemporal)
+
+      const movimientosOrigen = modulosActivos
+        .filter((x) =>
+          Number(x.linea) === lineaOrigen &&
+          String(x.id) !== String(moduloId) &&
+          Number(x.posicion) > posicionOrigen
+        )
+        .map((x) => ({ id: x.id, linea: lineaOrigen, posicion: Number(x.posicion) - 1, posicionActual: Number(x.posicion) }))
+        .sort((a, b) => a.posicionActual - b.posicionActual)
+
+      const movimientosDestino = modulosLineaDestino
+        .filter((x) => Number(x.posicion) >= posicionInsercion)
+        .map((x) => ({ id: x.id, linea: lineaDestinoParsed, posicion: Number(x.posicion) + 1, posicionActual: Number(x.posicion) }))
+        .sort((a, b) => b.posicionActual - a.posicionActual)
+
+      for (const movimiento of movimientosOrigen) {
+        await moverRegistro(movimiento.id, movimiento.linea, movimiento.posicion)
+      }
+
+      for (const movimiento of movimientosDestino) {
+        await moverRegistro(movimiento.id, movimiento.linea, movimiento.posicion)
+      }
+
+      await moverRegistro(moduloActual.id, lineaDestinoParsed, posicionInsercion)
+      await cargarTablero()
+      mostrarNotificacion('Módulo agregado a la línea correctamente')
       return
     }
 
@@ -4794,7 +4915,7 @@ const ultimosFinalizados = [...historial]
 
       <button
         type="button"
-        onClick={() => setMostrarEditorMateriales(false)}
+        onClick={() => cerrarEditorMateriales()}
         style={{
           flex: 1,
           padding: '12px',
