@@ -1350,7 +1350,7 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
     return
   }
 
-  if (!filasActualizadas) {
+  if (filasActualizadas === 0) {
     mostrarNotificacion('No se encontró el protocolo para guardar ID OT')
     return
   }
@@ -2116,7 +2116,7 @@ async function guardarProtocoloEntrega(protocolo) {
     .eq('id', moduloSeleccionado.id)
   let registroGuardado = null
 
-  if (!error && !filasActualizadas && protocoloDesdeHistorial) {
+  if (!error && filasActualizadas === 0 && protocoloDesdeHistorial) {
     const idModuloHistorial = moduloSeleccionado.modulo_id || moduloSeleccionado.id
     ;({ count: filasActualizadas, error } = await supabase
       .from(tablaDestino)
@@ -2129,7 +2129,7 @@ async function guardarProtocoloEntrega(protocolo) {
     return
   }
 
-  if (!filasActualizadas) {
+  if (filasActualizadas === 0) {
     mostrarNotificacion('No se encontrÃ³ el registro del protocolo para guardar')
     return
   }
