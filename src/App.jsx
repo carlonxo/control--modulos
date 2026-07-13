@@ -42,6 +42,12 @@ function fechaParaInput(valor) {
   return fecha.toISOString().slice(0, 10)
 }
 
+function claveProtocoloUnico(serie, fecha) {
+  const serieNormalizada = normalizarTexto(serie)
+  const fechaNormalizada = fechaParaInput(fecha || '')
+  return serieNormalizada && fechaNormalizada ? `${serieNormalizada}|${fechaNormalizada}` : ''
+}
+
 function diasDesdeFecha(valor) {
   if (!valor) return null
   const fecha = new Date(valor)
@@ -546,6 +552,7 @@ const puedeDescargarProtocolosDiarios = ['analista', 'admin', 'operador', 'contr
 const puedeVerPreciosMateriales = ['operador', 'analista', 'admin'].includes(perfil?.rol)
 const puedeEditarPreciosMateriales = ['analista', 'admin'].includes(perfil?.rol)
 const puedeVerProtocolosMensuales = ['analista', 'admin'].includes(perfil?.rol)
+const puedeEliminarProtocolosMensuales = ['admin', 'analista'].includes(perfil?.rol)
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
 const puedeVerMenuModulo = ['admin', 'operador'].includes(perfil?.rol)
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
@@ -556,6 +563,12 @@ const ingresosProtocolosMensuales = protocolosMensuales.reduce(
   (total, registro) => total + Number(registro.valorTotal || 0),
   0
 )
+const conteoClavesProtocolos = protocolosMensuales.reduce((conteo, registro) => {
+  const clave = claveProtocoloUnico(registro.serie, registro.fecha_prueba_electrica)
+  if (!clave) return conteo
+  conteo[clave] = (conteo[clave] || 0) + 1
+  return conteo
+}, {})
 const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
 const resumenMateriales = Object.entries(materialesModuloSeleccionado)
   .map(([material, valor]) => {
@@ -1437,6 +1450,127 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
   mostrarNotificacion('ID OT guardado')
 }
 
+async function buscarProtocoloDuplicado({ serie, fecha, origenActual = '', idActual = '' }) {
+  const serieNormalizada = String(serie || '').trim()
+  const fechaNormalizada = fechaParaInput(fecha)
+  if (!serieNormalizada || !fechaNormalizada) return null
+
+  const inicio = `${fechaNormalizada}T00:00:00`
+  const fin = new Date(`${fechaNormalizada}T00:00:00`)
+  fin.setDate(fin.getDate() + 1)
+  const finTexto = fin.toISOString().slice(0, 19)
+
+  const consultas = [
+    {
+      origen: 'actual',
+      respuesta: supabase
+        .from('modulos')
+        .select('id, serie, fecha_prueba_electrica')
+        .ilike('serie', serieNormalizada)
+        .gte('fecha_prueba_electrica', inicio)
+        .lt('fecha_prueba_electrica', finTexto),
+    },
+    {
+      origen: 'historial',
+      respuesta: supabase
+        .from('historial_modulos')
+        .select('id, serie, fecha_prueba_electrica')
+        .ilike('serie', serieNormalizada)
+        .gte('fecha_prueba_electrica', inicio)
+        .lt('fecha_prueba_electrica', finTexto),
+    },
+    {
+      origen: 'manual',
+      respuesta: supabase
+        .from('protocolos_manuales')
+        .select('id, serie, fecha_prueba_electrica')
+        .ilike('serie', serieNormalizada)
+        .gte('fecha_prueba_electrica', inicio)
+        .lt('fecha_prueba_electrica', finTexto),
+    },
+  ]
+
+  const respuestas = await Promise.all(consultas.map((consulta) => consulta.respuesta))
+
+  for (let indice = 0; indice < respuestas.length; indice += 1) {
+    const respuesta = respuestas[indice]
+    if (respuesta.error) {
+      if (respuesta.error.message?.includes('protocolos_manuales')) continue
+      throw respuesta.error
+    }
+
+    const origen = consultas[indice].origen
+    const duplicado = (respuesta.data || []).find((item) => !(
+      origen === origenActual && String(item.id) === String(idActual)
+    ))
+
+    if (duplicado) return { ...duplicado, origen }
+  }
+
+  return null
+}
+
+async function eliminarProtocoloMensual(registro) {
+  if (!puedeEliminarProtocolosMensuales || !registro?.id) return
+
+  if (registro.origen === 'actual') {
+    const confirmadoActual = window.confirm(
+      `¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}? El módulo seguirá activo en el tablero.`
+    )
+
+    if (!confirmadoActual) return
+
+    const { error } = await supabase
+      .from('modulos')
+      .update({
+        fecha_prueba_electrica: null,
+        id_ot: null,
+        protocolo_entrega: {},
+      })
+      .eq('id', registro.id)
+
+    if (error) {
+      mostrarNotificacion('No se pudo eliminar el protocolo: ' + error.message)
+      return
+    }
+
+    setProtocolosMensuales((actuales) => actuales.filter((item) => !(
+      item.origen === registro.origen && item.id === registro.id
+    )))
+    mostrarNotificacion('Protocolo eliminado. El módulo sigue activo.')
+    return
+  }
+
+  const confirmado = window.confirm(
+    `¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}?`
+  )
+
+  if (!confirmado) return
+
+  const tablaDestino = registro.origen === 'manual'
+    ? 'protocolos_manuales'
+    : registro.origen === 'historial'
+      ? 'historial_modulos'
+      : ''
+
+  if (!tablaDestino) return
+
+  const { error } = await supabase
+    .from(tablaDestino)
+    .delete()
+    .eq('id', registro.id)
+
+  if (error) {
+    mostrarNotificacion('No se pudo eliminar el protocolo: ' + error.message)
+    return
+  }
+
+  setProtocolosMensuales((actuales) => actuales.filter((item) => !(
+    item.origen === registro.origen && item.id === registro.id
+  )))
+  mostrarNotificacion('Protocolo eliminado')
+}
+
 function actualizarPrecioMaterial(material, valor) {
   setPreciosMateriales((actuales) => ({
     ...actuales,
@@ -2092,7 +2226,27 @@ async function guardarProtocoloEntrega(protocolo) {
       linea: protocolo.linea || moduloSeleccionado.linea || '',
       responsable: protocolo.responsable || moduloSeleccionado.responsable || perfil?.nombre || '',
     }
-  const payloadManual = {
+
+    const esManualExistente = moduloSeleccionado.origen === 'manual' && !String(moduloSeleccionado.id).startsWith('manual-nuevo-')
+
+    try {
+      const duplicado = await buscarProtocoloDuplicado({
+        serie: protocoloNormalizado.serie,
+        fecha: fechaProtocolo,
+        origenActual: esManualExistente ? 'manual' : '',
+        idActual: esManualExistente ? moduloSeleccionado.id : '',
+      })
+
+      if (duplicado) {
+        mostrarNotificacion(`Ya existe un protocolo para la serie ${protocoloNormalizado.serie} con fecha ${formatearFecha(fechaProtocolo)}.`)
+        return
+      }
+    } catch (errorDuplicado) {
+      mostrarNotificacion('No se pudo validar si el protocolo estaba duplicado: ' + errorDuplicado.message)
+      return
+    }
+
+    const payloadManual = {
       serie: protocoloNormalizado.serie,
       tipo: protocoloNormalizado.tipo,
       proyecto: protocoloNormalizado.proyecto,
@@ -2102,7 +2256,6 @@ async function guardarProtocoloEntrega(protocolo) {
       materiales: protocoloNormalizado.materiales || {},
     }
 
-    const esManualExistente = moduloSeleccionado.origen === 'manual' && !String(moduloSeleccionado.id).startsWith('manual-nuevo-')
     const consulta = esManualExistente
       ? supabase.from('protocolos_manuales').update(payloadManual).eq('id', moduloSeleccionado.id).select().single()
       : supabase.from('protocolos_manuales').insert([payloadManual]).select().single()
@@ -4467,7 +4620,7 @@ const ultimosFinalizados = [...historial]
     {protocolosMensuales.length === 0 && !cargandoProtocolosMensuales ? (
       <p style={{ color: '#ccc' }}>No hay protocolos con fecha de prueba electrica en el rango seleccionado.</p>
     ) : (
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', paddingLeft: puedeEliminarProtocolosMensuales ? '38px' : 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px' }}>
           <thead>
             <tr style={{ background: '#333' }}>
@@ -4483,9 +4636,43 @@ const ultimosFinalizados = [...historial]
           <tbody>
             {protocolosMensuales.map((registro) => {
               const claveRegistro = `${registro.origen}-${registro.id}`
+              const claveUnica = claveProtocoloUnico(registro.serie, registro.fecha_prueba_electrica)
+              const estaDuplicado = claveUnica && conteoClavesProtocolos[claveUnica] > 1
               return (
-                <tr key={claveRegistro}>
-                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'center' }}>
+                <tr key={claveRegistro} style={{ background: estaDuplicado ? 'rgba(255, 152, 0, 0.16)' : 'transparent' }}>
+                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'center', position: 'relative', overflow: 'visible' }}>
+                    {puedeEliminarProtocolosMensuales && (
+                      <button
+                        type="button"
+                        onClick={() => eliminarProtocoloMensual(registro)}
+                        title="Eliminar protocolo"
+                        style={{
+                          position: 'absolute',
+                          left: '-34px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          width: '28px',
+                          height: '28px',
+                          display: 'grid',
+                          placeItems: 'center',
+                          background: '#050505',
+                          border: '1px solid #777',
+                          borderRadius: '4px',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          lineHeight: 1,
+                          zIndex: 2,
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none">
+                          <path d="M9 4h6l1 2h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M4 6h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M7 9l1 11h8l1-11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => abrirProtocoloDesdeBusqueda(registro)}
@@ -4501,7 +4688,14 @@ const ultimosFinalizados = [...historial]
                       📜
                     </button>
                   </td>
-                  <td style={{ padding: '8px', border: '1px solid #444', fontWeight: 700 }}>{registro.serie}</td>
+                  <td style={{ padding: '8px', border: '1px solid #444', fontWeight: 700 }}>
+                    {registro.serie}
+                    {estaDuplicado && (
+                      <div style={{ color: '#ffb74d', fontSize: '11px', marginTop: '2px' }}>
+                        Duplicado
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding: '8px', border: '1px solid #444' }}>
                     {registro.fecha_prueba_electrica ? formatearFecha(registro.fecha_prueba_electrica) : '-'}
                   </td>
@@ -4578,6 +4772,30 @@ const ultimosFinalizados = [...historial]
                       </button>
                     </div>
                   </td>
+                  {false && (
+                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'center' }}>
+                    {puedeEliminarProtocolosMensuales && registro.origen !== 'actual' ? (
+                      <button
+                        type="button"
+                        onClick={() => eliminarProtocoloMensual(registro)}
+                        title="Eliminar protocolo"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#ff8a80',
+                          cursor: 'pointer',
+                          fontSize: '20px',
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    ) : (
+                      <span title={registro.origen === 'actual' ? 'Módulo activo: no se elimina desde esta vista' : 'Sin permiso para eliminar'} style={{ color: '#777' }}>
+                        —
+                      </span>
+                    )}
+                  </td>
+                  )}
                 </tr>
               )
             })}
