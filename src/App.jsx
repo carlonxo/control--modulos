@@ -523,6 +523,7 @@ const [rangoProtocolosMensuales, setRangoProtocolosMensuales] = useState('mes')
 const [fechaProtocolosMensuales, setFechaProtocolosMensuales] = useState(new Date().toISOString().slice(0, 7))
 const [protocolosMensuales, setProtocolosMensuales] = useState([])
 const [cargandoProtocolosMensuales, setCargandoProtocolosMensuales] = useState(false)
+const [busquedaProtocolosMensuales, setBusquedaProtocolosMensuales] = useState('')
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
 const [versionProtocoloEntrega, setVersionProtocoloEntrega] = useState(0)
@@ -563,6 +564,11 @@ const ingresosProtocolosMensuales = protocolosMensuales.reduce(
   (total, registro) => total + Number(registro.valorTotal || 0),
   0
 )
+const protocolosMensualesFiltrados = protocolosMensuales.filter((registro) => {
+  const busqueda = normalizarTexto(busquedaProtocolosMensuales)
+  if (!busqueda) return true
+  return normalizarTexto(registro.serie).includes(busqueda) || normalizarTexto(registro.idOt).includes(busqueda)
+})
 const conteoClavesProtocolos = protocolosMensuales.reduce((conteo, registro) => {
   const clave = claveProtocoloUnico(registro.serie, registro.fecha_prueba_electrica)
   if (!clave) return conteo
@@ -4615,10 +4621,47 @@ const ultimosFinalizados = [...historial]
       >
         {cargandoProtocolosMensuales ? 'Cargando...' : 'Actualizar'}
       </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <input
+          type="search"
+          value={busquedaProtocolosMensuales}
+          onChange={(e) => setBusquedaProtocolosMensuales(e.target.value)}
+          placeholder="Buscar serie o ID OT"
+          style={{
+            padding: '9px 10px',
+            minWidth: '210px',
+            borderRadius: '6px',
+            border: '1px solid #777',
+            background: '#333',
+            color: 'white',
+            fontWeight: 700,
+          }}
+        />
+        {busquedaProtocolosMensuales && (
+          <button
+            type="button"
+            onClick={() => setBusquedaProtocolosMensuales('')}
+            title="Limpiar búsqueda"
+            style={{
+              padding: '9px 11px',
+              borderRadius: '6px',
+              border: '1px solid #777',
+              background: '#444',
+              color: 'white',
+              cursor: 'pointer',
+              fontWeight: 800,
+            }}
+          >
+            ×
+          </button>
+        )}
+      </div>
     </div>
 
     {protocolosMensuales.length === 0 && !cargandoProtocolosMensuales ? (
       <p style={{ color: '#ccc' }}>No hay protocolos con fecha de prueba electrica en el rango seleccionado.</p>
+    ) : protocolosMensualesFiltrados.length === 0 && !cargandoProtocolosMensuales ? (
+      <p style={{ color: '#ccc' }}>No hay resultados para la búsqueda indicada.</p>
     ) : (
       <div style={{ overflowX: 'auto', paddingLeft: puedeEliminarProtocolosMensuales ? '38px' : 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px' }}>
@@ -4634,7 +4677,7 @@ const ultimosFinalizados = [...historial]
             </tr>
           </thead>
           <tbody>
-            {protocolosMensuales.map((registro) => {
+            {protocolosMensualesFiltrados.map((registro) => {
               const claveRegistro = `${registro.origen}-${registro.id}`
               const claveUnica = claveProtocoloUnico(registro.serie, registro.fecha_prueba_electrica)
               const estaDuplicado = claveUnica && conteoClavesProtocolos[claveUnica] > 1
