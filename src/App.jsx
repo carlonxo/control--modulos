@@ -1134,8 +1134,12 @@ function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) 
 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
   const valores = calcularValoresProtocoloMensual(registro, precios)
+  const datosProtocolo = registro?.protocolo_entrega || {}
   return {
     ...registro,
+    tipo: datosProtocolo.tipo || registro?.tipo || '',
+    proyecto: datosProtocolo.proyecto || registro?.proyecto || '',
+    linea: datosProtocolo.linea || registro?.linea || '',
     origen,
     esActual: origen === 'actual',
     valorMantencion: valores.mantencion,
@@ -1145,7 +1149,7 @@ function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMat
       mantencion: valores.detalleMantencion,
       modificacion: valores.detalleModificacion,
     },
-    idOt: registro?.id_ot || registro?.protocolo_entrega?.id_ot || registro?.protocolo_entrega?.idOt || '',
+    idOt: registro?.id_ot || datosProtocolo.id_ot || datosProtocolo.idOt || '',
   }
 }
 
@@ -4841,6 +4845,7 @@ const ultimosFinalizados = [...historial]
     soloLectura={protocoloManualMensual ? false : protocoloSoloLecturaBusqueda || (protocoloDesdeHistorial ? perfil?.rol !== 'admin' : !puedeEditarDatosProtocolo)}
     materialesSoloLectura={protocoloManualMensual ? false : protocoloSoloLecturaBusqueda || (protocoloDesdeHistorial ? perfil?.rol !== 'admin' : !puedeEditarProtocolo)}
     moduloEditable={protocoloManualMensual}
+    datosModuloEditables={perfil?.rol === 'admin' && !protocoloSoloLecturaBusqueda}
     onCerrar={() => {
       setMostrarProtocoloEntrega(false)
       setProtocoloSoloLecturaBusqueda(false)

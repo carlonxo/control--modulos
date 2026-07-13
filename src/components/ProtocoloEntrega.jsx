@@ -255,7 +255,7 @@ function descargarBlob(blob, nombreArchivo) {
   URL.revokeObjectURL(url)
 }
 
-export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, materiales, onGuardar, soloLectura = false, materialesSoloLectura = false, moduloEditable = false, onCerrar }) {
+export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, materiales, onGuardar, soloLectura = false, materialesSoloLectura = false, moduloEditable = false, datosModuloEditables = false, onCerrar }) {
   const [datos, setDatos] = useState(() => ({
     fecha: new Date().toISOString().slice(0, 10), serie: modulo?.serie || '', tipo: modulo?.tipo || '', linea: modulo?.linea || '', proyecto: modulo?.proyecto || '', responsable: responsable || '', planosRevision: '', centroCosto: '', flexNaranjo: false, flexLibre: false, flexMetalico: false,
     eva: false, thhn: false, caleco: false, canalizado: '', aterrizado: '', te1: '', observCanalizado: '', observCableado: '', observaciones: '', firma: '',
@@ -266,6 +266,8 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
   const [descargando, setDescargando] = useState(false)
   const [seleccionMaterial, setSeleccionMaterial] = useState(null)
   const [escalaProtocolo, setEscalaProtocolo] = useState(1)
+  const puedeEditarSerieModulo = moduloEditable
+  const puedeEditarDatosModulo = moduloEditable || datosModuloEditables
   const cambiar = (campo, valor) => {
     if (soloLectura) return
     setDatos((actual) => ({ ...actual, [campo]: valor }))
@@ -446,11 +448,11 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
       ctx.fillRect(37, 1277, 606, 1)
 
       dibujarTexto(ctx, datos.fecha, { left: 280, top: 190, width: 405, height: 31 })
-      dibujarTexto(ctx, moduloEditable ? datos.serie : modulo.serie, { left: 959, top: 190, width: 304, height: 31 })
+      dibujarTexto(ctx, puedeEditarSerieModulo ? datos.serie : modulo.serie, { left: 959, top: 190, width: 304, height: 31 })
       dibujarTexto(ctx, datos.responsable, { left: 280, top: 221, width: 405, height: 37 })
-      dibujarTexto(ctx, moduloEditable ? datos.tipo : modulo.tipo, { left: 959, top: 221, width: 304, height: 37 })
-      dibujarTexto(ctx, moduloEditable ? datos.linea : modulo.linea, { left: 280, top: 258, width: 405, height: 38 })
-      dibujarTexto(ctx, moduloEditable ? datos.proyecto : modulo.proyecto, { left: 959, top: 258, width: 304, height: 38 })
+      dibujarTexto(ctx, puedeEditarDatosModulo ? datos.tipo : modulo.tipo, { left: 959, top: 221, width: 304, height: 37 })
+      dibujarTexto(ctx, puedeEditarDatosModulo ? datos.linea : modulo.linea, { left: 280, top: 258, width: 405, height: 38 })
+      dibujarTexto(ctx, puedeEditarDatosModulo ? datos.proyecto : modulo.proyecto, { left: 959, top: 258, width: 304, height: 38 })
       dibujarTexto(ctx, datos.planosRevision, { left: 280, top: 296, width: 405, height: 44 })
       dibujarTexto(ctx, datos.centroCosto, { left: 959, top: 296, width: 304, height: 44 })
 
@@ -482,7 +484,7 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
 
       const jpegBase64 = canvas.toDataURL('image/jpeg', 0.95).split(',')[1]
       const pdf = crearPdfDesdeJpeg(base64ABinario(jpegBase64))
-      descargarBlob(pdf, `${nombreArchivoSeguro(moduloEditable ? datos.serie : modulo?.serie)}.pdf`)
+      descargarBlob(pdf, `${nombreArchivoSeguro(puedeEditarSerieModulo ? datos.serie : modulo?.serie)}.pdf`)
     } finally {
       setDescargando(false)
     }
@@ -526,9 +528,9 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
       <button onClick={onCerrar} disabled={guardando}>Cerrar</button>
     </div>
     <div className="protocolo-visor"><div className="pdf-protocolo-escala" style={{ width: 1275 * escalaProtocolo, height: 1650 * escalaProtocolo }}><div className="pdf-protocolo-pagina" style={{ backgroundImage: `url(${plantillaProtocolo})`, transform: `scale(${escalaProtocolo})`, transformOrigin: 'top left' }}>
-      {campo('fecha', { left: 280, top: 190, width: 405, height: 31 }, { type: 'date' })}{moduloEditable ? campo('serie', { left: 959, top: 190, width: 304, height: 31 }) : <input className="pdf-campo" style={{ left: 959, top: 190, width: 304, height: 31 }} value={modulo.serie || ''} disabled />}
-      {campo('responsable', { left: 280, top: 221, width: 405, height: 37 })}{moduloEditable ? campo('tipo', { left: 959, top: 221, width: 304, height: 37 }) : <input className="pdf-campo" style={{ left: 959, top: 221, width: 304, height: 37 }} value={modulo.tipo || ''} disabled />}
-      {moduloEditable ? campo('linea', { left: 280, top: 258, width: 405, height: 38 }) : <input className="pdf-campo" style={{ left: 280, top: 258, width: 405, height: 38 }} value={modulo.linea || ''} disabled />}{moduloEditable ? campo('proyecto', { left: 959, top: 258, width: 304, height: 38 }) : <input className="pdf-campo" style={{ left: 959, top: 258, width: 304, height: 38 }} value={modulo.proyecto || ''} disabled />}
+      {campo('fecha', { left: 280, top: 190, width: 405, height: 31 }, { type: 'date' })}{puedeEditarSerieModulo ? campo('serie', { left: 959, top: 190, width: 304, height: 31 }) : <input className="pdf-campo" style={{ left: 959, top: 190, width: 304, height: 31 }} value={modulo.serie || ''} disabled />}
+      {campo('responsable', { left: 280, top: 221, width: 405, height: 37 })}{puedeEditarDatosModulo ? campo('tipo', { left: 959, top: 221, width: 304, height: 37 }) : <input className="pdf-campo" style={{ left: 959, top: 221, width: 304, height: 37 }} value={modulo.tipo || ''} disabled />}
+      {puedeEditarDatosModulo ? campo('linea', { left: 280, top: 258, width: 405, height: 38 }) : <input className="pdf-campo" style={{ left: 280, top: 258, width: 405, height: 38 }} value={modulo.linea || ''} disabled />}{puedeEditarDatosModulo ? campo('proyecto', { left: 959, top: 258, width: 304, height: 38 }) : <input className="pdf-campo" style={{ left: 959, top: 258, width: 304, height: 38 }} value={modulo.proyecto || ''} disabled />}
       {campo('planosRevision', { left: 280, top: 296, width: 405, height: 44 })}{campo('centroCosto', { left: 959, top: 296, width: 304, height: 44 })}
       <div className="pdf-linea-horizontal" style={{ left: 37, top: 258, width: 1226 }} />
       <div className="pdf-linea-horizontal" style={{ left: 37, top: 1277, width: 606 }} />
