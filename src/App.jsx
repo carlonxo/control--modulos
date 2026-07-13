@@ -162,13 +162,50 @@ const encabezadosProtocolosMensuales = [
 ]
 
 function formatearPrecioMaterial(valor) {
-  const numero = Number(String(valor ?? '').replace(/[^\d]/g, ''))
+  const numero = normalizarPrecioMaterial(valor)
   if (!numero) return '$ 0'
   return `$ ${numero.toLocaleString('es-CL')}`
 }
 
 function limpiarPrecioMaterial(valor) {
   return String(valor ?? '').replace(/[^\d]/g, '')
+}
+
+function normalizarPrecioMaterial(valor) {
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0
+
+  const texto = String(valor ?? '').trim().replace(/[^\d,.-]/g, '')
+  if (!texto) return 0
+
+  const tienePunto = texto.includes('.')
+  const tieneComa = texto.includes(',')
+
+  if (tienePunto && tieneComa) {
+    const ultimoPunto = texto.lastIndexOf('.')
+    const ultimaComa = texto.lastIndexOf(',')
+    if (ultimaComa > ultimoPunto) {
+      return Number(texto.replace(/\./g, '').replace(',', '.')) || 0
+    }
+    return Number(texto.replace(/,/g, '')) || 0
+  }
+
+  if (tienePunto) {
+    const partes = texto.split('.')
+    const ultimaParte = partes[partes.length - 1]
+    const pareceDecimal = partes.length === 2 && ultimaParte.length <= 2
+    if (pareceDecimal) return Number(texto) || 0
+    return Number(texto.replace(/\./g, '')) || 0
+  }
+
+  if (tieneComa) {
+    const partes = texto.split(',')
+    const ultimaParte = partes[partes.length - 1]
+    const pareceDecimal = partes.length === 2 && ultimaParte.length <= 2
+    if (pareceDecimal) return Number(texto.replace(',', '.')) || 0
+    return Number(texto.replace(/,/g, '')) || 0
+  }
+
+  return Number(texto) || 0
 }
 
 function normalizarTextoComparacion(valor) {
@@ -1051,14 +1088,14 @@ function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) 
   const detalleMateriales = registro?.protocolo_entrega?.detalleMateriales || {}
   const preciosBase = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
     item.material,
-    Number(limpiarPrecioMaterial(precios[item.material] ?? item.precio) || 0),
+    normalizarPrecioMaterial(precios[item.material] ?? item.precio),
   ]))
   const preciosBaseNormalizados = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
     normalizarTextoComparacion(item.material),
-    Number(limpiarPrecioMaterial(precios[item.material] ?? item.precio) || 0),
+    normalizarPrecioMaterial(precios[item.material] ?? item.precio),
   ]))
   Object.entries(precios || {}).forEach(([material, precio]) => {
-    preciosBaseNormalizados[normalizarTextoComparacion(material)] = Number(limpiarPrecioMaterial(precio) || 0)
+    preciosBaseNormalizados[normalizarTextoComparacion(material)] = normalizarPrecioMaterial(precio)
   })
 
   return camposMateriales.reduce((totales, [itemProtocolo]) => {
@@ -1306,7 +1343,7 @@ async function guardarPreciosMateriales() {
     material: item.material,
     id_art: item.idArt,
     seccion: item.seccion,
-    precio: Number(limpiarPrecioMaterial(preciosMateriales[item.material]) || 0),
+    precio: normalizarPrecioMaterial(preciosMateriales[item.material]),
     updated_at: new Date().toISOString(),
   }))
 
@@ -4308,6 +4345,11 @@ const ultimosFinalizados = [...historial]
                         )))}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') guardarIdOtProtocoloMensual(registro, e.currentTarget.value)
+                        }}
+                        onBlur={(e) => {
+                          if (idOtEnEdicion === claveRegistro) {
+                            guardarIdOtProtocoloMensual(registro, e.currentTarget.value)
+                          }
                         }}
                         style={{
                           width: '110px',
