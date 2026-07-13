@@ -682,7 +682,14 @@ function cerrarPanelesFlotantes() {
 }
 
 function cerrarPanelesYModulo() {
+  limpiarBusquedaSerie()
   cerrarVentanasEmergentes()
+}
+
+function limpiarBusquedaSerie() {
+  setSerieBusqueda('')
+  setResultadoBusqueda([])
+  setBusquedaRealizada(false)
 }
 
 function cerrarVentanasEmergentes({ conservarModulo = false } = {}) {
@@ -3446,21 +3453,43 @@ const ultimosFinalizados = [...historial]
 
   <h2>Buscar historial por serie</h2>
 
-<input
-  type="text"
-  value={serieBusqueda}
-  onChange={(e) => setSerieBusqueda(e.target.value)}
-  placeholder="Buscar serie"
-  onKeyDown={(e) => {
-    if (e.key === 'Enter') {
-      buscarSerie()
-    }
-  }}
-/>
+<div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+  <input
+    type="text"
+    value={serieBusqueda}
+    onChange={(e) => setSerieBusqueda(e.target.value)}
+    placeholder="Buscar serie"
+    onKeyDown={(e) => {
+      if (e.key === 'Enter') {
+        buscarSerie()
+      }
+    }}
+  />
 
-<button onClick={buscarSerie} style={{ marginLeft: '10px' }}>
-  Buscar
-</button>
+  <button onClick={buscarSerie}>
+    Buscar
+  </button>
+
+  {(serieBusqueda || busquedaRealizada || resultadoBusqueda.length > 0) && (
+    <button
+      type="button"
+      onClick={limpiarBusquedaSerie}
+      title="Limpiar búsqueda"
+      style={{
+        width: '28px',
+        height: '28px',
+        borderRadius: '50%',
+        border: '1px solid #777',
+        background: '#444',
+        color: 'white',
+        cursor: 'pointer',
+        fontWeight: 900,
+      }}
+    >
+      ×
+    </button>
+  )}
+</div>
 
 {/* BLOQUE FECHAS + EXPORTAR (SEPARADO) */}
 <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
