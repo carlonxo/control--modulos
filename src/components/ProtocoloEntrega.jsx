@@ -35,12 +35,17 @@ function formatearCantidad(nuevo, reutilizado) {
 }
 
 function normalizarNumero(valor) {
-  const numero = Number(String(valor || '').replace(',', '.').replace(/[^\d.-]/g, ''))
+  const coincidencia = String(valor || '').replace(',', '.').match(/-?\d+(?:\.\d+)?/)
+  const numero = Number(coincidencia?.[0] || 0)
   return Number.isFinite(numero) ? numero : 0
 }
 
 function esCantidadReutilizada(valor) {
-  return /(^|[\d\s.,-])r\b|reutiliz/i.test(String(valor || ''))
+  const texto = String(valor || '').replace(',', '.')
+  const coincidencia = texto.match(/-?\d+(?:\.\d+)?/)
+  if (!coincidencia) return false
+  const despuesDelNumero = texto.slice((coincidencia.index || 0) + coincidencia[0].length).trim()
+  return /^r\b/i.test(despuesDelNumero) || /reutiliz/i.test(despuesDelNumero)
 }
 
 export function parsearCantidadProtocolo(valor) {
