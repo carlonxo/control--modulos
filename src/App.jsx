@@ -519,6 +519,7 @@ const [protocolosMensuales, setProtocolosMensuales] = useState([])
 const [cargandoProtocolosMensuales, setCargandoProtocolosMensuales] = useState(false)
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
+const [versionProtocoloEntrega, setVersionProtocoloEntrega] = useState(0)
 const [fechaProtocolosDiarios, setFechaProtocolosDiarios] = useState(new Date().toISOString().slice(0, 10))
 const [descargandoProtocolos, setDescargandoProtocolos] = useState(false)
 const [serieReintegrar, setSerieReintegrar] = useState('')
@@ -1893,6 +1894,8 @@ async function abrirProtocoloEntrega() {
   setResponsableProtocolo(
     modulo?.protocolo_entrega?.responsable || nombreResponsable
   )
+  setProtocoloManualMensual(false)
+  setVersionProtocoloEntrega((version) => version + 1)
   setMostrarProtocoloEntrega(true)
 }
 
@@ -1920,6 +1923,7 @@ async function abrirProtocoloDesdeBusqueda(item) {
     setProtocoloSoloLecturaBusqueda(false)
     setProtocoloDesdeHistorial(false)
     setProtocoloManualMensual(true)
+    setVersionProtocoloEntrega((version) => version + 1)
     setMostrarProtocoloEntrega(true)
     return
   }
@@ -1945,6 +1949,8 @@ async function abrirProtocoloDesdeBusqueda(item) {
     setResponsableProtocolo(modulo?.protocolo_entrega?.responsable || modulo?.responsable || '')
     setProtocoloSoloLecturaBusqueda(false)
     setProtocoloDesdeHistorial(false)
+    setProtocoloManualMensual(false)
+    setVersionProtocoloEntrega((version) => version + 1)
     setMostrarProtocoloEntrega(true)
     return
   }
@@ -1958,6 +1964,8 @@ async function abrirProtocoloDesdeBusqueda(item) {
   setResponsableProtocolo(item?.protocolo_entrega?.responsable || item?.responsable || '')
   setProtocoloSoloLecturaBusqueda(perfil?.rol !== 'admin')
   setProtocoloDesdeHistorial(true)
+  setProtocoloManualMensual(false)
+  setVersionProtocoloEntrega((version) => version + 1)
   setMostrarProtocoloEntrega(true)
 }
 
@@ -2005,12 +2013,23 @@ async function guardarProtocoloEntrega(protocolo) {
       esActual: false,
     })
     setDatosProtocoloEntrega(protocoloNormalizado)
+    setVersionProtocoloEntrega((version) => version + 1)
     setFormulariosElectricos((actuales) => ({
       ...actuales,
       [registroGuardado.id]: protocoloNormalizado.materiales || {},
     }))
+    setProtocolosMensuales((actuales) => actuales.map((item) => (
+      item.origen === 'manual' && item.id === registroGuardado.id
+        ? prepararRegistroProtocoloMensual({
+            ...item,
+            ...registroGuardado,
+            protocolo_entrega: protocoloNormalizado,
+            materiales: protocoloNormalizado.materiales || {},
+          }, 'manual', preciosMateriales)
+        : item
+    )))
     setProtocoloManualMensual(true)
-    await cargarProtocolosMensuales(fechaProtocolosMensuales)
+    await cargarProtocolosMensuales(fechaProtocolosMensuales, rangoProtocolosMensuales)
     mostrarNotificacion('Protocolo manual guardado correctamente')
     return
   }
@@ -2033,6 +2052,7 @@ async function guardarProtocoloEntrega(protocolo) {
   }
 
   setDatosProtocoloEntrega(protocolo)
+  setVersionProtocoloEntrega((version) => version + 1)
   setFormulariosElectricos((actuales) => ({
     ...actuales,
     [moduloSeleccionado.id]: protocolo.materiales || {},
@@ -2046,12 +2066,23 @@ async function guardarProtocoloEntrega(protocolo) {
     : actual
   )
   if (protocoloDesdeHistorial) {
+    setProtocolosMensuales((actuales) => actuales.map((item) => (
+      item.id === moduloSeleccionado.id && item.origen === 'historial'
+        ? prepararRegistroProtocoloMensual({ ...item, protocolo_entrega: protocolo, materiales: protocolo.materiales || {} }, 'historial', preciosMateriales)
+        : item
+    )))
     setResultadoBusqueda((actuales) => actuales.map((item) => (
       item.id === moduloSeleccionado.id && !item.esActual
         ? { ...item, protocolo_entrega: protocolo, materiales: protocolo.materiales || {} }
         : item
     )))
     await cargarHistorial()
+  } else {
+    setProtocolosMensuales((actuales) => actuales.map((item) => (
+      item.id === moduloSeleccionado.id && item.origen === 'actual'
+        ? prepararRegistroProtocoloMensual({ ...item, protocolo_entrega: protocolo, materiales: protocolo.materiales || {} }, 'actual', preciosMateriales)
+        : item
+    )))
   }
   mostrarNotificacion('Protocolo guardado correctamente')
 }
@@ -4646,7 +4677,7 @@ const ultimosFinalizados = [...historial]
 
 {mostrarProtocoloEntrega && moduloSeleccionado && (
   <ProtocoloEntrega
-    key={moduloSeleccionado.id}
+    key={`${protocoloManualMensual ? 'manual' : protocoloDesdeHistorial ? 'historial' : 'actual'}-${moduloSeleccionado.id}-${versionProtocoloEntrega}`}
     modulo={moduloSeleccionado}
     responsable={responsableProtocolo}
     datosIniciales={datosProtocoloEntrega}
