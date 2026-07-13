@@ -35,6 +35,10 @@ function esEstadoConObservacionAlerta(estado) {
   )
 }
 
+function esEstadoGarantia(estado) {
+  return normalizarTexto(estado) === 'en garantia'
+}
+
 function fechaParaInput(valor) {
   if (!valor) return ''
   const fecha = new Date(valor)
@@ -299,6 +303,31 @@ function formatearFechaInput(fecha) {
   return `${ano}-${mes}-${dia}`
 }
 
+function formatearFechaRevisionGarantia(valor) {
+  const fechaInput = fechaParaInput(valor)
+  if (!fechaInput) return ''
+  const [ano, mes, dia] = fechaInput.split('-')
+  return `${dia}-${mes}-${ano}`
+}
+
+function agregarNotaGarantiaProtocolo(protocolo = {}, fechaRevision) {
+  const fechaTexto = formatearFechaRevisionGarantia(fechaRevision)
+  if (!fechaTexto) return protocolo
+
+  const notaGarantia = `en garantia, ultima revision:${fechaTexto}`
+  const observacionesActuales = String(protocolo.observaciones || '').trim()
+  const observacionesSinNota = observacionesActuales
+    .split('\n')
+    .filter((linea) => !normalizarTexto(linea).startsWith('en garantia, ultima revision:'))
+    .join('\n')
+    .trim()
+
+  return {
+    ...protocolo,
+    observaciones: [observacionesSinNota, notaGarantia].filter(Boolean).join('\n'),
+  }
+}
+
 function obtenerValorInicialRangoProtocolo(rango) {
   const hoy = new Date()
   if (rango === 'dia') return formatearFechaInput(hoy)
@@ -526,6 +555,7 @@ const [cargandoProtocolosMensuales, setCargandoProtocolosMensuales] = useState(f
 const [busquedaProtocolosMensuales, setBusquedaProtocolosMensuales] = useState('')
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
+const [ajusteCobroMensual, setAjusteCobroMensual] = useState({ itemKey: '', itemLabel: '', tipoCobro: '', valor: '', motivo: '' })
 const [versionProtocoloEntrega, setVersionProtocoloEntrega] = useState(0)
 const [fechaProtocolosDiarios, setFechaProtocolosDiarios] = useState(new Date().toISOString().slice(0, 10))
 const [descargandoProtocolos, setDescargandoProtocolos] = useState(false)
@@ -554,6 +584,7 @@ const puedeVerPreciosMateriales = ['operador', 'analista', 'admin'].includes(per
 const puedeEditarPreciosMateriales = ['analista', 'admin'].includes(perfil?.rol)
 const puedeVerProtocolosMensuales = ['analista', 'admin'].includes(perfil?.rol)
 const puedeEliminarProtocolosMensuales = ['admin', 'analista'].includes(perfil?.rol)
+const puedeAjustarValoresProtocolos = ['admin', 'analista'].includes(perfil?.rol)
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
 const puedeVerMenuModulo = ['admin', 'operador'].includes(perfil?.rol)
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
@@ -1119,7 +1150,54 @@ async function abrirPreciosMateriales() {
   await cargarPreciosMateriales()
 }
 
+function claveItemCobro(tipo, item = {}) {
+  return [
+    tipo || '',
+    item.material || '',
+    item.materialPrecio || '',
+    item.tipoCantidad || '',
+  ].map((parte) => String(parte).trim()).join('|')
+}
+
+function aplicarAjustesItemsCobro(valores, ajustesItems = {}) {
+  const aplicar = (tipo, items = []) => items.map((item) => {
+    const clave = claveItemCobro(tipo, item)
+    const ajuste = ajustesItems[clave]
+    if (!ajuste || ajuste.valor === undefined || ajuste.valor === null || ajuste.valor === '') {
+      return { ...item, tipoCobro: tipo, claveAjuste: clave }
+    }
+
+    return {
+      ...item,
+      tipoCobro: tipo,
+      claveAjuste: clave,
+      subtotalOriginal: item.subtotal,
+      subtotal: normalizarPrecioMaterial(ajuste.valor),
+      ajusteValorizacionItem: ajuste,
+    }
+  })
+
+  const detalleMantencion = aplicar('mantencion', valores.detalleMantencion)
+  const detalleModificacion = aplicar('modificacion', valores.detalleModificacion)
+
+  return {
+    mantencion: detalleMantencion.reduce((total, item) => total + Number(item.subtotal || 0), 0),
+    modificacion: detalleModificacion.reduce((total, item) => total + Number(item.subtotal || 0), 0),
+    detalleMantencion,
+    detalleModificacion,
+  }
+}
+
 function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) {
+  if (false && esEstadoGarantia(registro?.estado || registro?.protocolo_entrega?.estado)) {
+    return {
+      mantencion: 0,
+      modificacion: 0,
+      detalleMantencion: [{ material: 'Módulo en garantía', cantidad: 1, precioUnitario: 0, subtotal: 0 }],
+      detalleModificacion: [],
+    }
+  }
+
   const detalleMateriales = registro?.protocolo_entrega?.detalleMateriales || {}
   const preciosBase = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
     item.material,
@@ -1133,7 +1211,7 @@ function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) 
     preciosBaseNormalizados[normalizarTextoComparacion(material)] = normalizarPrecioMaterial(precio)
   })
 
-  return camposMateriales.reduce((totales, [itemProtocolo]) => {
+  const valores = camposMateriales.reduce((totales, [itemProtocolo]) => {
     const detalle = detalleMateriales[itemProtocolo] || {}
     const materialPrecio = obtenerMaterialPrecioParaProtocolo(itemProtocolo)
     const precioUnitario = preciosBase[materialPrecio] ?? preciosBaseNormalizados[normalizarTextoComparacion(materialPrecio)] ?? 0
@@ -1164,12 +1242,39 @@ function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) 
     detalleMantencion: [{ material: 'Mano de obra base', cantidad: 1, precioUnitario: valorBaseManoObraMantencion, subtotal: valorBaseManoObraMantencion }],
     detalleModificacion: [],
   })
+
+  const subtotalMaterialesMantencion = valores.detalleMantencion
+    .filter((item) => item.material !== 'Mano de obra base')
+    .reduce((total, item) => total + Number(item.subtotal || 0), 0)
+  const subtotalMaterialesModificacion = valores.detalleModificacion
+    .reduce((total, item) => total + Number(item.subtotal || 0), 0)
+  const tieneCobroMaterial = (subtotalMaterialesMantencion + subtotalMaterialesModificacion) > 0
+
+  let valoresFinales = valores
+
+  if (esEstadoGarantia(registro?.estado || registro?.protocolo_entrega?.estado) && !tieneCobroMaterial) {
+    valoresFinales = {
+      mantencion: 0,
+      modificacion: 0,
+      detalleMantencion: [{ material: 'Módulo en garantía sin cobro de material', cantidad: 1, precioUnitario: 0, subtotal: 0 }],
+      detalleModificacion: [],
+    }
+  }
+
+  return aplicarAjustesItemsCobro(valoresFinales, registro?.protocolo_entrega?.ajustes_valorizacion_items || {})
 }
 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
   const valores = calcularValoresProtocoloMensual(registro, precios)
   const datosProtocolo = registro?.protocolo_entrega || {}
   const fechaProtocolo = registro?.fecha_prueba_electrica || (datosProtocolo.fecha ? `${datosProtocolo.fecha}T00:00:00` : null)
+  const ajusteValorizacion = datosProtocolo.ajuste_valorizacion || {}
+  const ajustesItems = datosProtocolo.ajustes_valorizacion_items || {}
+  const tieneAjustesItems = Object.keys(ajustesItems).length > 0
+  const tieneAjusteMantencion = !tieneAjustesItems && ajusteValorizacion.mantencion !== undefined && ajusteValorizacion.mantencion !== null && ajusteValorizacion.mantencion !== ''
+  const tieneAjusteModificacion = !tieneAjustesItems && ajusteValorizacion.modificacion !== undefined && ajusteValorizacion.modificacion !== null && ajusteValorizacion.modificacion !== ''
+  const valorMantencion = tieneAjusteMantencion ? normalizarPrecioMaterial(ajusteValorizacion.mantencion) : valores.mantencion
+  const valorModificacion = tieneAjusteModificacion ? normalizarPrecioMaterial(ajusteValorizacion.modificacion) : valores.modificacion
   return {
     ...registro,
     tipo: datosProtocolo.tipo || registro?.tipo || '',
@@ -1178,9 +1283,12 @@ function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMat
     fecha_prueba_electrica: fechaProtocolo,
     origen,
     esActual: origen === 'actual',
-    valorMantencion: valores.mantencion,
-    valorModificacion: valores.modificacion,
-    valorTotal: valores.mantencion + valores.modificacion,
+    valorMantencion,
+    valorModificacion,
+    valorTotal: valorMantencion + valorModificacion,
+    ajusteValorizacion,
+    ajustesValorizacionItems: ajustesItems,
+    tieneAjusteValorizacion: Boolean(ajusteValorizacion.motivo) || tieneAjustesItems,
     detalleCobro: {
       mantencion: valores.detalleMantencion,
       modificacion: valores.detalleModificacion,
@@ -1200,10 +1308,18 @@ function abrirDetalleCobro(registro, tipo) {
   const total = lineas.reduce((suma, item) => suma + Number(item.subtotal || 0), 0)
 
   setDetalleCobroSeleccionado({
+    registro,
     tipo,
     serie: registro.serie,
     lineas,
     total,
+  })
+  setAjusteCobroMensual({
+    itemKey: '',
+    itemLabel: '',
+    tipoCobro: '',
+    valor: '',
+    motivo: '',
   })
 }
 
@@ -1231,6 +1347,100 @@ function BotonValorCobro({ registro, tipo, children, destacado = false }) {
   )
 }
 
+async function guardarAjusteValorizacionProtocolo() {
+  const registro = detalleCobroSeleccionado?.registro
+  if (!puedeAjustarValoresProtocolos || !registro?.id) return
+
+  if (!ajusteCobroMensual.itemKey) {
+    mostrarNotificacion('Debe seleccionar un item para modificar')
+    return
+  }
+
+  const motivo = ajusteCobroMensual.motivo.trim()
+  if (!motivo) {
+    mostrarNotificacion('Debe ingresar el motivo de la modificación')
+    return
+  }
+
+  const tablaDestino = registro.origen === 'manual'
+    ? 'protocolos_manuales'
+    : registro.origen === 'historial'
+      ? 'historial_modulos'
+      : 'modulos'
+
+  const { data: registroActual, error: errorCarga } = await supabase
+    .from(tablaDestino)
+    .select('id, protocolo_entrega, materiales')
+    .eq('id', registro.id)
+    .maybeSingle()
+
+  if (errorCarga) {
+    mostrarNotificacion('No se pudo cargar el protocolo para ajustar valores: ' + errorCarga.message)
+    return
+  }
+
+  if (!registroActual) {
+    mostrarNotificacion('No se encontró el protocolo para ajustar valores')
+    return
+  }
+
+  const ajustesItemsActuales = registroActual.protocolo_entrega?.ajustes_valorizacion_items || {}
+  const protocoloActualizado = {
+    ...(registroActual.protocolo_entrega || {}),
+    ajustes_valorizacion_items: {
+      ...ajustesItemsActuales,
+      [ajusteCobroMensual.itemKey]: {
+        valor: normalizarPrecioMaterial(ajusteCobroMensual.valor),
+        motivo,
+        item: ajusteCobroMensual.itemLabel,
+        tipo: ajusteCobroMensual.tipoCobro,
+        usuario: perfil?.nombre || perfil?.email || perfil?.rol || '',
+        fecha: new Date().toISOString(),
+      },
+    },
+  }
+  delete protocoloActualizado.ajuste_valorizacion
+
+  const { data: registroGuardado, error } = await supabase
+    .from(tablaDestino)
+    .update({ protocolo_entrega: protocoloActualizado })
+    .eq('id', registro.id)
+    .select('*')
+    .maybeSingle()
+
+  if (error) {
+    mostrarNotificacion('No se pudo guardar el ajuste de valorización: ' + error.message)
+    return
+  }
+
+  const actualizado = prepararRegistroProtocoloMensual({
+    ...registro,
+    ...(registroGuardado || {}),
+    protocolo_entrega: protocoloActualizado,
+    materiales: registroGuardado?.materiales || registro.materiales,
+  }, registro.origen, preciosMateriales)
+
+  setProtocolosMensuales((actuales) => actuales.map((item) => (
+    item.origen === registro.origen && item.id === registro.id ? actualizado : item
+  )))
+  setDetalleCobroSeleccionado((actual) => actual ? {
+    ...actual,
+    registro: actualizado,
+    lineas: actual.tipo === 'mantencion'
+      ? actualizado.detalleCobro.mantencion
+      : actual.tipo === 'modificacion'
+        ? actualizado.detalleCobro.modificacion
+        : [...actualizado.detalleCobro.mantencion, ...actualizado.detalleCobro.modificacion],
+    total: actual.tipo === 'mantencion'
+      ? actualizado.valorMantencion
+      : actual.tipo === 'modificacion'
+        ? actualizado.valorModificacion
+        : actualizado.valorTotal,
+  } : actual)
+  setAjusteCobroMensual({ itemKey: '', itemLabel: '', tipoCobro: '', valor: '', motivo: '' })
+  mostrarNotificacion('Ajuste de valorización guardado')
+}
+
 async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango = rangoProtocolosMensuales) {
   if (!puedeVerProtocolosMensuales || !valor) return
 
@@ -1242,6 +1452,12 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
   const { inicio, fin: finTexto } = obtenerRangoFechasProtocolos(rango, valor)
 
   async function cargarTablaProtocolos(tabla, columnasConIdOt, columnasSinIdOt) {
+    const quitarColumnaEstado = (columnas) => columnas
+      .split(',')
+      .map((columna) => columna.trim())
+      .filter((columna) => columna !== 'estado')
+      .join(', ')
+
     const traerPorRango = async (columnas) => supabase
       .from(tabla)
       .select(columnas)
@@ -1260,11 +1476,18 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
       respuesta = await traerPorRango(columnasSinIdOt)
     }
 
+    if (respuesta.error?.message?.includes('estado')) {
+      respuesta = await traerPorRango(quitarColumnaEstado(columnasSinIdOt))
+    }
+
     if (respuesta.error) return respuesta
 
     let recientes = await traerRecientes(columnasConIdOt)
     if (recientes.error?.message?.includes('id_ot')) {
       recientes = await traerRecientes(columnasSinIdOt)
+    }
+    if (recientes.error?.message?.includes('estado')) {
+      recientes = await traerRecientes(quitarColumnaEstado(columnasSinIdOt))
     }
 
     const porId = new Map()
@@ -1283,18 +1506,18 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
   const [respuestaActivos, respuestaHistorial, respuestaManuales] = await Promise.all([
     cargarTablaProtocolos(
       'modulos',
-      'id, id_ot, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales',
-      'id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales',
+      'id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
+      'id, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
     ),
     cargarTablaProtocolos(
       'historial_modulos',
-      'id, modulo_id, id_ot, serie, tipo, proyecto, responsable, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
-      'id, modulo_id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
+      'id, modulo_id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
+      'id, modulo_id, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
     ),
     cargarTablaProtocolos(
       'protocolos_manuales',
-      'id, id_ot, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales',
-      'id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales',
+      'id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
+      'id, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
     ),
   ])
 
@@ -1859,6 +2082,10 @@ console.log({
 
   if (isEnGarantia) {
     updatePayload.fecha_prueba_electrica = new Date(`${fechaPruebaEditada}T12:00:00`).toISOString()
+    updatePayload.protocolo_entrega = agregarNotaGarantiaProtocolo(
+      moduloSeleccionado?.protocolo_entrega || {},
+      updatePayload.fecha_prueba_electrica
+    )
   }
 
   let { error } = await supabase
@@ -2360,9 +2587,12 @@ async function guardarProtocoloEntrega(protocolo) {
   if (!protocoloDesdeHistorial && !puedeEditarDatosProtocolo) return
 
   const tablaDestino = protocoloDesdeHistorial ? 'historial_modulos' : 'modulos'
+  const protocoloParaGuardar = esEstadoGarantia(moduloSeleccionado?.estado || protocolo?.estado)
+    ? agregarNotaGarantiaProtocolo(protocolo, moduloSeleccionado?.fecha_prueba_electrica || protocolo?.fecha)
+    : protocolo
   const payloadProtocolo = {
-    protocolo_entrega: protocolo,
-    materiales: protocolo.materiales || {},
+    protocolo_entrega: protocoloParaGuardar,
+    materiales: protocoloParaGuardar.materiales || {},
   }
 
   let { count: filasActualizadas, error } = await supabase
@@ -2396,8 +2626,8 @@ async function guardarProtocoloEntrega(protocolo) {
     ...payloadProtocolo,
   }
 
-  const protocoloGuardado = registroGuardado.protocolo_entrega || protocolo
-  const materialesGuardados = registroGuardado.materiales || protocolo.materiales || {}
+  const protocoloGuardado = registroGuardado.protocolo_entrega || protocoloParaGuardar
+  const materialesGuardados = registroGuardado.materiales || protocoloParaGuardar.materiales || {}
 
   setDatosProtocoloEntrega(protocoloGuardado)
   setVersionProtocoloEntrega((version) => version + 1)
@@ -2479,6 +2709,10 @@ async function finalizarModulo() {
     return
   }
 
+  const protocoloHistorial = esEstadoGarantia(modulo.estado)
+    ? agregarNotaGarantiaProtocolo(modulo.protocolo_entrega || {}, modulo.fecha_prueba_electrica)
+    : modulo.protocolo_entrega || {}
+
   const historialPayload = {
     modulo_id: modulo.id,
     serie: modulo.serie,
@@ -2488,7 +2722,7 @@ async function finalizarModulo() {
     fecha_ingreso: modulo.fecha_ingreso,
     fecha_prueba_electrica: modulo.fecha_prueba_electrica,
     id_ot: modulo.id_ot || modulo.protocolo_entrega?.id_ot || modulo.protocolo_entrega?.idOt || null,
-    protocolo_entrega: modulo.protocolo_entrega || {},
+    protocolo_entrega: protocoloHistorial,
     nota: modulo.nota || '',
     observacion_alerta: modulo.observacion_alerta || '',
     fecha_salida: new Date().toISOString(),
@@ -4694,6 +4928,11 @@ const ultimosFinalizados = [...historial]
           </button>
         )}
       </div>
+      <span style={{ color: '#ddd', fontWeight: 700 }}>
+        {busquedaProtocolosMensuales
+          ? `${protocolosMensualesFiltrados.length} de ${protocolosMensuales.length} resultados`
+          : `${protocolosMensuales.length} resultados`}
+      </span>
     </div>
 
     {protocolosMensuales.length === 0 && !cargandoProtocolosMensuales ? (
@@ -4784,16 +5023,19 @@ const ultimosFinalizados = [...historial]
                   <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>
                     <BotonValorCobro registro={registro} tipo="mantencion">
                       {formatearPrecioMaterial(registro.valorMantencion)}
+                      {registro.tieneAjusteValorizacion ? ' *' : ''}
                     </BotonValorCobro>
                   </td>
                   <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>
                     <BotonValorCobro registro={registro} tipo="modificacion">
                       {formatearPrecioMaterial(registro.valorModificacion)}
+                      {registro.tieneAjusteValorizacion ? ' *' : ''}
                     </BotonValorCobro>
                   </td>
                   <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right', fontWeight: 800 }}>
                     <BotonValorCobro registro={registro} tipo="total" destacado>
                       {formatearPrecioMaterial(registro.valorTotal)}
+                      {registro.tieneAjusteValorizacion ? ' *' : ''}
                     </BotonValorCobro>
                   </td>
                   <td style={{ padding: '8px', border: '1px solid #444' }}>
@@ -5107,9 +5349,75 @@ const ultimosFinalizados = [...historial]
                 {item.materialPrecio && item.materialPrecio !== item.material ? ` · precio: ${item.materialPrecio}` : ''}
               </div>
             </div>
-            <div style={{ fontWeight: 800, textAlign: 'right' }}>
-              {formatearPrecioMaterial(item.subtotal)}
+            <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
+              <div style={{ fontWeight: 800, textAlign: 'right' }}>
+                {formatearPrecioMaterial(item.subtotal)}
+              </div>
+              {item.ajusteValorizacionItem && (
+                <div style={{ color: '#ffcc80', fontSize: '12px', textAlign: 'right' }}>
+                  Ajustado{item.subtotalOriginal !== undefined ? ` desde ${formatearPrecioMaterial(item.subtotalOriginal)}` : ''}
+                </div>
+              )}
+              {puedeAjustarValoresProtocolos && (
+                <button
+                  type="button"
+                  onClick={() => setAjusteCobroMensual({
+                    itemKey: item.claveAjuste || claveItemCobro(item.tipoCobro || detalleCobroSeleccionado.tipo, item),
+                    itemLabel: item.material,
+                    tipoCobro: item.tipoCobro || detalleCobroSeleccionado.tipo,
+                    valor: String(item.subtotal ?? 0),
+                    motivo: item.ajusteValorizacionItem?.motivo || '',
+                  })}
+                  title="Modificar este cobro"
+                  style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '50%',
+                    border: '1px solid #777',
+                    background: '#333',
+                    color: 'white',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✏️
+                </button>
+              )}
             </div>
+            {ajusteCobroMensual.itemKey === (item.claveAjuste || claveItemCobro(item.tipoCobro || detalleCobroSeleccionado.tipo, item)) && (
+              <div style={{ gridColumn: '1 / -1', display: 'grid', gap: '8px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #555' }}>
+                <strong>Modificar: {item.material}</strong>
+                <input
+                  value={ajusteCobroMensual.valor}
+                  onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, valor: e.target.value }))}
+                  inputMode="numeric"
+                  placeholder="Nuevo valor"
+                  style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777' }}
+                />
+                <textarea
+                  value={ajusteCobroMensual.motivo}
+                  onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, motivo: e.target.value }))}
+                  rows={2}
+                  placeholder="Motivo de la modificación"
+                  style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777', resize: 'vertical' }}
+                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={guardarAjusteValorizacionProtocolo}
+                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #66bb6a', background: '#1b5e20', color: 'white', cursor: 'pointer', fontWeight: 800 }}
+                  >
+                    Guardar item
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAjusteCobroMensual({ itemKey: '', itemLabel: '', tipoCobro: '', valor: '', motivo: '' })}
+                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #777', background: '#555', color: 'white', cursor: 'pointer' }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -5130,6 +5438,71 @@ const ultimosFinalizados = [...historial]
       <span>Total detalle</span>
       <span>{formatearPrecioMaterial(detalleCobroSeleccionado.total)}</span>
     </div>
+
+    {false && puedeAjustarValoresProtocolos && (
+      <div
+        style={{
+          marginTop: '14px',
+          paddingTop: '12px',
+          borderTop: '1px solid #555',
+          display: 'grid',
+          gap: '10px',
+        }}
+      >
+        <div style={{ fontWeight: 900 }}>Modificar valorización</div>
+        {detalleCobroSeleccionado.registro?.ajusteValorizacion?.motivo && (
+          <div style={{ color: '#ffcc80', fontSize: '13px' }}>
+            Ajuste actual: {detalleCobroSeleccionado.registro.ajusteValorizacion.motivo}
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span>Valor mantención</span>
+            <input
+              value={ajusteCobroMensual.mantencion}
+              onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, mantencion: e.target.value }))}
+              inputMode="numeric"
+              style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777' }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span>Valor modificación</span>
+            <input
+              value={ajusteCobroMensual.modificacion}
+              onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, modificacion: e.target.value }))}
+              inputMode="numeric"
+              style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777' }}
+            />
+          </label>
+        </div>
+        <label style={{ display: 'grid', gap: '4px' }}>
+          <span>Motivo de la modificación</span>
+          <textarea
+            value={ajusteCobroMensual.motivo}
+            onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, motivo: e.target.value }))}
+            rows={3}
+            placeholder="Ej: se anula cobro por garantía / se agrega cobro adicional..."
+            style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777', resize: 'vertical' }}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={guardarAjusteValorizacionProtocolo}
+          style={{
+            justifySelf: 'start',
+            padding: '9px 14px',
+            borderRadius: '8px',
+            border: '1px solid #66bb6a',
+            background: '#1b5e20',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 800,
+          }}
+        >
+          Guardar modificación
+        </button>
+      </div>
+    )}
   </div>
 )}
 
