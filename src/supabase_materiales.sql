@@ -73,6 +73,36 @@ for delete
 to anon, authenticated
 using (true);
 
+drop policy if exists "control_modulos_manuales_select" on public.protocolos_manuales;
+drop policy if exists "control_modulos_manuales_insert" on public.protocolos_manuales;
+drop policy if exists "control_modulos_manuales_update" on public.protocolos_manuales;
+drop policy if exists "control_modulos_manuales_delete" on public.protocolos_manuales;
+
+create policy "control_modulos_manuales_select"
+on public.protocolos_manuales
+for select
+to anon, authenticated
+using (true);
+
+create policy "control_modulos_manuales_insert"
+on public.protocolos_manuales
+for insert
+to anon, authenticated
+with check (true);
+
+create policy "control_modulos_manuales_update"
+on public.protocolos_manuales
+for update
+to anon, authenticated
+using (true)
+with check (true);
+
+create policy "control_modulos_manuales_delete"
+on public.protocolos_manuales
+for delete
+to anon, authenticated
+using (true);
+
 alter table public.protocolos_manuales
 add column if not exists id_ot text;
 

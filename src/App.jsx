@@ -893,7 +893,7 @@ async function buscarSerie() {
     return
   }
 
-  const [respuestaHistorial, respuestaActivos] = await Promise.all([
+  const [respuestaHistorial, respuestaActivos, respuestaManuales] = await Promise.all([
     supabase
       .from('historial_modulos')
       .select('*')
@@ -905,10 +905,20 @@ async function buscarSerie() {
       .from('modulos')
       .select('*')
       .eq('serie', serie),
+    supabase
+      .from('protocolos_manuales')
+      .select('*')
+      .eq('serie', serie)
+      .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
+      .limit(5),
   ])
 
-  if (respuestaHistorial.error || respuestaActivos.error) {
-    alert((respuestaHistorial.error || respuestaActivos.error).message)
+  const errorBusqueda = respuestaHistorial.error || respuestaActivos.error || (
+    respuestaManuales.error?.message?.includes('protocolos_manuales') ? null : respuestaManuales.error
+  )
+
+  if (errorBusqueda) {
+    alert(errorBusqueda.message)
     return
   }
 
@@ -917,7 +927,12 @@ async function buscarSerie() {
     esActual: true,
   }))
 
-  setResultadoBusqueda([...activos, ...(respuestaHistorial.data || [])])
+  const manuales = (respuestaManuales.error?.message?.includes('protocolos_manuales') ? [] : respuestaManuales.data || []).map((protocolo) => ({
+    ...protocolo,
+    origen: 'manual',
+  }))
+
+  setResultadoBusqueda([...activos, ...(respuestaHistorial.data || []), ...manuales])
   setBusquedaRealizada(true)
 }
 
@@ -1154,11 +1169,13 @@ function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
   const valores = calcularValoresProtocoloMensual(registro, precios)
   const datosProtocolo = registro?.protocolo_entrega || {}
+  const fechaProtocolo = registro?.fecha_prueba_electrica || (datosProtocolo.fecha ? `${datosProtocolo.fecha}T00:00:00` : null)
   return {
     ...registro,
     tipo: datosProtocolo.tipo || registro?.tipo || '',
     proyecto: datosProtocolo.proyecto || registro?.proyecto || '',
     linea: datosProtocolo.linea || registro?.linea || '',
+    fecha_prueba_electrica: fechaProtocolo,
     origen,
     esActual: origen === 'actual',
     valorMantencion: valores.mantencion,
@@ -1225,21 +1242,42 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
   const { inicio, fin: finTexto } = obtenerRangoFechasProtocolos(rango, valor)
 
   async function cargarTablaProtocolos(tabla, columnasConIdOt, columnasSinIdOt) {
-    let respuesta = await supabase
+    const traerPorRango = async (columnas) => supabase
       .from(tabla)
-      .select(columnasConIdOt)
+      .select(columnas)
       .gte('fecha_prueba_electrica', inicio)
       .lt('fecha_prueba_electrica', finTexto)
 
+    const traerRecientes = async (columnas) => supabase
+      .from(tabla)
+      .select(columnas)
+      .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
+      .limit(250)
+
+    let respuesta = await traerPorRango(columnasConIdOt)
+
     if (respuesta.error?.message?.includes('id_ot')) {
-      respuesta = await supabase
-        .from(tabla)
-        .select(columnasSinIdOt)
-        .gte('fecha_prueba_electrica', inicio)
-        .lt('fecha_prueba_electrica', finTexto)
+      respuesta = await traerPorRango(columnasSinIdOt)
     }
 
-    return respuesta
+    if (respuesta.error) return respuesta
+
+    let recientes = await traerRecientes(columnasConIdOt)
+    if (recientes.error?.message?.includes('id_ot')) {
+      recientes = await traerRecientes(columnasSinIdOt)
+    }
+
+    const porId = new Map()
+    ;[...(respuesta.data || []), ...(!recientes.error ? recientes.data || [] : [])].forEach((item) => {
+      const fechaRegistro = item?.fecha_prueba_electrica || (item?.protocolo_entrega?.fecha ? `${item.protocolo_entrega.fecha}T00:00:00` : null)
+      if (!fechaRegistro || fechaRegistro < inicio || fechaRegistro >= finTexto) return
+      porId.set(String(item.id), item)
+    })
+
+    return {
+      ...respuesta,
+      data: [...porId.values()],
+    }
   }
 
   const [respuestaActivos, respuestaHistorial, respuestaManuales] = await Promise.all([
