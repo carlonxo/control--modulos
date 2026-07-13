@@ -1340,30 +1340,39 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
     idOt: valor,
   }
 
-  const { data: registroGuardado, error } = await supabase
+  const { count: filasActualizadas, error } = await supabase
     .from(tablaDestino)
-    .update({ protocolo_entrega: protocoloActualizado })
+    .update({ protocolo_entrega: protocoloActualizado }, { count: 'exact' })
     .eq('id', registroActual.id)
-    .select(columnasIdOt)
-    .maybeSingle()
 
   if (error) {
     mostrarNotificacion('No se pudo guardar el ID OT: ' + error.message)
     return
   }
 
-  if (!registroGuardado?.protocolo_entrega) {
-    mostrarNotificacion('No se pudo confirmar el guardado del ID OT')
+  if (!filasActualizadas) {
+    mostrarNotificacion('No se encontró el protocolo para guardar ID OT')
     return
+  }
+
+  const { data: registroGuardado } = await supabase
+    .from(tablaDestino)
+    .select(columnasIdOt)
+    .eq('id', registroActual.id)
+    .maybeSingle()
+
+  const registroConfirmado = registroGuardado || {
+    ...registroActual,
+    protocolo_entrega: protocoloActualizado,
   }
 
   setProtocolosMensuales((actuales) => actuales.map((item) => (
     item.origen === registro.origen && (
       item.id === registro.id ||
-      item.id === registroGuardado.id ||
-      item.modulo_id === registroGuardado.modulo_id
+      item.id === registroConfirmado.id ||
+      item.modulo_id === registroConfirmado.modulo_id
     )
-      ? { ...item, ...registroGuardado, idOt: valor, protocolo_entrega: registroGuardado.protocolo_entrega }
+      ? { ...item, ...registroConfirmado, idOt: valor, protocolo_entrega: registroConfirmado.protocolo_entrega }
       : item
   )))
   setIdOtEnEdicion(null)
@@ -2101,21 +2110,18 @@ async function guardarProtocoloEntrega(protocolo) {
     materiales: protocolo.materiales || {},
   }
 
-  let { data: registroGuardado, error } = await supabase
+  let { count: filasActualizadas, error } = await supabase
     .from(tablaDestino)
-    .update(payloadProtocolo)
+    .update(payloadProtocolo, { count: 'exact' })
     .eq('id', moduloSeleccionado.id)
-    .select()
-    .maybeSingle()
+  let registroGuardado = null
 
-  if (!error && !registroGuardado && protocoloDesdeHistorial) {
+  if (!error && !filasActualizadas && protocoloDesdeHistorial) {
     const idModuloHistorial = moduloSeleccionado.modulo_id || moduloSeleccionado.id
-    ;({ data: registroGuardado, error } = await supabase
+    ;({ count: filasActualizadas, error } = await supabase
       .from(tablaDestino)
-      .update(payloadProtocolo)
-      .eq('modulo_id', idModuloHistorial)
-      .select()
-      .maybeSingle())
+      .update(payloadProtocolo, { count: 'exact' })
+      .eq('modulo_id', idModuloHistorial))
   }
 
   if (error) {
@@ -2123,29 +2129,34 @@ async function guardarProtocoloEntrega(protocolo) {
     return
   }
 
-  if (!registroGuardado) {
-    mostrarNotificacion('No se pudo confirmar el guardado del protocolo')
+  if (!filasActualizadas) {
+    mostrarNotificacion('No se encontrÃ³ el registro del protocolo para guardar')
     return
   }
 
-  const idRegistroGuardado = registroGuardado.id || moduloSeleccionado.id
   const { data: registroVerificado, error: errorVerificacion } = await supabase
     .from(tablaDestino)
     .select('*')
-    .eq('id', idRegistroGuardado)
+    .eq('id', moduloSeleccionado.id)
     .maybeSingle()
 
-  if (errorVerificacion) {
-    mostrarNotificacion('El protocolo se guardó, pero no se pudo verificar: ' + errorVerificacion.message)
-    return
+  if (!errorVerificacion && registroVerificado) {
+    registroGuardado = registroVerificado
   }
 
-  if (!registroVerificado?.protocolo_entrega) {
-    mostrarNotificacion('No se pudo verificar que el protocolo quedara guardado')
-    return
+  if (!registroGuardado && protocoloDesdeHistorial && moduloSeleccionado.modulo_id) {
+    const { data: registroPorModulo } = await supabase
+      .from(tablaDestino)
+      .select('*')
+      .eq('modulo_id', moduloSeleccionado.modulo_id)
+      .maybeSingle()
+    registroGuardado = registroPorModulo
   }
 
-  registroGuardado = registroVerificado
+  registroGuardado = registroGuardado || {
+    ...moduloSeleccionado,
+    ...payloadProtocolo,
+  }
 
   const protocoloGuardado = registroGuardado.protocolo_entrega || protocolo
   const materialesGuardados = registroGuardado.materiales || protocolo.materiales || {}
