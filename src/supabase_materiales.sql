@@ -10,6 +10,12 @@ add column if not exists protocolo_entrega jsonb not null default '{}'::jsonb;
 alter table public.historial_modulos
 add column if not exists protocolo_entrega jsonb not null default '{}'::jsonb;
 
+alter table public.modulos
+add column if not exists id_ot text;
+
+alter table public.historial_modulos
+add column if not exists id_ot text;
+
 alter table public.historial_modulos
 add column if not exists nota text;
 
@@ -26,11 +32,49 @@ create table if not exists public.protocolos_manuales (
   proyecto text,
   responsable text,
   fecha_prueba_electrica timestamp with time zone not null,
+  id_ot text,
   protocolo_entrega jsonb not null default '{}'::jsonb,
   materiales jsonb not null default '{}'::jsonb,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now()
 );
+
+grant select, insert, update, delete on public.historial_modulos to anon, authenticated;
+grant select, insert, update, delete on public.modulos to anon, authenticated;
+grant select, insert, update, delete on public.protocolos_manuales to anon, authenticated;
+
+drop policy if exists "control_modulos_historial_select" on public.historial_modulos;
+drop policy if exists "control_modulos_historial_insert" on public.historial_modulos;
+drop policy if exists "control_modulos_historial_update" on public.historial_modulos;
+drop policy if exists "control_modulos_historial_delete" on public.historial_modulos;
+
+create policy "control_modulos_historial_select"
+on public.historial_modulos
+for select
+to anon, authenticated
+using (true);
+
+create policy "control_modulos_historial_insert"
+on public.historial_modulos
+for insert
+to anon, authenticated
+with check (true);
+
+create policy "control_modulos_historial_update"
+on public.historial_modulos
+for update
+to anon, authenticated
+using (true)
+with check (true);
+
+create policy "control_modulos_historial_delete"
+on public.historial_modulos
+for delete
+to anon, authenticated
+using (true);
+
+alter table public.protocolos_manuales
+add column if not exists id_ot text;
 
 create table if not exists public.material_precios (
   material text primary key,

@@ -1145,7 +1145,7 @@ function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMat
       mantencion: valores.detalleMantencion,
       modificacion: valores.detalleModificacion,
     },
-    idOt: registro?.protocolo_entrega?.id_ot || registro?.protocolo_entrega?.idOt || '',
+    idOt: registro?.id_ot || registro?.protocolo_entrega?.id_ot || registro?.protocolo_entrega?.idOt || '',
   }
 }
 
@@ -1201,22 +1201,40 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
 
   const { inicio, fin: finTexto } = obtenerRangoFechasProtocolos(rango, valor)
 
+  async function cargarTablaProtocolos(tabla, columnasConIdOt, columnasSinIdOt) {
+    let respuesta = await supabase
+      .from(tabla)
+      .select(columnasConIdOt)
+      .gte('fecha_prueba_electrica', inicio)
+      .lt('fecha_prueba_electrica', finTexto)
+
+    if (respuesta.error?.message?.includes('id_ot')) {
+      respuesta = await supabase
+        .from(tabla)
+        .select(columnasSinIdOt)
+        .gte('fecha_prueba_electrica', inicio)
+        .lt('fecha_prueba_electrica', finTexto)
+    }
+
+    return respuesta
+  }
+
   const [respuestaActivos, respuestaHistorial, respuestaManuales] = await Promise.all([
-    supabase
-      .from('modulos')
-      .select('id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales')
-      .gte('fecha_prueba_electrica', inicio)
-      .lt('fecha_prueba_electrica', finTexto),
-    supabase
-      .from('historial_modulos')
-      .select('id, modulo_id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales')
-      .gte('fecha_prueba_electrica', inicio)
-      .lt('fecha_prueba_electrica', finTexto),
-    supabase
-      .from('protocolos_manuales')
-      .select('id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales')
-      .gte('fecha_prueba_electrica', inicio)
-      .lt('fecha_prueba_electrica', finTexto),
+    cargarTablaProtocolos(
+      'modulos',
+      'id, id_ot, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales',
+      'id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales',
+    ),
+    cargarTablaProtocolos(
+      'historial_modulos',
+      'id, modulo_id, id_ot, serie, tipo, proyecto, responsable, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
+      'id, modulo_id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
+    ),
+    cargarTablaProtocolos(
+      'protocolos_manuales',
+      'id, id_ot, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales',
+      'id, serie, tipo, proyecto, responsable, fecha_prueba_electrica, protocolo_entrega, materiales',
+    ),
   ])
 
   setCargandoProtocolosMensuales(false)
@@ -1300,6 +1318,8 @@ function abrirIngresoManualProtocolo() {
 async function guardarIdOtProtocoloMensual(registro, valor) {
   if (!puedeVerProtocolosMensuales || !registro?.id) return
 
+  const valorIdOt = String(valor ?? '').trim()
+
   const tablaDestino = registro.origen === 'manual'
     ? 'protocolos_manuales'
     : registro.origen === 'historial'
@@ -1307,8 +1327,8 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
       : 'modulos'
 
   const columnasIdOt = registro.origen === 'historial'
-    ? 'id, modulo_id, protocolo_entrega, materiales'
-    : 'id, protocolo_entrega, materiales'
+    ? 'id, modulo_id, id_ot, protocolo_entrega, materiales'
+    : 'id, id_ot, protocolo_entrega, materiales'
 
   let { data: registroActual, error: errorCarga } = await supabase
     .from(tablaDestino)
@@ -1317,11 +1337,23 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
     .maybeSingle()
 
   if (!errorCarga && !registroActual && registro.origen === 'historial' && registro.modulo_id) {
+    registroActual = null
+  }
+
+  if (errorCarga?.message?.includes('id_ot')) {
+    const columnasCompatibles = registro.origen === 'historial'
+      ? 'id, modulo_id, protocolo_entrega, materiales'
+      : 'id, protocolo_entrega, materiales'
+
     ;({ data: registroActual, error: errorCarga } = await supabase
       .from(tablaDestino)
-      .select(columnasIdOt)
-      .eq('modulo_id', registro.modulo_id)
+      .select(columnasCompatibles)
+      .eq('id', registro.id)
       .maybeSingle())
+
+    if (!errorCarga && !registroActual && registro.origen === 'historial' && registro.modulo_id) {
+      registroActual = null
+    }
   }
 
   if (errorCarga) {
@@ -1336,43 +1368,65 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
 
   const protocoloActualizado = {
     ...(registroActual.protocolo_entrega || {}),
-    id_ot: valor,
-    idOt: valor,
+    id_ot: valorIdOt,
+    idOt: valorIdOt,
   }
 
-  const { count: filasActualizadas, error } = await supabase
+  const payloadIdOt = {
+    id_ot: valorIdOt,
+    protocolo_entrega: protocoloActualizado,
+  }
+
+  let { data: registroGuardado, error } = await supabase
     .from(tablaDestino)
-    .update({ protocolo_entrega: protocoloActualizado }, { count: 'exact' })
+    .update(payloadIdOt)
     .eq('id', registroActual.id)
+    .select(columnasIdOt)
+    .maybeSingle()
+
+  if (error?.message?.includes('id_ot')) {
+    const columnasCompatibles = registro.origen === 'historial'
+      ? 'id, modulo_id, protocolo_entrega, materiales'
+      : 'id, protocolo_entrega, materiales'
+
+    ;({ data: registroGuardado, error } = await supabase
+      .from(tablaDestino)
+      .update({ protocolo_entrega: protocoloActualizado })
+      .eq('id', registroActual.id)
+      .select(columnasCompatibles)
+      .maybeSingle())
+  }
 
   if (error) {
     mostrarNotificacion('No se pudo guardar el ID OT: ' + error.message)
     return
   }
 
-  if (filasActualizadas === 0) {
-    mostrarNotificacion('No se encontró el protocolo para guardar ID OT')
+  if (!registroGuardado) {
+    mostrarNotificacion(`No se pudo confirmar el guardado del ID OT en ${tablaDestino}. Revisa permisos/RLS de Supabase para actualizar esa tabla.`)
     return
   }
 
-  const { data: registroGuardado } = await supabase
-    .from(tablaDestino)
-    .select(columnasIdOt)
-    .eq('id', registroActual.id)
-    .maybeSingle()
+  const idOtConfirmado = String(registroGuardado.id_ot ?? registroGuardado.protocolo_entrega?.id_ot ?? registroGuardado.protocolo_entrega?.idOt ?? '').trim()
 
-  const registroConfirmado = registroGuardado || {
+  if (idOtConfirmado !== valorIdOt) {
+    mostrarNotificacion(`Supabase no confirmó el ID OT en ${tablaDestino}. Valor recibido: ${idOtConfirmado || 'vacío'}`)
+    return
+  }
+
+  const registroConfirmado = {
     ...registroActual,
-    protocolo_entrega: protocoloActualizado,
+    ...registroGuardado,
+    id_ot: valorIdOt,
+    protocolo_entrega: registroGuardado.protocolo_entrega || protocoloActualizado,
   }
 
   setProtocolosMensuales((actuales) => actuales.map((item) => (
     item.origen === registro.origen && (
       item.id === registro.id ||
-      item.id === registroConfirmado.id ||
-      item.modulo_id === registroConfirmado.modulo_id
+      item.id === registroConfirmado.id
     )
-      ? { ...item, ...registroConfirmado, idOt: valor, protocolo_entrega: registroConfirmado.protocolo_entrega }
+      ? { ...item, ...registroConfirmado, id_ot: valorIdOt, idOt: valorIdOt, protocolo_entrega: registroConfirmado.protocolo_entrega || protocoloActualizado }
       : item
   )))
   setIdOtEnEdicion(null)
@@ -2034,7 +2088,7 @@ async function guardarProtocoloEntrega(protocolo) {
       linea: protocolo.linea || moduloSeleccionado.linea || '',
       responsable: protocolo.responsable || moduloSeleccionado.responsable || perfil?.nombre || '',
     }
-    const payloadManual = {
+  const payloadManual = {
       serie: protocoloNormalizado.serie,
       tipo: protocoloNormalizado.tipo,
       proyecto: protocoloNormalizado.proyecto,
@@ -2116,14 +2170,6 @@ async function guardarProtocoloEntrega(protocolo) {
     .eq('id', moduloSeleccionado.id)
   let registroGuardado = null
 
-  if (!error && filasActualizadas === 0 && protocoloDesdeHistorial) {
-    const idModuloHistorial = moduloSeleccionado.modulo_id || moduloSeleccionado.id
-    ;({ count: filasActualizadas, error } = await supabase
-      .from(tablaDestino)
-      .update(payloadProtocolo, { count: 'exact' })
-      .eq('modulo_id', idModuloHistorial))
-  }
-
   if (error) {
     mostrarNotificacion('No se pudo guardar el protocolo: ' + error.message)
     return
@@ -2142,15 +2188,6 @@ async function guardarProtocoloEntrega(protocolo) {
 
   if (!errorVerificacion && registroVerificado) {
     registroGuardado = registroVerificado
-  }
-
-  if (!registroGuardado && protocoloDesdeHistorial && moduloSeleccionado.modulo_id) {
-    const { data: registroPorModulo } = await supabase
-      .from(tablaDestino)
-      .select('*')
-      .eq('modulo_id', moduloSeleccionado.modulo_id)
-      .maybeSingle()
-    registroGuardado = registroPorModulo
   }
 
   registroGuardado = registroGuardado || {
@@ -2180,8 +2217,7 @@ async function guardarProtocoloEntrega(protocolo) {
     setProtocolosMensuales((actuales) => actuales.map((item) => (
       item.origen === 'historial' && (
         item.id === moduloSeleccionado.id ||
-        item.id === registroGuardado.id ||
-        item.modulo_id === registroGuardado.modulo_id
+        item.id === registroGuardado.id
       )
         ? prepararRegistroProtocoloMensual({ ...item, ...registroGuardado, protocolo_entrega: protocoloGuardado, materiales: materialesGuardados }, 'historial', preciosMateriales)
         : item
@@ -2189,8 +2225,7 @@ async function guardarProtocoloEntrega(protocolo) {
     setResultadoBusqueda((actuales) => actuales.map((item) => (
       !item.esActual && (
         item.id === moduloSeleccionado.id ||
-        item.id === registroGuardado.id ||
-        item.modulo_id === registroGuardado.modulo_id
+        item.id === registroGuardado.id
       )
         ? { ...item, ...registroGuardado, protocolo_entrega: protocoloGuardado, materiales: materialesGuardados }
         : item
@@ -2251,6 +2286,7 @@ async function finalizarModulo() {
     responsable: modulo.responsable,
     fecha_ingreso: modulo.fecha_ingreso,
     fecha_prueba_electrica: modulo.fecha_prueba_electrica,
+    id_ot: modulo.id_ot || modulo.protocolo_entrega?.id_ot || modulo.protocolo_entrega?.idOt || null,
     protocolo_entrega: modulo.protocolo_entrega || {},
     nota: modulo.nota || '',
     observacion_alerta: modulo.observacion_alerta || '',
