@@ -3121,7 +3121,6 @@ async function guardarProtocoloEntrega(protocolo) {
     proyecto: protocoloParaGuardar.proyecto || moduloSeleccionado?.proyecto || '',
     responsable: protocoloParaGuardar.responsable || moduloSeleccionado?.responsable || '',
     linea: protocoloParaGuardar.linea || moduloSeleccionado?.linea || '',
-    estado: protocoloParaGuardar.estado || moduloSeleccionado?.estado || '',
   }
 
   let { count: filasActualizadas, error } = await supabase
