@@ -370,6 +370,18 @@ function completarDatosPruebaEnProtocolo(protocolo = {}, modulo = {}, fechaPrueb
   }
 }
 
+function sincronizarDatosModuloEnProtocolo(protocolo = {}, modulo = {}) {
+  return {
+    ...protocolo,
+    serie: modulo.serie ?? protocolo.serie ?? '',
+    tipo: modulo.tipo ?? protocolo.tipo ?? '',
+    proyecto: modulo.proyecto ?? protocolo.proyecto ?? '',
+    linea: modulo.linea ?? protocolo.linea ?? '',
+    responsable: modulo.responsable ?? protocolo.responsable ?? '',
+    estado: modulo.estado ?? protocolo.estado ?? '',
+  }
+}
+
 function obtenerValorInicialRangoProtocolo(rango) {
   const hoy = new Date()
   if (rango === 'dia') return formatearFechaInput(hoy)
@@ -635,6 +647,7 @@ const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
 const puedeUsarProtocolo = ['admin', 'operador', 'control_calidad', 'visor', 'analista'].includes(perfil?.rol)
 const puedeEditarProtocolo = ['admin', 'operador'].includes(perfil?.rol)
 const puedeEditarDatosProtocolo = ['admin', 'operador', 'control_calidad'].includes(perfil?.rol)
+const puedeEditarDatosModulo = puedeEditarDatosProtocolo
 const recibeAvisosPrueba = ['admin', 'control_calidad', 'operador'].includes(perfil?.rol)
 const puedeDescargarProtocolosDiarios = ['analista', 'admin', 'operador', 'control_calidad'].includes(perfil?.rol)
 const puedeVerPreciosMateriales = ['operador', 'analista', 'admin'].includes(perfil?.rol)
@@ -2134,7 +2147,9 @@ function limpiarEstadosModal() {
     return
   }
 
-  const updatePayload = esRolSoloLectura
+  const puedeEditarDatosModulo = puedeEditarDatosProtocolo
+
+  const updatePayload = !puedeEditarDatosModulo
     ? {
         nota: notaEditada,
         ...(perfil?.rol === 'electrico'
@@ -2151,6 +2166,31 @@ function limpiarEstadosModal() {
         posicion: posicionEditada,
         nota: notaEditada,
       }
+
+  if (puedeEditarDatosModulo) {
+    const { data: moduloActual, error: errorCargaModulo } = await supabase
+      .from('modulos')
+      .select('protocolo_entrega')
+      .eq('id', moduloSeleccionado.id)
+      .single()
+
+    if (errorCargaModulo) {
+      mostrarNotificacion('No se pudo cargar el protocolo actual: ' + errorCargaModulo.message)
+      return
+    }
+
+    updatePayload.protocolo_entrega = sincronizarDatosModuloEnProtocolo(
+      moduloActual?.protocolo_entrega || {},
+      {
+        serie: serieEditada,
+        tipo: tipoEditado,
+        proyecto: proyectoEditado,
+        responsable: responsableEditado,
+        estado: estadoEditado,
+        linea: lineaEditada,
+      }
+    )
+  }
 
   console.log('GUARDANDO CAMBIOS:', {
     moduloId: moduloSeleccionado?.id,
@@ -2203,7 +2243,7 @@ console.log({
   if (isEnGarantia) {
     updatePayload.fecha_prueba_electrica = new Date(`${fechaPruebaEditada}T12:00:00`).toISOString()
     updatePayload.protocolo_entrega = agregarNotaGarantiaProtocolo(
-      moduloSeleccionado?.protocolo_entrega || {},
+      updatePayload.protocolo_entrega || moduloSeleccionado?.protocolo_entrega || {},
       updatePayload.fecha_prueba_electrica
     )
   }
@@ -2813,6 +2853,12 @@ async function guardarProtocoloEntrega(protocolo) {
     protocolo_entrega: protocoloParaGuardar,
     materiales: protocoloParaGuardar.materiales || {},
     fecha_prueba_electrica: fechaPruebaProtocolo,
+    serie: protocoloParaGuardar.serie || moduloSeleccionado?.serie || '',
+    tipo: protocoloParaGuardar.tipo || moduloSeleccionado?.tipo || '',
+    proyecto: protocoloParaGuardar.proyecto || moduloSeleccionado?.proyecto || '',
+    responsable: protocoloParaGuardar.responsable || moduloSeleccionado?.responsable || '',
+    linea: protocoloParaGuardar.linea || moduloSeleccionado?.linea || '',
+    estado: protocoloParaGuardar.estado || moduloSeleccionado?.estado || '',
   }
 
   let { count: filasActualizadas, error } = await supabase
@@ -4632,7 +4678,7 @@ const ultimosFinalizados = [...historial]
           <input
             value={serieEditada}
             onChange={(e) => setSerieEditada(e.target.value)}
-            disabled={esRolSoloLectura}
+            disabled={!puedeEditarDatosModulo}
             style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </div>
@@ -4642,7 +4688,7 @@ const ultimosFinalizados = [...historial]
           <input
             value={tipoEditado}
             onChange={(e) => setTipoEditado(e.target.value)}
-            disabled={esRolSoloLectura}
+            disabled={!puedeEditarDatosModulo}
             style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </div>
@@ -4652,7 +4698,7 @@ const ultimosFinalizados = [...historial]
           <input
             value={proyectoEditado}
             onChange={(e) => setProyectoEditado(e.target.value)}
-            disabled={esRolSoloLectura}
+            disabled={!puedeEditarDatosModulo}
             style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </div>
@@ -4663,7 +4709,7 @@ const ultimosFinalizados = [...historial]
           <select
             value={lineaEditada}
             onChange={(e) => setLineaEditada(Number(e.target.value))}
-            disabled={esRolSoloLectura}
+            disabled={!puedeEditarDatosModulo}
             style={{
               width: '64px',
               padding: '8px',
@@ -4684,7 +4730,7 @@ const ultimosFinalizados = [...historial]
           <select
             value={estadoEditado}
             onChange={(e) => setEstadoEditado(e.target.value)}
-            disabled={esRolSoloLectura}
+            disabled={!puedeEditarDatosModulo}
             style={{
               width: '170px',
               maxWidth: 'calc(100% - 62px)',
@@ -4711,7 +4757,7 @@ const ultimosFinalizados = [...historial]
               type="date"
               value={fechaPruebaEditada}
               onChange={(e) => setFechaPruebaEditada(e.target.value)}
-              disabled={esRolSoloLectura}
+              disabled={!puedeEditarDatosModulo}
               style={{
                 width: '190px',
                 maxWidth: '100%',
@@ -4733,7 +4779,7 @@ const ultimosFinalizados = [...historial]
           <input
             value={responsableEditado}
             onChange={(e) => setResponsableEditado(e.target.value)}
-            disabled={esRolSoloLectura}
+            disabled={!puedeEditarDatosModulo}
             style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
           />
         </div>
@@ -4750,7 +4796,7 @@ const ultimosFinalizados = [...historial]
       </div>
     )}
 
-    {perfil?.rol !== 'electrico' && !['admin', 'operador'].includes(perfil?.rol) && (
+    {false && perfil?.rol !== 'electrico' && !['admin', 'operador'].includes(perfil?.rol) && (
       <div
         style={{
           display: 'grid',
@@ -4845,7 +4891,7 @@ const ultimosFinalizados = [...historial]
           flex: 1,
         }}
       >
-        {esRolSoloLectura ? 'Guardar nota' : 'Guardar cambios'}
+        {puedeEditarDatosModulo ? 'Guardar cambios' : 'Guardar nota'}
       </button>
 
        {['electrico', 'operador'].includes(perfil?.rol) && (
