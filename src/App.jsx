@@ -578,6 +578,7 @@ const [serieBusqueda, setSerieBusqueda] = useState('')
 const [resultadoBusqueda, setResultadoBusqueda] = useState([])
 const [busquedaRealizada, setBusquedaRealizada] = useState(false)
 const [mostrarNuevoModulo, setMostrarNuevoModulo] = useState(false)
+const [creandoModulo, setCreandoModulo] = useState(false)
 const [posicionSeleccionada, setPosicionSeleccionada] = useState(null)
 const [serieNueva, setSerieNueva] = useState('')
 const [tipoNuevo, setTipoNuevo] = useState('')
@@ -974,6 +975,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
   setProtocoloDesdeHistorial(false)
   setProtocoloManualMensual(false)
   setMostrarNuevoModulo(false)
+  setCreandoModulo(false)
   setMostrarReintegrar(false)
   setMostrarDescargaProtocolos(false)
   setMostrarPreciosMateriales(false)
@@ -1252,6 +1254,8 @@ function exportarHistorialExcelHandler() {
 }
 
 async function crearModulo() {
+  if (creandoModulo) return
+
   if (!puedeAgregarModulos) {
     mostrarNotificacion('No tienes permisos para agregar módulos')
     setMostrarNuevoModulo(false)
@@ -1267,6 +1271,8 @@ async function crearModulo() {
     return
   }
 
+  setCreandoModulo(true)
+
   let lineaIngreso = posicionSeleccionada.linea
   let posicionIngreso = posicionSeleccionada.posicion
 
@@ -1279,6 +1285,7 @@ async function crearModulo() {
     } catch (error) {
       mostrarNotificacion(error.message)
       await cargarTablero()
+      setCreandoModulo(false)
       return
     }
   }
@@ -1290,7 +1297,7 @@ async function crearModulo() {
         serie: serieNueva,
         tipo: tipoNuevo,
         proyecto: proyectoNuevo,
-        responsable: responsableNuevo.trim(),
+        responsable: responsableNuevo.trim() || null,
         linea: lineaIngreso,
         posicion: posicionIngreso,
         estado: 'Sin iniciar',
@@ -1302,6 +1309,7 @@ async function crearModulo() {
 
   if (error) {
     alert(error.message)
+    setCreandoModulo(false)
     return
   }
 
@@ -1316,6 +1324,7 @@ async function crearModulo() {
   })
 
   setMostrarNuevoModulo(false)
+  setCreandoModulo(false)
 
   alert('Módulo creado correctamente')
 }
@@ -3759,9 +3768,8 @@ const ultimosFinalizados = [...historial]
                       <div style={{ marginTop: '4px', fontSize: '13px', color: '#ddd' }}>
                         Serie: <strong>{accion.serie || '-'}</strong>
                         {accion.linea ? ` | Línea ${accion.linea}` : ''}
-                      </div>
-                      <div style={{ marginTop: '3px', fontSize: '13px', color: '#ccc' }}>
-                        Usuario: {accion.usuario_nombre || 'No registrado'}
+                        {' | '}
+                        <span style={{ color: '#ccc' }}>{accion.usuario_nombre || 'No registrado'}</span>
                       </div>
                       {accion.descripcion && (
                         <div style={{ marginTop: '3px', fontSize: '13px', color: '#ffecb3' }}>
@@ -6523,10 +6531,12 @@ const ultimosFinalizados = [...historial]
       placeholder="Serie"
       value={serieNueva}
       onChange={(e) => setSerieNueva(e.target.value)}
+      disabled={creandoModulo}
       style={{
         width: '100%',
         padding: '8px',
         marginBottom: '10px',
+        opacity: creandoModulo ? 0.7 : 1,
       }}
     />
 
@@ -6534,10 +6544,12 @@ const ultimosFinalizados = [...historial]
       placeholder="Tipo"
       value={tipoNuevo}
       onChange={(e) => setTipoNuevo(e.target.value)}
+      disabled={creandoModulo}
       style={{
         width: '100%',
         padding: '8px',
         marginBottom: '10px',
+        opacity: creandoModulo ? 0.7 : 1,
       }}
     />
 
@@ -6545,10 +6557,12 @@ const ultimosFinalizados = [...historial]
       placeholder="Proyecto"
       value={proyectoNuevo}
       onChange={(e) => setProyectoNuevo(e.target.value)}
+      disabled={creandoModulo}
       style={{
         width: '100%',
         padding: '8px',
         marginBottom: '10px',
+        opacity: creandoModulo ? 0.7 : 1,
       }}
     />
 
@@ -6556,12 +6570,20 @@ const ultimosFinalizados = [...historial]
       placeholder="Responsable"
       value={responsableNuevo}
       onChange={(e) => setResponsableNuevo(e.target.value)}
+      disabled={creandoModulo}
       style={{
         width: '100%',
         padding: '8px',
         marginBottom: '10px',
+        opacity: creandoModulo ? 0.7 : 1,
       }}
     />
+
+    {creandoModulo && (
+      <div style={{ marginBottom: '10px', color: '#90caf9', fontWeight: 700 }}>
+        Guardando módulo...
+      </div>
+    )}
 
     <div
       style={{
@@ -6571,19 +6593,27 @@ const ultimosFinalizados = [...historial]
     >
       <button
         onClick={crearModulo}
+        disabled={creandoModulo}
         style={{
           padding: '10px',
           flex: 1,
+          opacity: creandoModulo ? 0.7 : 1,
+          cursor: creandoModulo ? 'not-allowed' : 'pointer',
         }}
       >
-        Guardar
+        {creandoModulo ? 'Guardando...' : 'Guardar'}
       </button>
 
       <button
-        onClick={() => setMostrarNuevoModulo(false)}
+        onClick={() => {
+          if (!creandoModulo) setMostrarNuevoModulo(false)
+        }}
+        disabled={creandoModulo}
         style={{
           padding: '10px',
           flex: 1,
+          opacity: creandoModulo ? 0.7 : 1,
+          cursor: creandoModulo ? 'not-allowed' : 'pointer',
         }}
       >
         Cancelar
