@@ -41,9 +41,16 @@ function esEstadoGarantia(estado) {
 
 function fechaParaInput(valor) {
   if (!valor) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(valor))) return String(valor)
   const fecha = new Date(valor)
   if (Number.isNaN(fecha.getTime())) return ''
   return fecha.toISOString().slice(0, 10)
+}
+
+function fechaDocumentoProtocolo(registro = {}) {
+  const fechaInterna = registro?.protocolo_entrega?.fecha
+  if (fechaInterna) return `${fechaInterna}T00:00:00`
+  return registro?.fecha_prueba_electrica || null
 }
 
 function claveProtocoloUnico(serie, fecha) {
@@ -1299,7 +1306,7 @@ function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
   const valores = calcularValoresProtocoloMensual(registro, precios)
   const datosProtocolo = registro?.protocolo_entrega || {}
-  const fechaProtocolo = registro?.fecha_prueba_electrica || (datosProtocolo.fecha ? `${datosProtocolo.fecha}T00:00:00` : null)
+  const fechaProtocolo = fechaDocumentoProtocolo(registro)
   const ajusteValorizacion = datosProtocolo.ajuste_valorizacion || {}
   const ajustesItems = datosProtocolo.ajustes_valorizacion_items || {}
   const tieneAjustesItems = Object.keys(ajustesItems).length > 0
@@ -1524,7 +1531,7 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
 
     const porId = new Map()
     ;[...(respuesta.data || []), ...(!recientes.error ? recientes.data || [] : [])].forEach((item) => {
-      const fechaRegistro = item?.fecha_prueba_electrica || (item?.protocolo_entrega?.fecha ? `${item.protocolo_entrega.fecha}T00:00:00` : null)
+      const fechaRegistro = fechaDocumentoProtocolo(item)
       if (!fechaRegistro || fechaRegistro < inicio || fechaRegistro >= finTexto) return
       porId.set(String(item.id), item)
     })
@@ -2489,7 +2496,10 @@ async function abrirProtocoloEntrega() {
     ...actuales,
     [moduloSeleccionado.id]: modulo?.materiales || {},
   }))
-  setDatosProtocoloEntrega(modulo?.protocolo_entrega || {})
+  setDatosProtocoloEntrega({
+    ...(modulo?.protocolo_entrega || {}),
+    fecha: modulo?.protocolo_entrega?.fecha || fechaParaInput(modulo?.fecha_prueba_electrica),
+  })
   setResponsableProtocolo(
     modulo?.protocolo_entrega?.responsable || nombreResponsable
   )
@@ -2544,7 +2554,10 @@ async function abrirProtocoloDesdeBusqueda(item) {
       ...actuales,
       [modulo.id]: modulo?.materiales || {},
     }))
-    setDatosProtocoloEntrega(modulo?.protocolo_entrega || {})
+    setDatosProtocoloEntrega({
+      ...(modulo?.protocolo_entrega || {}),
+      fecha: modulo?.protocolo_entrega?.fecha || fechaParaInput(modulo?.fecha_prueba_electrica),
+    })
     setResponsableProtocolo(modulo?.protocolo_entrega?.responsable || modulo?.responsable || '')
     setProtocoloSoloLecturaBusqueda(false)
     setProtocoloDesdeHistorial(false)
@@ -2559,7 +2572,10 @@ async function abrirProtocoloDesdeBusqueda(item) {
     ...actuales,
     [item.id]: item?.materiales || {},
   }))
-  setDatosProtocoloEntrega(item?.protocolo_entrega || {})
+  setDatosProtocoloEntrega({
+    ...(item?.protocolo_entrega || {}),
+    fecha: item?.protocolo_entrega?.fecha || fechaParaInput(item?.fecha_prueba_electrica),
+  })
   setResponsableProtocolo(item?.protocolo_entrega?.responsable || item?.responsable || '')
   setProtocoloSoloLecturaBusqueda(perfil?.rol !== 'admin')
   setProtocoloDesdeHistorial(true)
@@ -2674,11 +2690,15 @@ async function guardarProtocoloEntrega(protocolo) {
 
   const tablaDestino = protocoloDesdeHistorial ? 'historial_modulos' : 'modulos'
   const protocoloParaGuardar = esEstadoGarantia(moduloSeleccionado?.estado || protocolo?.estado)
-    ? agregarNotaGarantiaProtocolo(protocolo, moduloSeleccionado?.fecha_prueba_electrica || protocolo?.fecha)
+    ? agregarNotaGarantiaProtocolo(protocolo, protocolo?.fecha || moduloSeleccionado?.fecha_prueba_electrica)
     : protocolo
+  const fechaPruebaProtocolo = protocoloParaGuardar.fecha
+    ? `${protocoloParaGuardar.fecha}T00:00:00`
+    : moduloSeleccionado?.fecha_prueba_electrica || null
   const payloadProtocolo = {
     protocolo_entrega: protocoloParaGuardar,
     materiales: protocoloParaGuardar.materiales || {},
+    fecha_prueba_electrica: fechaPruebaProtocolo,
   }
 
   let { count: filasActualizadas, error } = await supabase
