@@ -41,7 +41,9 @@ function esEstadoGarantia(estado) {
 
 function fechaParaInput(valor) {
   if (!valor) return ''
-  if (/^\d{4}-\d{2}-\d{2}$/.test(String(valor))) return String(valor)
+  const fechaComoTexto = String(valor)
+  const coincidenciaFecha = fechaComoTexto.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (coincidenciaFecha) return coincidenciaFecha[1]
   const fecha = new Date(valor)
   if (Number.isNaN(fecha.getTime())) return ''
   return fecha.toISOString().slice(0, 10)
@@ -355,7 +357,7 @@ function obtenerRangoFechasProtocolos(rango, valor) {
     const inicio = new Date(`${valor}T00:00:00`)
     const fin = new Date(inicio)
     fin.setDate(fin.getDate() + 1)
-    return { inicio: `${valor}T00:00:00`, fin: fin.toISOString().slice(0, 19) }
+    return { inicio: `${valor}T00:00:00`, fin: `${formatearFechaInput(fin)}T00:00:00` }
   }
 
   if (rango === 'semana') {
@@ -369,13 +371,26 @@ function obtenerRangoFechasProtocolos(rango, valor) {
     inicio.setDate(lunesSemana1.getDate() + (semana - 1) * 7)
     const fin = new Date(inicio)
     fin.setDate(fin.getDate() + 7)
-    return { inicio: `${formatearFechaInput(inicio)}T00:00:00`, fin: fin.toISOString().slice(0, 19) }
+    return { inicio: `${formatearFechaInput(inicio)}T00:00:00`, fin: `${formatearFechaInput(fin)}T00:00:00` }
   }
 
   const inicio = `${valor}-01T00:00:00`
   const fin = new Date(`${valor}-01T00:00:00`)
   fin.setMonth(fin.getMonth() + 1)
-  return { inicio, fin: fin.toISOString().slice(0, 19) }
+  return { inicio, fin: `${formatearFechaInput(fin)}T00:00:00` }
+}
+
+function fechaDentroDeRangoProtocolo(fecha, inicio, fin) {
+  const fechaNormalizada = fechaParaInput(fecha)
+  const inicioNormalizado = fechaParaInput(inicio)
+  const finNormalizado = fechaParaInput(fin)
+  return Boolean(
+    fechaNormalizada &&
+    inicioNormalizado &&
+    finNormalizado &&
+    fechaNormalizada >= inicioNormalizado &&
+    fechaNormalizada < finNormalizado
+  )
 }
 
 function FormularioElectrico({ valores, onChange }) {
@@ -1532,7 +1547,7 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
     const porId = new Map()
     ;[...(respuesta.data || []), ...(!recientes.error ? recientes.data || [] : [])].forEach((item) => {
       const fechaRegistro = fechaDocumentoProtocolo(item)
-      if (!fechaRegistro || fechaRegistro < inicio || fechaRegistro >= finTexto) return
+      if (!fechaDentroDeRangoProtocolo(fechaRegistro, inicio, finTexto)) return
       porId.set(String(item.id), item)
     })
 
