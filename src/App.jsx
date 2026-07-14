@@ -605,6 +605,10 @@ const [mostrarEditorMateriales, setMostrarEditorMateriales] = useState(false)
 const [cargandoMateriales, setCargandoMateriales] = useState(false)
 const [avisoPruebaElectrica, setAvisoPruebaElectrica] = useState(null)
 const [mostrarLlamadosPendientes, setMostrarLlamadosPendientes] = useState(false)
+const [mostrarRegistroAcciones, setMostrarRegistroAcciones] = useState(false)
+const [mostrarTodasAccionesDia, setMostrarTodasAccionesDia] = useState(false)
+const [accionesDia, setAccionesDia] = useState([])
+const [cargandoAccionesDia, setCargandoAccionesDia] = useState(false)
 const [solicitantesPendientes, setSolicitantesPendientes] = useState({})
 const [mostrarMenuAcciones, setMostrarMenuAcciones] = useState(false)
 const [mostrarMenuModulo, setMostrarMenuModulo] = useState(false)
@@ -642,7 +646,9 @@ const [protocoloManualMensual, setProtocoloManualMensual] = useState(false)
 const solicitudesPendientesRef = useRef(new Set())
 const autoScrollArrastreRef = useRef(null)
 const esRolSoloLectura = ['visor', 'analista', 'electrico'].includes(perfil?.rol)
-const puedeAgregarModulos = ['admin', 'operador'].includes(perfil?.rol)
+const puedeAgregarModulos = ['admin', 'operador', 'colaborador'].includes(perfil?.rol)
+const puedeMoverModulos = ['admin', 'operador', 'colaborador'].includes(perfil?.rol)
+const puedeFinalizarModulos = ['admin', 'colaborador'].includes(perfil?.rol)
 const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
 const puedeUsarProtocolo = ['admin', 'operador', 'control_calidad', 'visor', 'analista'].includes(perfil?.rol)
 const puedeEditarProtocolo = ['admin', 'operador'].includes(perfil?.rol)
@@ -706,6 +712,177 @@ function mostrarNotificacion(mensaje) {
   setNotificacion(mensaje)
 }
 
+function rangoDiaActual() {
+  const hoy = formatearFechaInput(new Date())
+  const manana = new Date(`${hoy}T00:00:00`)
+  manana.setDate(manana.getDate() + 1)
+  return {
+    inicio: `${hoy}T00:00:00`,
+    fin: `${formatearFechaInput(manana)}T00:00:00`,
+  }
+}
+
+function nombreTipoAccion(tipo) {
+  if (tipo === 'ingreso') return 'Ingreso'
+  if (tipo === 'finalizacion') return 'Finalización'
+  if (tipo === 'cambio_estado') return 'Cambio estado'
+  if (tipo === 'aprobacion_prueba_electrica') return 'Aprobación prueba eléctrica'
+  if (tipo === 'rechazo_prueba_electrica') return 'Rechazo prueba eléctrica'
+  return tipo || 'Acción'
+}
+
+async function cargarAccionesDia() {
+  if (perfil?.rol !== 'admin') return
+
+  setCargandoAccionesDia(true)
+  const { inicio, fin } = rangoDiaActual()
+  const { data, error } = await supabase
+    .from('registro_acciones_modulos')
+    .select('*')
+    .gte('created_at', inicio)
+    .lt('created_at', fin)
+    .order('created_at', { ascending: false })
+  setCargandoAccionesDia(false)
+
+  if (error) {
+    console.error(error)
+    mostrarNotificacion('No se pudo cargar el registro de acciones. Revisa si existe la tabla en Supabase.')
+    return
+  }
+
+  setAccionesDia(data || [])
+}
+
+async function registrarAccionModulo({ tipo, modulo = {}, datosAntes = null, datosDespues = null, descripcion = '' }) {
+  const payload = {
+    tipo,
+    modulo_id: String(modulo?.id || datosDespues?.id || datosAntes?.id || ''),
+    serie: modulo?.serie || datosDespues?.serie || datosAntes?.serie || '',
+    linea: modulo?.linea || datosDespues?.linea || datosAntes?.linea || null,
+    descripcion,
+    usuario_id: session?.user?.id || null,
+    usuario_nombre: perfil?.nombre || perfil?.email || session?.user?.email || perfil?.rol || '',
+    datos_antes: datosAntes,
+    datos_despues: datosDespues,
+    deshecho: false,
+  }
+
+  const { error } = await supabase
+    .from('registro_acciones_modulos')
+    .insert([payload])
+
+  if (error) {
+    console.error(error)
+    if (!error.message?.includes('registro_acciones_modulos')) {
+      mostrarNotificacion('La acción se realizó, pero no se pudo guardar en el registro: ' + error.message)
+    }
+  }
+}
+
+async function marcarAccionDeshecha(accion) {
+  const { error } = await supabase
+    .from('registro_acciones_modulos')
+    .update({
+      deshecho: true,
+      fecha_deshacer: new Date().toISOString(),
+      deshecho_por: perfil?.nombre || session?.user?.email || '',
+    })
+    .eq('id', accion.id)
+
+  if (error) {
+    mostrarNotificacion('La acción se deshizo, pero no se pudo marcar en el registro: ' + error.message)
+    return
+  }
+
+  await cargarAccionesDia()
+}
+
+async function deshacerAccionModulo(accion) {
+  if (perfil?.rol !== 'admin' || !accion || accion.deshecho) return
+
+  const confirmado = window.confirm(`¿Deshacer ${nombreTipoAccion(accion.tipo).toLowerCase()} de la serie ${accion.serie || ''}?`)
+  if (!confirmado) return
+
+  if (accion.tipo === 'ingreso') {
+    const idModulo = accion.datos_despues?.id || accion.modulo_id
+    const { error } = await supabase
+      .from('modulos')
+      .delete()
+      .eq('id', idModulo)
+
+    if (error) {
+      mostrarNotificacion('No se pudo deshacer el ingreso: ' + error.message)
+      return
+    }
+  } else if (accion.tipo === 'cambio_estado' || accion.tipo === 'aprobacion_prueba_electrica') {
+    const anterior = accion.datos_antes || {}
+    const { error } = await supabase
+      .from('modulos')
+      .update({
+        estado: anterior.estado,
+        solicitud_prueba: accion.tipo === 'aprobacion_prueba_electrica'
+          ? true
+          : anterior.solicitud_prueba,
+        fecha_prueba_electrica: anterior.fecha_prueba_electrica || null,
+        protocolo_entrega: anterior.protocolo_entrega || {},
+      })
+      .eq('id', anterior.id || accion.modulo_id)
+
+    if (error) {
+      mostrarNotificacion('No se pudo deshacer la acción: ' + error.message)
+      return
+    }
+  } else if (accion.tipo === 'rechazo_prueba_electrica') {
+    const anterior = accion.datos_antes || {}
+    const { error } = await supabase
+      .from('modulos')
+      .update({
+        solicitud_prueba: true,
+        solicitado_por: anterior.solicitado_por || null,
+        fecha_solicitud: anterior.fecha_solicitud || null,
+      })
+      .eq('id', anterior.id || accion.modulo_id)
+
+    if (error) {
+      mostrarNotificacion('No se pudo deshacer el rechazo: ' + error.message)
+      return
+    }
+  } else if (accion.tipo === 'finalizacion') {
+    const moduloAnterior = accion.datos_antes || {}
+    const historialId = accion.datos_despues?.id
+
+    const moduloRestaurado = { ...moduloAnterior }
+    delete moduloRestaurado.modulo_id
+    delete moduloRestaurado.fecha_salida
+
+    const { error: errorInsert } = await supabase
+      .from('modulos')
+      .insert([moduloRestaurado])
+
+    if (errorInsert) {
+      mostrarNotificacion('No se pudo restaurar el módulo. Es posible que la posición ya esté ocupada: ' + errorInsert.message)
+      return
+    }
+
+    if (historialId) {
+      const { error: errorDelete } = await supabase
+        .from('historial_modulos')
+        .delete()
+        .eq('id', historialId)
+
+      if (errorDelete) {
+        mostrarNotificacion('Módulo restaurado, pero no se pudo eliminar del historial: ' + errorDelete.message)
+        return
+      }
+    }
+  }
+
+  await marcarAccionDeshecha(accion)
+  await cargarTablero()
+  await cargarHistorial()
+  mostrarNotificacion('Acción deshecha correctamente')
+}
+
 function detenerAutoScrollArrastre() {
   if (autoScrollArrastreRef.current) {
     window.cancelAnimationFrame(autoScrollArrastreRef.current)
@@ -747,6 +924,8 @@ useEffect(() => {
 
 function cerrarPanelesFlotantes() {
   setMostrarLlamadosPendientes(false)
+  setMostrarRegistroAcciones(false)
+  setMostrarTodasAccionesDia(false)
   setMostrarMenuAcciones(false)
   setMostrarMenuModulo(false)
 }
@@ -1082,10 +1261,9 @@ async function crearModulo() {
   if (
     !serieNueva.trim() ||
     !tipoNuevo.trim() ||
-    !proyectoNuevo.trim() ||
-    !responsableNuevo.trim()
+    !proyectoNuevo.trim()
   ) {
-    alert('Debe completar todos los campos')
+    alert('Debe completar serie, tipo y proyecto')
     return
   }
 
@@ -1105,20 +1283,22 @@ async function crearModulo() {
     }
   }
 
-  const { error } = await supabase
+  const { data: moduloCreado, error } = await supabase
     .from('modulos')
     .insert([
       {
         serie: serieNueva,
         tipo: tipoNuevo,
         proyecto: proyectoNuevo,
-        responsable: responsableNuevo,
+        responsable: responsableNuevo.trim(),
         linea: lineaIngreso,
         posicion: posicionIngreso,
         estado: 'Sin iniciar',
         fecha_ingreso: new Date(),
       },
     ])
+    .select('*')
+    .single()
 
   if (error) {
     alert(error.message)
@@ -1126,6 +1306,14 @@ async function crearModulo() {
   }
 
   await cargarTablero()
+
+  await registrarAccionModulo({
+    tipo: 'ingreso',
+    modulo: moduloCreado || { serie: serieNueva, linea: lineaIngreso },
+    datosAntes: null,
+    datosDespues: moduloCreado,
+    descripcion: `Ingresó módulo en línea ${lineaIngreso}`,
+  })
 
   setMostrarNuevoModulo(false)
 
@@ -2167,10 +2355,12 @@ function limpiarEstadosModal() {
         nota: notaEditada,
       }
 
+  let moduloAntesCambio = null
+
   if (puedeEditarDatosModulo) {
     const { data: moduloActual, error: errorCargaModulo } = await supabase
       .from('modulos')
-      .select('protocolo_entrega')
+      .select('*')
       .eq('id', moduloSeleccionado.id)
       .single()
 
@@ -2178,6 +2368,8 @@ function limpiarEstadosModal() {
       mostrarNotificacion('No se pudo cargar el protocolo actual: ' + errorCargaModulo.message)
       return
     }
+
+    moduloAntesCambio = moduloActual
 
     updatePayload.protocolo_entrega = sincronizarDatosModuloEnProtocolo(
       moduloActual?.protocolo_entrega || {},
@@ -2220,7 +2412,7 @@ console.log({
     const fechaPruebaInput = formatearFechaInput(new Date())
     const moduloBase = {
       ...moduloSeleccionado,
-      ...(moduloActual || {}),
+      ...(moduloAntesCambio || {}),
     }
     const moduloParaProtocolo = {
       ...moduloBase,
@@ -2364,6 +2556,28 @@ async function cancelarSolicitudPruebaElectrica() {
     return
   }
 
+  if (
+    puedeEditarDatosModulo &&
+    moduloAntesCambio &&
+    normalizarTexto(moduloAntesCambio.estado) !== normalizarTexto(estadoEditado)
+  ) {
+    await registrarAccionModulo({
+      tipo: 'cambio_estado',
+      modulo: {
+        ...moduloAntesCambio,
+        estado: estadoEditado,
+        linea: lineaEditada,
+        serie: serieEditada,
+      },
+      datosAntes: moduloAntesCambio,
+      datosDespues: {
+        ...moduloAntesCambio,
+        ...updatePayload,
+      },
+      descripcion: `${moduloAntesCambio.estado || 'Sin estado'} → ${estadoEditado}`,
+    })
+  }
+
   await cargarTablero()
   limpiarEstadosModal()
   mostrarNotificacion('Solicitud de prueba eléctrica cancelada')
@@ -2412,6 +2626,24 @@ async function aprobarPruebaElectrica() {
     return
   }
 
+  await registrarAccionModulo({
+    tipo: 'aprobacion_prueba_electrica',
+    modulo: {
+      ...moduloParaAprobar,
+      estado: 'Prueba elÃ©ctrica',
+      fecha_prueba_electrica: fechaPruebaDb,
+    },
+    datosAntes: moduloParaAprobar,
+    datosDespues: {
+      ...moduloParaAprobar,
+      solicitud_prueba: false,
+      estado: 'Prueba elÃ©ctrica',
+      fecha_prueba_electrica: fechaPruebaDb,
+      protocolo_entrega: protocoloActualizado,
+    },
+    descripcion: `Aprobada por ${perfil?.nombre || perfil?.rol || 'usuario'} (${perfil?.rol || 'sin rol'})`,
+  })
+
   await cargarTablero()
   limpiarEstadosModal()
   mostrarNotificacion('Prueba eléctrica aprobada')
@@ -2419,6 +2651,17 @@ async function aprobarPruebaElectrica() {
 
 async function rechazarPruebaElectrica() {
   if (!moduloSeleccionado?.id) return
+
+  const { data: moduloAntesRechazo, error: errorCargaModulo } = await supabase
+    .from('modulos')
+    .select('*')
+    .eq('id', moduloSeleccionado.id)
+    .single()
+
+  if (errorCargaModulo) {
+    mostrarNotificacion('No se pudo cargar el mÃ³dulo para rechazar la prueba: ' + errorCargaModulo.message)
+    return
+  }
 
   const { error } = await supabase
     .from('modulos')
@@ -2429,6 +2672,17 @@ async function rechazarPruebaElectrica() {
     mostrarNotificacion(error.message)
     return
   }
+
+  await registrarAccionModulo({
+    tipo: 'rechazo_prueba_electrica',
+    modulo: moduloAntesRechazo,
+    datosAntes: moduloAntesRechazo,
+    datosDespues: {
+      ...moduloAntesRechazo,
+      solicitud_prueba: false,
+    },
+    descripcion: `Rechazada por ${perfil?.nombre || perfil?.rol || 'usuario'} (${perfil?.rol || 'sin rol'})`,
+  })
 
   await cargarTablero()
   limpiarEstadosModal()
@@ -2940,6 +3194,7 @@ async function guardarProtocoloEntrega(protocolo) {
 
 
 async function finalizarModulo() {
+  if (!puedeFinalizarModulos || !moduloSeleccionado?.id) return
 
   const { data: modulo, error: errorModulo } = await supabase
     .from('modulos')
@@ -2970,6 +3225,13 @@ async function finalizarModulo() {
     })
 
     await cargarTablero()
+    await registrarAccionModulo({
+      tipo: 'finalizacion',
+      modulo,
+      datosAntes: modulo,
+      datosDespues: null,
+      descripcion: 'Retirado sin instalación',
+    })
     limpiarEstadosModal()
     mostrarNotificacion('Módulo sin instalacion retirado sin registro')
     return
@@ -3032,6 +3294,14 @@ async function finalizarModulo() {
     return
   }
 
+  const { data: historialCreado } = await supabase
+    .from('historial_modulos')
+    .select('*')
+    .eq('modulo_id', modulo.id)
+    .order('fecha_salida', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
   const { error: errorDelete } = await supabase
     .from('modulos')
     .delete()
@@ -3044,6 +3314,14 @@ async function finalizarModulo() {
 
   await cargarTablero()
   await cargarHistorial()
+
+  await registrarAccionModulo({
+    tipo: 'finalizacion',
+    modulo,
+    datosAntes: modulo,
+    datosDespues: historialCreado || historialPayload,
+    descripcion: `Finalizó módulo desde línea ${modulo.linea}`,
+  })
 
   limpiarEstadosModal()
 
@@ -3080,7 +3358,7 @@ async function eliminarModuloSinRegistro() {
 }
 
 async function moverModulo(moduloId, lineaDestino, posicionDestino) {
-  if (!puedeAgregarModulos) {
+  if (!puedeMoverModulos) {
     mostrarNotificacion('No tienes permisos para mover módulos')
     return
   }
@@ -3327,7 +3605,7 @@ const ultimosFinalizados = [...historial]
   return (
     <>
       <div
-        onClick={cerrarPanelesFlotantes}
+        onClick={cerrarPanelesYModulo}
         style={{
           padding: '20px',
           width: '100%',
@@ -3366,6 +3644,153 @@ const ultimosFinalizados = [...historial]
           >
             Prueba eléctrica línea {avisoPruebaElectrica.linea}
           </button>
+        )}
+
+        {perfil?.rol === 'admin' && (
+          <>
+            <button
+              aria-label="Ver acciones del dÃ­a"
+              onClick={async (e) => {
+                e.stopPropagation()
+                const abrir = !mostrarRegistroAcciones
+                cerrarVentanasEmergentes()
+                setMostrarRegistroAcciones(abrir)
+                setMostrarTodasAccionesDia(false)
+                if (abrir) await cargarAccionesDia()
+              }}
+              style={{
+                position: 'fixed',
+                left: '12px',
+                bottom: '84px',
+                width: '52px',
+                height: '52px',
+                borderRadius: '50%',
+                border: '2px solid white',
+                background: '#1976d2',
+                color: 'white',
+                fontSize: '30px',
+                lineHeight: '52px',
+                zIndex: 2501,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+              }}
+            >
+              🔂
+            </button>
+
+            {mostrarRegistroAcciones && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  position: 'fixed',
+                  left: '12px',
+                  bottom: '146px',
+                  width: 'calc(100vw - 24px)',
+                  maxWidth: '420px',
+                  maxHeight: '62vh',
+                  overflowY: 'auto',
+                  padding: '16px',
+                  boxSizing: 'border-box',
+                  border: '1px solid white',
+                  borderRadius: '10px',
+                  background: '#222',
+                  color: 'white',
+                  textAlign: 'left',
+                  zIndex: 2500,
+                  boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ margin: 0 }}>Acciones de hoy</h3>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    {accionesDia.length > 5 && (
+                      <button
+                        type="button"
+                        onClick={() => setMostrarTodasAccionesDia((actual) => !actual)}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '7px',
+                          border: '1px solid #777',
+                          background: '#333',
+                          color: 'white',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {mostrarTodasAccionesDia ? 'Ver menos' : 'Ver más'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={cargarAccionesDia}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '7px',
+                        border: '1px solid #777',
+                        background: '#333',
+                        color: 'white',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+                </div>
+
+                {cargandoAccionesDia ? (
+                  <p>Cargando...</p>
+                ) : accionesDia.length === 0 ? (
+                  <p>No hay ingresos, finalizaciones o cambios de estado registrados hoy.</p>
+                ) : (
+                  (mostrarTodasAccionesDia ? accionesDia : accionesDia.slice(0, 5)).map((accion) => (
+                    <div
+                      key={accion.id}
+                      style={{
+                        padding: '10px 0',
+                        borderBottom: '1px solid #444',
+                        opacity: accion.deshecho ? 0.55 : 1,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                        <strong>{nombreTipoAccion(accion.tipo)}</strong>
+                        <span style={{ color: '#bbb', fontSize: '12px' }}>
+                          {accion.created_at ? new Date(accion.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      </div>
+                      <div style={{ marginTop: '4px', fontSize: '13px', color: '#ddd' }}>
+                        Serie: <strong>{accion.serie || '-'}</strong>
+                        {accion.linea ? ` | Línea ${accion.linea}` : ''}
+                      </div>
+                      <div style={{ marginTop: '3px', fontSize: '13px', color: '#ccc' }}>
+                        Usuario: {accion.usuario_nombre || 'No registrado'}
+                      </div>
+                      {accion.descripcion && (
+                        <div style={{ marginTop: '3px', fontSize: '13px', color: '#ffecb3' }}>
+                          {accion.descripcion}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        disabled={accion.deshecho}
+                        onClick={() => deshacerAccionModulo(accion)}
+                        style={{
+                          marginTop: '8px',
+                          padding: '7px 10px',
+                          borderRadius: '7px',
+                          border: '1px solid #ffb74d',
+                          background: accion.deshecho ? '#555' : '#bf360c',
+                          color: 'white',
+                          cursor: accion.deshecho ? 'not-allowed' : 'pointer',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {accion.deshecho ? 'Deshecho' : 'Deshacer'}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {recibeAvisosPrueba && (
@@ -3960,8 +4385,8 @@ const ultimosFinalizados = [...historial]
               <div
                 key={`${pos.linea}-${pos.posicion}`}
                 className={esSolicitudPruebaActiva(pos.solicitud_prueba) ? 'modulo-prueba-pendiente' : undefined}
-                draggable={puedeAgregarModulos && pos.serie ? true : false}
-                onDragStart={() => puedeAgregarModulos && pos.serie && setModuloEnDrag(pos)}
+                draggable={puedeMoverModulos && pos.serie ? true : false}
+                onDragStart={() => puedeMoverModulos && pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
                   e.preventDefault()
                   e.currentTarget.style.opacity = '0.6'
@@ -4023,7 +4448,7 @@ const ultimosFinalizados = [...historial]
                   minHeight: '60px',
                   padding: '3px',
                   borderRadius: '5px',
-                  cursor: puedeAgregarModulos && pos.serie ? 'grab' : 'pointer',
+                  cursor: puedeMoverModulos && pos.serie ? 'grab' : 'pointer',
                   backgroundColor: pos.estado
                     ? colorEstado(pos.estado, pos)
                     : '#222',
@@ -4171,8 +4596,8 @@ const ultimosFinalizados = [...historial]
               <div
                 key={`${pos.linea}-${pos.posicion}`}
                 className={esSolicitudPruebaActiva(pos.solicitud_prueba) ? 'modulo-prueba-pendiente' : undefined}
-                draggable={puedeAgregarModulos && pos.serie ? true : false}
-                onDragStart={() => puedeAgregarModulos && pos.serie && setModuloEnDrag(pos)}
+                draggable={puedeMoverModulos && pos.serie ? true : false}
+                onDragStart={() => puedeMoverModulos && pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
                   e.preventDefault()
                   e.currentTarget.style.opacity = '0.6'
@@ -4242,7 +4667,7 @@ const ultimosFinalizados = [...historial]
                   minHeight: '120px',
                   padding: '8px',
                   borderRadius: '8px',
-                  cursor: puedeAgregarModulos && pos.serie ? 'grab' : 'pointer',
+                  cursor: puedeMoverModulos && pos.serie ? 'grab' : 'pointer',
                   backgroundColor: pos.estado
                     ? colorEstado(pos.estado, pos)
                     : '#222',
@@ -4364,7 +4789,7 @@ const ultimosFinalizados = [...historial]
             {rolSolicitante && ` (${rolSolicitante})`}
           </p>
 
-          {perfil?.rol === 'admin' && (
+          {puedeFinalizarModulos && (
             <button
               onClick={abrirResumenMateriales}
               style={{ width: '100%', marginBottom: '10px', padding: '12px' }}
@@ -4604,7 +5029,7 @@ const ultimosFinalizados = [...historial]
             )}
           </div>
 
-          {perfil?.rol === 'admin' && (
+          {puedeFinalizarModulos && (
             <button
               onClick={finalizarModulo}
               style={{
