@@ -180,6 +180,25 @@ const encabezadosProtocolosMensuales = [
   { clave: 'idOt', lineas: ['ID.', 'OT'] },
 ]
 
+function separarIdsOt(valor) {
+  const valores = String(valor ?? '')
+    .split(/[\/,;\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+
+  while (valores.length < 3) valores.push('')
+  return valores
+}
+
+function unirIdsOt(valores = []) {
+  return valores
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' / ')
+}
+
 function formatearPrecioMaterial(valor) {
   const numero = normalizarPrecioMaterial(valor)
   if (!numero) return '$ 0'
@@ -334,6 +353,20 @@ function agregarNotaGarantiaProtocolo(protocolo = {}, fechaRevision) {
   return {
     ...protocolo,
     observaciones: [observacionesSinNota, notaGarantia].filter(Boolean).join('\n'),
+  }
+}
+
+function completarDatosPruebaEnProtocolo(protocolo = {}, modulo = {}, fechaPrueba, responsablePrueba = '') {
+  const fechaProtocolo = fechaParaInput(fechaPrueba)
+
+  return {
+    ...protocolo,
+    fecha: fechaProtocolo || protocolo.fecha || '',
+    responsable: modulo.responsable || protocolo.responsable || responsablePrueba || '',
+    serie: protocolo.serie || modulo.serie || '',
+    tipo: protocolo.tipo || modulo.tipo || '',
+    proyecto: protocolo.proyecto || modulo.proyecto || '',
+    linea: protocolo.linea || modulo.linea || '',
   }
 }
 
@@ -577,6 +610,7 @@ const [protocolosMensuales, setProtocolosMensuales] = useState([])
 const [cargandoProtocolosMensuales, setCargandoProtocolosMensuales] = useState(false)
 const [busquedaProtocolosMensuales, setBusquedaProtocolosMensuales] = useState('')
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
+const [idsOtEnEdicion, setIdsOtEnEdicion] = useState(['', '', ''])
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
 const [ajusteCobroMensual, setAjusteCobroMensual] = useState({ itemKey: '', itemLabel: '', tipoCobro: '', valor: '', motivo: '' })
 const [versionProtocoloEntrega, setVersionProtocoloEntrega] = useState(0)
@@ -1768,6 +1802,7 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
       : item
   )))
   setIdOtEnEdicion(null)
+  setIdsOtEnEdicion(['', '', ''])
   mostrarNotificacion('ID OT guardado')
 }
 
@@ -2131,7 +2166,38 @@ console.log({
   if (shouldSetFechaPrueba) {
     console.log("Guardando fecha de prueba eléctrica")
 
-    updatePayload.fecha_prueba_electrica = new Date().toISOString()
+    const { data: moduloActual, error: errorCargaModulo } = await supabase
+      .from('modulos')
+      .select('*')
+      .eq('id', moduloSeleccionado.id)
+      .single()
+
+    if (errorCargaModulo) {
+      mostrarNotificacion('No se pudo cargar el mÃ³dulo para guardar la prueba: ' + errorCargaModulo.message)
+      return
+    }
+
+    const fechaPruebaInput = formatearFechaInput(new Date())
+    const moduloBase = {
+      ...moduloSeleccionado,
+      ...(moduloActual || {}),
+    }
+    const moduloParaProtocolo = {
+      ...moduloBase,
+      serie: serieEditada,
+      tipo: tipoEditado,
+      proyecto: proyectoEditado,
+      responsable: responsableEditado,
+      linea: lineaEditada,
+    }
+
+    updatePayload.fecha_prueba_electrica = `${fechaPruebaInput}T00:00:00`
+    updatePayload.protocolo_entrega = completarDatosPruebaEnProtocolo(
+      moduloBase?.protocolo_entrega || {},
+      moduloParaProtocolo,
+      updatePayload.fecha_prueba_electrica,
+      responsableEditado || perfil?.nombre || ''
+    )
   }
 
   if (isEnGarantia) {
@@ -2266,12 +2332,38 @@ async function cancelarSolicitudPruebaElectrica() {
 async function aprobarPruebaElectrica() {
   if (!moduloSeleccionado?.id) return
 
+  const { data: moduloActual, error: errorCargaModulo } = await supabase
+    .from('modulos')
+    .select('*')
+    .eq('id', moduloSeleccionado.id)
+    .single()
+
+  if (errorCargaModulo) {
+    mostrarNotificacion('No se pudo cargar el mÃ³dulo para aprobar la prueba: ' + errorCargaModulo.message)
+    return
+  }
+
+  const moduloParaAprobar = {
+    ...moduloSeleccionado,
+    ...(moduloActual || {}),
+  }
+
+  const fechaPruebaInput = formatearFechaInput(new Date())
+  const fechaPruebaDb = `${fechaPruebaInput}T00:00:00`
+  const protocoloActualizado = completarDatosPruebaEnProtocolo(
+    moduloParaAprobar?.protocolo_entrega || {},
+    moduloParaAprobar,
+    fechaPruebaDb,
+    perfil?.nombre || ''
+  )
+
   const { error } = await supabase
     .from('modulos')
     .update({
       solicitud_prueba: false,
       estado: 'Prueba eléctrica',
-      fecha_prueba_electrica: new Date().toISOString(),
+      fecha_prueba_electrica: fechaPruebaDb,
+      protocolo_entrega: protocoloActualizado,
     })
     .eq('id', moduloSeleccionado.id)
 
@@ -2345,6 +2437,23 @@ async function cargarNombreSolicitante(idSolicitante, moduloId) {
 
   setNombreSolicitante(data?.nombre || 'No disponible')
   setRolSolicitante(data?.rol || '')
+}
+
+async function obtenerNombrePerfil(idPerfil) {
+  if (!idPerfil) return ''
+
+  const { data, error } = await supabase
+    .from('perfiles')
+    .select('nombre')
+    .eq('id', idPerfil)
+    .maybeSingle()
+
+  if (error) {
+    console.error(error)
+    return ''
+  }
+
+  return data?.nombre || ''
 }
 
 async function cargarMaterialesModulo(moduloId) {
@@ -2488,23 +2597,13 @@ async function abrirProtocoloEntrega() {
 
   const { data: modulo, error } = await supabase
     .from('modulos')
-    .select('materiales, protocolo_entrega, solicitado_por')
+    .select('materiales, protocolo_entrega, responsable')
     .eq('id', moduloSeleccionado.id)
     .single()
 
   if (error) {
     mostrarNotificacion('No se pudo cargar el protocolo: ' + error.message)
     return
-  }
-
-  let nombreResponsable = ''
-  if (modulo?.solicitado_por) {
-    const { data: perfilSolicitante } = await supabase
-      .from('perfiles')
-      .select('nombre')
-      .eq('id', modulo.solicitado_por)
-      .maybeSingle()
-    nombreResponsable = perfilSolicitante?.nombre || ''
   }
 
   setFormulariosElectricos((actuales) => ({
@@ -2516,7 +2615,7 @@ async function abrirProtocoloEntrega() {
     fecha: modulo?.protocolo_entrega?.fecha || fechaParaInput(modulo?.fecha_prueba_electrica),
   })
   setResponsableProtocolo(
-    modulo?.protocolo_entrega?.responsable || nombreResponsable
+    modulo?.protocolo_entrega?.responsable || modulo?.responsable || moduloSeleccionado?.responsable || ''
   )
   setProtocoloManualMensual(false)
   setVersionProtocoloEntrega((version) => version + 1)
@@ -5225,42 +5324,66 @@ const ultimosFinalizados = [...historial]
                   </td>
                   <td style={{ padding: '8px', border: '1px solid #444' }}>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <input
-                        type="text"
-                        value={registro.idOt}
-                        disabled={idOtEnEdicion !== claveRegistro}
-                        placeholder="-"
-                        onChange={(e) => setProtocolosMensuales((actuales) => actuales.map((item) => (
-                          item.id === registro.id && item.origen === registro.origen
-                            ? { ...item, idOt: e.target.value }
-                            : item
-                        )))}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') guardarIdOtProtocoloMensual(registro, e.currentTarget.value)
-                        }}
-                        onBlur={(e) => {
-                          if (idOtEnEdicion === claveRegistro) {
-                            guardarIdOtProtocoloMensual(registro, e.currentTarget.value)
-                          }
-                        }}
-                        style={{
-                          width: '110px',
-                          padding: idOtEnEdicion === claveRegistro ? '7px' : '0',
-                          background: idOtEnEdicion === claveRegistro ? 'white' : 'transparent',
-                          color: idOtEnEdicion === claveRegistro ? '#111' : 'white',
-                          border: idOtEnEdicion === claveRegistro ? '1px solid #777' : '1px solid transparent',
-                          borderRadius: '6px',
-                          font: 'inherit',
-                          fontWeight: 700,
-                          opacity: 1,
-                        }}
-                      />
+                      {idOtEnEdicion === claveRegistro ? (
+                        <div style={{ display: 'grid', gap: '4px' }}>
+                          {idsOtEnEdicion.map((valorOt, indiceOt) => (
+                            <input
+                              key={indiceOt}
+                              type="text"
+                              value={valorOt}
+                              placeholder={`OT ${indiceOt + 1}`}
+                              onChange={(e) => {
+                                const nuevosValores = [...idsOtEnEdicion]
+                                nuevosValores[indiceOt] = e.target.value
+                                setIdsOtEnEdicion(nuevosValores)
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') guardarIdOtProtocoloMensual(registro, unirIdsOt(idsOtEnEdicion))
+                              }}
+                              style={{
+                                width: '92px',
+                                padding: '6px',
+                                background: 'white',
+                                color: '#111',
+                                border: '1px solid #777',
+                                borderRadius: '6px',
+                                font: 'inherit',
+                                fontWeight: 700,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', minWidth: '98px' }}>
+                          {separarIdsOt(registro.idOt).filter(Boolean).length > 0 ? (
+                            separarIdsOt(registro.idOt).filter(Boolean).map((valorOt, indiceOt) => (
+                              <span
+                                key={`${valorOt}-${indiceOt}`}
+                                style={{
+                                  padding: '3px 7px',
+                                  borderRadius: '999px',
+                                  background: '#263238',
+                                  border: '1px solid #546e7a',
+                                  color: 'white',
+                                  fontWeight: 700,
+                                  fontSize: '13px',
+                                }}
+                              >
+                                {valorOt}
+                              </span>
+                            ))
+                          ) : (
+                            <span style={{ color: '#aaa', fontWeight: 700 }}>-</span>
+                          )}
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
                           if (idOtEnEdicion === claveRegistro) {
-                            guardarIdOtProtocoloMensual(registro, registro.idOt)
+                            guardarIdOtProtocoloMensual(registro, unirIdsOt(idsOtEnEdicion))
                           } else {
+                            setIdsOtEnEdicion(separarIdsOt(registro.idOt))
                             setIdOtEnEdicion(claveRegistro)
                           }
                         }}
