@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import * as pdfjsLib from 'pdfjs-dist'
+import mammoth from 'mammoth/mammoth.browser'
 import { supabase } from './services/supabase'
 import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
@@ -18,6 +20,7 @@ import DetalleCobroModal from './components/DetalleCobroModal'
 import ReintegrarModuloModal from './components/ReintegrarModuloModal'
 import DescargaProtocolosDiariosModal from './components/DescargaProtocolosDiariosModal'
 import BalanceMaterialesModal from './components/BalanceMaterialesModal'
+import ValesBodegaModal from './components/ValesBodegaModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
 import { formatearFecha } from './utils/fechas'
@@ -28,6 +31,11 @@ import {
   marcarRegistroAccionDeshecha,
   registrarRegistroAccionModulo,
 } from './services/registroAccionesService'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url,
+).toString()
 
 function esSolicitudPruebaActiva(valor) {
   return valor === true || valor === 'true' || valor === 1
@@ -190,6 +198,8 @@ const catalogoPreciosProtocolo = [
 ]
 
 const seccionesCatalogoPrecios = [...new Set(catalogoPreciosProtocolo.map((item) => item.seccion))]
+const opcionesMaterialesBalance = [...new Set(camposMateriales.map(([item]) => item))]
+  .sort((a, b) => a.localeCompare(b))
 const valorBaseManoObraMantencion = 18900
 const encabezadosProtocolosMensuales = [
   { clave: 'ver', lineas: ['Ver'], align: 'center' },
@@ -276,11 +286,33 @@ function normalizarTextoComparacion(valor) {
     .replace(/Ã³/gi, 'o')
     .replace(/Ãº/gi, 'u')
     .replace(/Ã±/gi, 'n')
+    .replace(/Ã¡/gi, 'a')
+    .replace(/Ã©/gi, 'e')
+    .replace(/Ã­/gi, 'i')
+    .replace(/Ã³/gi, 'o')
+    .replace(/Ãº/gi, 'u')
+    .replace(/Ã±/gi, 'n')
     .replace(/Â/g, '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '')
+}
+
+function normalizarClaveMaterialBalance(valor) {
+  return normalizarTextoComparacion(valor)
+    .replace(/retenedoresde/g, 'retenedor')
+    .replace(/retenedores/g, 'retenedor')
+    .replace(/retenedorde/g, 'retenedor')
+    .replace(/retenedor20mm/g, 'retenedor20')
+    .replace(/monofasica/g, 'monof')
+    .replace(/monofasico/g, 'monof')
+    .replace(/bifasica/g, 'bif')
+    .replace(/bifasico/g, 'bif')
+    .replace(/repartidora/g, 'repartidor')
+    .replace(/barra/g, '')
+    .replace(/accesorios/g, 'acces')
+    .replace(/accesorio/g, 'acces')
 }
 
 const equivalenciasPrecioProtocolo = {
@@ -312,6 +344,7 @@ const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Aut. bifásico 2x25A')]: 'Auto. Bifásico 2x25-32A',
   [normalizarTextoComparacion('Porta Fusible')]: 'Porta Fusibles',
   [normalizarTextoComparacion('Repartidor 4x80A')]: 'Repartidor 4x80A',
+  [normalizarTextoComparacion('Barra repartidora')]: 'Repartidor 4x80A',
   [normalizarTextoComparacion('Falso polo')]: 'Falso Polo 1Mts',
   [normalizarTextoComparacion('BPC LH 100x45 + acces')]: 'BPC LH 100x45 + Acces',
   [normalizarTextoComparacion('Tapa idrobox IP65')]: 'Tapa Idrobox IP55',
@@ -319,6 +352,41 @@ const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Panel led 600x600 mm')]: 'Panel Led 600x600mm',
   [normalizarTextoComparacion('Accesorio Montaje Panel Led')]: 'Accesorio Mtaje Panel Led',
   [normalizarTextoComparacion('Foco sobrep led 24w')]: 'Foco Sobrep LED 24W',
+}
+
+const equivalenciasValeBodega = {
+  [normalizarTextoComparacion('INT. 9/12 modulo R.5001 MATIX')]: 'INT. 9/12 modulo R.5001 MATIX',
+  [normalizarTextoComparacion('CINTA DE AISLAR')]: 'CINTA DE AISLAR',
+  [normalizarTextoComparacion('TAPA 1MOD.')]: 'Artefacto Simple',
+  [normalizarTextoComparacion('TAPA 2MOD.')]: 'Artefacto Doble',
+  [normalizarTextoComparacion('TAPA 2MOD')]: 'TAPA 2 MODULOS',
+  [normalizarTextoComparacion('TAPA CIEGA')]: 'Tapa Ciega + Soporte',
+  [normalizarTextoComparacion('ENCHUFE MACHO DE 32a SOBRE')]: 'Enchufe Mch Indep 32A',
+  [normalizarTextoComparacion('ENCHUFE HEMBRA DE 32a SOBRE')]: 'Ench. ind. 32A hembra',
+  [normalizarTextoComparacion('FOCO TORTUGA')]: 'Foco Tortuga Led',
+  [normalizarTextoComparacion('TUBO FLUORESCENTE')]: 'Tubo Led',
+  [normalizarTextoComparacion('EQU. FLUOR. 2 * 18 W HERMETICO')]: 'Eq. Herm. Led 40w (Tubo/Placa)',
+  [normalizarTextoComparacion('CABLE EVA RZ-1 VERDE 2.5 MM')]: 'Cable rz1 2.5 MM',
+  [normalizarTextoComparacion('CABLE EVA RZ-1 BLANCO 2.5 MM')]: 'Cable rz1 2.5 MM',
+  [normalizarTextoComparacion('CABLE EVA RZ-1 AZUL 2.5 MM')]: 'Cable rz1 2.5 MM',
+  [normalizarTextoComparacion('CONDUIT PVC TIGREFLEX 20MM 25MM 32MM LIB. HALOG')]: 'Ducto Flex/Rig 20mm LH (Incl Acc)',
+  [normalizarTextoComparacion('CONDUIT PVC TIGREFLEX 20MM LIB')]: 'Conduit 20mm',
+  [normalizarTextoComparacion('CAJA PVC 5/8" O/METALICO')]: 'Caja Tabique 3 Puestos LH',
+  [normalizarTextoComparacion('CAJA ESTANCA 100 * 100 *')]: 'Caja PVC 100x100x65',
+  [normalizarTextoComparacion('TORNILLO PHILIPS AUTORR. 6*2')]: 'TORNILLO PHILIPS AUTORR. 6*2',
+  [normalizarTextoComparacion('TORNILLO AUTOPERFORANTE 8*3')]: 'TORNILLO AUTOPERFORANTE 8*3',
+  [normalizarTextoComparacion('TDA EMBUTIDO 24 MODULOS ARMAI')]: 'Tablero armado',
+  [normalizarTextoComparacion('AUTOM. * 10A LEXO / LEGRAND /STECK')]: 'Aut. Monof 10-16-20A',
+  [normalizarTextoComparacion('AUTOM. * 16A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x16A',
+  [normalizarTextoComparacion('AUTOM. * 20A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x20A',
+  [normalizarTextoComparacion('AUTOM. * 25A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x25-32A',
+  [normalizarTextoComparacion('AUTOM. * 32A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x25-32A',
+  [normalizarTextoComparacion('DIFERENCIAL 2 * 25A 30MA LEXO / LEGRAND / BTICINO')]: 'Diferencial 2x25A',
+  [normalizarTextoComparacion('LUZ PILOTO')]: 'Luz Piloto',
+  [normalizarTextoComparacion('PORTA FUSIBLE CON FUSIBLE')]: 'Porta Fusibles',
+  [normalizarTextoComparacion('FALSO POLO')]: 'Falso Polo 1Mts',
+  [normalizarTextoComparacion('RETENEDORES DE 20')]: 'Retenedor 20mm',
+  [normalizarTextoComparacion('RETENEDOR 20MM')]: 'Retenedor 20mm',
 }
 
 function obtenerMaterialPrecioParaProtocolo(itemProtocolo) {
@@ -640,6 +708,7 @@ const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false
 const [mostrarPreciosMateriales, setMostrarPreciosMateriales] = useState(false)
 const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(false)
 const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
+const [mostrarValesBodega, setMostrarValesBodega] = useState(false)
 const [preciosMateriales, setPreciosMateriales] = useState({})
 const [cargandoPreciosMateriales, setCargandoPreciosMateriales] = useState(false)
 const [guardandoPreciosMateriales, setGuardandoPreciosMateriales] = useState(false)
@@ -652,7 +721,16 @@ const [busquedaProtocolosMensuales, setBusquedaProtocolosMensuales] = useState('
 const [rangoBalanceMateriales, setRangoBalanceMateriales] = useState('mes')
 const [fechaBalanceMateriales, setFechaBalanceMateriales] = useState(new Date().toISOString().slice(0, 7))
 const [protocolosBalanceMateriales, setProtocolosBalanceMateriales] = useState([])
+const [valesBalanceMateriales, setValesBalanceMateriales] = useState([])
+const [configBalanceMateriales, setConfigBalanceMateriales] = useState({})
 const [cargandoBalanceMateriales, setCargandoBalanceMateriales] = useState(false)
+const [fechaValeBodega, setFechaValeBodega] = useState(new Date().toISOString().slice(0, 10))
+const [archivoValeBodega, setArchivoValeBodega] = useState(null)
+const [filasValeBodega, setFilasValeBodega] = useState([])
+const [valesBodegaDia, setValesBodegaDia] = useState([])
+const [cargandoValesBodegaDia, setCargandoValesBodegaDia] = useState(false)
+const [leyendoValeBodega, setLeyendoValeBodega] = useState(false)
+const [guardandoValeBodega, setGuardandoValeBodega] = useState(false)
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [idsOtEnEdicion, setIdsOtEnEdicion] = useState(['', '', ''])
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
@@ -673,6 +751,7 @@ const [protocoloDesdeHistorial, setProtocoloDesdeHistorial] = useState(false)
 const [protocoloManualMensual, setProtocoloManualMensual] = useState(false)
 const solicitudesPendientesRef = useRef(new Set())
 const autoScrollArrastreRef = useRef(null)
+const guardadoBalanceMaterialesRef = useRef({})
 const esRolSoloLectura = tienePermiso(perfil?.rol, 'soloLectura')
 const puedeAgregarModulos = tienePermiso(perfil?.rol, 'agregarModulos')
 const puedeMoverModulos = tienePermiso(perfil?.rol, 'moverModulos')
@@ -688,6 +767,7 @@ const puedeVerPreciosMateriales = tienePermiso(perfil?.rol, 'verPreciosMateriale
 const puedeEditarPreciosMateriales = tienePermiso(perfil?.rol, 'editarPreciosMateriales')
 const puedeVerProtocolosMensuales = tienePermiso(perfil?.rol, 'verProtocolosMensuales')
 const puedeVerBalanceMateriales = tienePermiso(perfil?.rol, 'verBalanceMateriales')
+const puedeVerValesBodega = tienePermiso(perfil?.rol, 'verValesBodega')
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
@@ -711,7 +791,7 @@ const conteoClavesProtocolos = protocolosMensuales.reduce((conteo, registro) => 
   conteo[clave] = (conteo[clave] || 0) + 1
   return conteo
 }, {})
-const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales)
+const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales, valesBalanceMateriales, configBalanceMateriales)
 const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
 const resumenMateriales = Object.entries(materialesModuloSeleccionado)
   .map(([material, valor]) => {
@@ -982,6 +1062,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
   setMostrarDescargaProtocolos(false)
   setMostrarPreciosMateriales(false)
   setMostrarBalanceMateriales(false)
+  setMostrarValesBodega(false)
   setPrecioMaterialEnEdicion(null)
   setDetalleCobroSeleccionado(null)
 
@@ -1598,39 +1679,65 @@ function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMat
   }
 }
 
-function compilarBalanceMateriales(registros = []) {
+function compilarBalanceMateriales(registros = [], vales = [], configMateriales = {}) {
   const catalogoPorNombre = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
-    normalizarTextoComparacion(item.material),
+    normalizarClaveMaterialBalance(item.material),
     item,
   ]))
 
   const acumulado = new Map()
   const materialesExcluidos = new Set([
     normalizarTextoComparacion('Mano de obra base'),
-    normalizarTextoComparacion('Módulo en garantía'),
-    normalizarTextoComparacion('Módulo en garantía sin cobro de material'),
+    normalizarTextoComparacion('M?dulo en garant?a'),
+    normalizarTextoComparacion('M?dulo en garant?a sin cobro de material'),
   ])
 
-  function agregarItem(item, tipoCobro) {
-    const materialBase = String(item.material || '').replace(/\s+reutilizado$/i, '').trim()
-    const claveMaterial = normalizarTextoComparacion(materialBase)
-    if (!materialBase || materialesExcluidos.has(claveMaterial)) return
+  function resolverMaterialBalance(nombre, materialPrecio = '') {
+    const nombreLimpio = String(nombre || '').trim()
+    const candidatos = [
+      nombreLimpio,
+      materialPrecio,
+      equivalenciasPrecioProtocolo[normalizarTextoComparacion(nombreLimpio)],
+      equivalenciasPrecioProtocolo[normalizarTextoComparacion(materialPrecio)],
+      equivalenciasValeBodega[normalizarTextoComparacion(nombreLimpio)],
+    ].filter(Boolean)
 
-    const materialPrecio = item.materialPrecio || materialBase
-    const catalogo = catalogoPorNombre[normalizarTextoComparacion(materialBase)]
-      || catalogoPorNombre[normalizarTextoComparacion(materialPrecio)]
-      || {}
-    const clave = catalogo.material || materialBase
-    const esReutilizado = normalizarTextoComparacion(item.tipoCantidad || item.material).includes('reutilizado')
-    const cantidad = Number(item.cantidad || 0)
-    const subtotal = Number(item.subtotal || 0)
+    for (const candidato of candidatos) {
+      const catalogo = catalogoPorNombre[normalizarClaveMaterialBalance(candidato)]
+      if (catalogo) {
+        return {
+          clave: normalizarClaveMaterialBalance(catalogo.material),
+          idArt: catalogo.idArt || '',
+          material: catalogo.material,
+          noCatalogado: false,
+        }
+      }
+    }
 
-    const fila = acumulado.get(clave) || {
-      clave,
-      idArt: catalogo.idArt || '',
-      material: materialBase,
+    const nombreEquivalente = equivalenciasValeBodega[normalizarTextoComparacion(nombreLimpio)]
+      || equivalenciasPrecioProtocolo[normalizarTextoComparacion(nombreLimpio)]
+      || nombreLimpio
+    const claveNormalizada = normalizarClaveMaterialBalance(nombreEquivalente)
+    const claveExistente = [...acumulado.keys()].find((claveActual) => claveActual === claveNormalizada)
+    const filaExistente = claveExistente ? acumulado.get(claveExistente) : null
+
+    return {
+      clave: claveExistente || claveNormalizada,
+      idArt: '',
+      material: filaExistente?.material || nombreEquivalente,
+      noCatalogado: true,
+    }
+  }
+
+  function crearFila(materialBalance) {
+    return {
+      clave: materialBalance.clave,
+      idArt: materialBalance.idArt || '',
+      material: materialBalance.material,
       nuevo: 0,
       reutilizado: 0,
+      retirado: 0,
+      noCatalogado: materialBalance.noCatalogado,
       totalCantidad: 0,
       valorNuevo: 0,
       valorReutilizado: 0,
@@ -1640,6 +1747,22 @@ function compilarBalanceMateriales(registros = []) {
       valorModificacion: 0,
       valorTotal: 0,
     }
+  }
+
+  function agregarItem(item, tipoCobro) {
+    const materialBase = String(item.material || '').replace(/\s+reutilizado$/i, '').trim()
+    const claveMaterial = normalizarTextoComparacion(materialBase)
+    if (!materialBase || materialesExcluidos.has(claveMaterial)) return
+
+    const materialPrecio = item.materialPrecio || materialBase
+    const materialBalance = resolverMaterialBalance(materialBase, materialPrecio)
+    const esReutilizado = normalizarTextoComparacion(item.tipoCantidad || item.material).includes('reutilizado')
+    const cantidad = Number(item.cantidad || 0)
+    const subtotal = Number(item.subtotal || 0)
+    const fila = acumulado.get(materialBalance.clave) || crearFila(materialBalance)
+
+    fila.noCatalogado = fila.noCatalogado && materialBalance.noCatalogado
+    if (!fila.idArt && materialBalance.idArt) fila.idArt = materialBalance.idArt
 
     if (esReutilizado) {
       fila.reutilizado += cantidad
@@ -1659,7 +1782,7 @@ function compilarBalanceMateriales(registros = []) {
     }
     fila.valorTotal += subtotal
 
-    acumulado.set(clave, fila)
+    acumulado.set(materialBalance.clave, fila)
   }
 
   registros.forEach((registro) => {
@@ -1667,7 +1790,65 @@ function compilarBalanceMateriales(registros = []) {
     ;(registro.detalleCobro?.modificacion || []).forEach((item) => agregarItem(item, 'modificacion'))
   })
 
-  return [...acumulado.values()].sort((a, b) => a.material.localeCompare(b.material))
+  vales.forEach((itemVale) => {
+    const material = itemVale.material_balance || itemVale.material || itemVale.material_vale || ''
+    if (!normalizarTextoComparacion(material)) return
+
+    const materialBalance = resolverMaterialBalance(material)
+    const fila = acumulado.get(materialBalance.clave) || crearFila(materialBalance)
+    fila.retirado += Number(itemVale.cantidad || 0)
+    fila.noCatalogado = fila.noCatalogado && materialBalance.noCatalogado
+    if (!fila.idArt && materialBalance.idArt) fila.idArt = materialBalance.idArt
+    acumulado.set(materialBalance.clave, fila)
+  })
+
+  return consolidarFilasBalanceMateriales([...acumulado.values()], configMateriales, catalogoPorNombre)
+    .sort((a, b) => a.material.localeCompare(b.material))
+}
+
+function consolidarFilasBalanceMateriales(filas, configMateriales = {}, catalogoPorNombre = {}) {
+  const consolidadas = new Map()
+
+  filas.forEach((fila) => {
+    const nombreVisible = configMateriales[fila.clave]?.nombreVisible || fila.material
+    const claveVisible = normalizarClaveMaterialBalance(nombreVisible)
+    const catalogo = catalogoPorNombre[claveVisible]
+    const claveFinal = catalogo ? normalizarClaveMaterialBalance(catalogo.material) : claveVisible
+    const materialFinal = catalogo?.material || nombreVisible || fila.material
+    const existente = consolidadas.get(claveFinal)
+
+    if (!existente) {
+      consolidadas.set(claveFinal, {
+        ...fila,
+        clave: claveFinal,
+        idArt: catalogo?.idArt || fila.idArt || '',
+        material: materialFinal,
+        noCatalogado: catalogo ? false : fila.noCatalogado,
+        precioUnitarioNuevo: catalogo?.precio || fila.precioUnitarioNuevo || 0,
+      })
+      return
+    }
+
+    existente.nuevo += Number(fila.nuevo || 0)
+    existente.reutilizado += Number(fila.reutilizado || 0)
+    existente.retirado += Number(fila.retirado || 0)
+    existente.totalCantidad += Number(fila.totalCantidad || 0)
+    existente.valorNuevo += Number(fila.valorNuevo || 0)
+    existente.valorReutilizado += Number(fila.valorReutilizado || 0)
+    existente.valorMantencion += Number(fila.valorMantencion || 0)
+    existente.valorModificacion += Number(fila.valorModificacion || 0)
+    existente.valorTotal += Number(fila.valorTotal || 0)
+    existente.noCatalogado = existente.noCatalogado && fila.noCatalogado && !catalogo
+    if (!existente.idArt && (catalogo?.idArt || fila.idArt)) existente.idArt = catalogo?.idArt || fila.idArt
+    if (!existente.precioUnitarioNuevo && (catalogo?.precio || fila.precioUnitarioNuevo)) {
+      existente.precioUnitarioNuevo = catalogo?.precio || fila.precioUnitarioNuevo
+    }
+    if (!existente.precioUnitarioReutilizado && fila.precioUnitarioReutilizado) {
+      existente.precioUnitarioReutilizado = fila.precioUnitarioReutilizado
+    }
+  })
+
+  return [...consolidadas.values()]
 }
 
 function abrirDetalleCobro(registro, tipo) {
@@ -1933,11 +2114,111 @@ async function abrirProtocolosMensuales() {
   await cargarProtocolosMensuales()
 }
 
+async function cargarConfigBalanceMateriales() {
+  if (!puedeVerBalanceMateriales) return {}
+
+  const { data, error } = await supabase
+    .from('balance_materiales_config')
+    .select('material_key, nombre_visible, valor_compra')
+
+  if (error) {
+    if (!error.message?.includes('balance_materiales_config')) {
+      mostrarNotificacion('No se pudo cargar la configuración de balance: ' + error.message)
+    }
+    return {}
+  }
+
+  const config = Object.fromEntries((data || []).map((item) => [
+    item.material_key,
+    {
+      nombreVisible: item.nombre_visible || '',
+      valorCompra: item.valor_compra ?? '',
+    },
+  ]))
+
+  let configFinal = config
+  try {
+    const comprasLocales = JSON.parse(localStorage.getItem('balance_materiales_valores_compra') || '{}')
+    const nombresLocales = JSON.parse(localStorage.getItem('balance_materiales_nombres') || '{}')
+    const clavesLocales = [...new Set([...Object.keys(comprasLocales), ...Object.keys(nombresLocales)])]
+    const filasMigrar = clavesLocales
+      .filter((clave) => !config[clave] && (comprasLocales[clave] !== undefined || nombresLocales[clave]))
+      .map((clave) => ({
+        material_key: clave,
+        nombre_visible: nombresLocales[clave] || null,
+        valor_compra: normalizarPrecioMaterial(comprasLocales[clave]),
+        updated_at: new Date().toISOString(),
+      }))
+
+    if (filasMigrar.length > 0) {
+      const { error: errorMigracion } = await supabase
+        .from('balance_materiales_config')
+        .upsert(filasMigrar, { onConflict: 'material_key' })
+
+      if (!errorMigracion) {
+        configFinal = {
+          ...config,
+          ...Object.fromEntries(filasMigrar.map((fila) => [
+            fila.material_key,
+            {
+              nombreVisible: fila.nombre_visible || '',
+              valorCompra: fila.valor_compra ?? '',
+            },
+          ])),
+        }
+      }
+    }
+  } catch {
+    // Si no existe información local o no se puede leer, seguimos con Supabase.
+  }
+
+  setConfigBalanceMateriales(configFinal)
+  return configFinal
+}
+
+function guardarConfigBalanceMaterialesDebounced(clave, config) {
+  if (!clave) return
+  clearTimeout(guardadoBalanceMaterialesRef.current[clave])
+  guardadoBalanceMaterialesRef.current[clave] = setTimeout(async () => {
+    const { error } = await supabase
+      .from('balance_materiales_config')
+      .upsert({
+        material_key: clave,
+        nombre_visible: config.nombreVisible || null,
+        valor_compra: normalizarPrecioMaterial(config.valorCompra),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'material_key' })
+
+    if (error) {
+      mostrarNotificacion('No se pudo guardar el valor compra en Supabase: ' + error.message)
+    }
+  }, 600)
+}
+
+function actualizarConfigBalanceMaterial(clave, cambios) {
+  setConfigBalanceMateriales((actual) => {
+    const configActualizada = {
+      ...(actual[clave] || {}),
+      ...cambios,
+    }
+
+    guardarConfigBalanceMaterialesDebounced(clave, configActualizada)
+
+    return {
+      ...actual,
+      [clave]: configActualizada,
+    }
+  })
+}
+
 async function cargarBalanceMateriales(valor = fechaBalanceMateriales, rango = rangoBalanceMateriales) {
   if (!puedeVerBalanceMateriales || !valor) return
 
   setCargandoBalanceMateriales(true)
-  const { registros, error } = await obtenerRegistrosProtocolosPorRango(valor, rango)
+  const [{ registros, error }, vales] = await Promise.all([
+    obtenerRegistrosProtocolosPorRango(valor, rango),
+    cargarValesBodegaPorRango(valor, rango),
+  ])
   setCargandoBalanceMateriales(false)
 
   if (error) {
@@ -1946,6 +2227,7 @@ async function cargarBalanceMateriales(valor = fechaBalanceMateriales, rango = r
   }
 
   setProtocolosBalanceMateriales(registros)
+  setValesBalanceMateriales(vales)
 }
 
 async function abrirBalanceMateriales() {
@@ -1953,7 +2235,565 @@ async function abrirBalanceMateriales() {
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarBalanceMateriales(true)
-  await cargarBalanceMateriales()
+  await Promise.all([
+    cargarConfigBalanceMateriales(),
+    cargarBalanceMateriales(),
+  ])
+}
+
+async function cargarValesBodegaPorRango(valor = fechaBalanceMateriales, rango = rangoBalanceMateriales) {
+  const { inicio, fin } = obtenerRangoFechasProtocolos(rango, valor)
+  const fechaInicio = inicio.slice(0, 10)
+  const fechaFin = fin.slice(0, 10)
+
+  const { data, error } = await supabase
+    .from('vales_bodega_items')
+    .select('id, fecha, material_vale, material_balance, cantidad')
+    .gte('fecha', fechaInicio)
+    .lt('fecha', fechaFin)
+
+  if (error) {
+    if (error.message?.includes('vales_bodega_items')) return []
+    mostrarNotificacion('No se pudieron cargar los vales de bodega: ' + error.message)
+    return []
+  }
+
+  return data || []
+}
+
+async function cargarValesBodegaDia(fecha = fechaValeBodega) {
+  if (!fecha || !puedeVerValesBodega) return
+
+  setCargandoValesBodegaDia(true)
+
+  const { data: vales, error: errorVales } = await supabase
+    .from('vales_bodega')
+    .select('id, fecha, archivo_nombre, usuario_nombre, created_at')
+    .eq('fecha', fecha)
+    .order('created_at', { ascending: false })
+
+  if (errorVales) {
+    setCargandoValesBodegaDia(false)
+    if (!errorVales.message?.includes('vales_bodega')) {
+      mostrarNotificacion('No se pudieron cargar los vales del día: ' + errorVales.message)
+    }
+    setValesBodegaDia([])
+    return
+  }
+
+  const ids = (vales || []).map((vale) => vale.id)
+  if (ids.length === 0) {
+    setValesBodegaDia([])
+    setCargandoValesBodegaDia(false)
+    return
+  }
+
+  const { data: items, error: errorItems } = await supabase
+    .from('vales_bodega_items')
+    .select('id, vale_id, material_vale, material_balance, cantidad')
+    .in('vale_id', ids)
+
+  setCargandoValesBodegaDia(false)
+
+  if (errorItems) {
+    mostrarNotificacion('No se pudieron cargar los materiales de los vales: ' + errorItems.message)
+    setValesBodegaDia((vales || []).map((vale) => ({ ...vale, items: [] })))
+    return
+  }
+
+  const itemsPorVale = (items || []).reduce((mapa, item) => {
+    mapa[item.vale_id] = [...(mapa[item.vale_id] || []), item]
+    return mapa
+  }, {})
+
+  setValesBodegaDia((vales || []).map((vale) => ({
+    ...vale,
+    items: itemsPorVale[vale.id] || [],
+  })))
+}
+
+function cambiarFechaValeBodega(fecha) {
+  setFechaValeBodega(fecha)
+  cargarValesBodegaDia(fecha)
+}
+
+function agregarFilaValeBodega(fila = {}) {
+  setFilasValeBodega((actuales) => [
+    ...actuales,
+    {
+      id: `vale-${Date.now()}-${actuales.length}`,
+      materialVale: fila.materialVale || '',
+      materialBalance: fila.materialBalance || '',
+      cantidad: fila.cantidad || '',
+    },
+  ])
+}
+
+function actualizarFilaValeBodega(index, cambios) {
+  setFilasValeBodega((actuales) => actuales.map((fila, filaIndex) => (
+    filaIndex === index ? { ...fila, ...cambios } : fila
+  )))
+}
+
+function eliminarFilaValeBodega(index) {
+  setFilasValeBodega((actuales) => actuales.filter((_, filaIndex) => filaIndex !== index))
+}
+
+function materialBalanceDesdeVale(descripcion) {
+  const clave = normalizarTextoComparacion(descripcion)
+  if (equivalenciasValeBodega[clave]) return equivalenciasValeBodega[clave]
+
+  const encontrada = Object.entries(equivalenciasValeBodega).find(([patron]) => (
+    clave.includes(patron) || patron.includes(clave)
+  ))
+  if (encontrada?.[1]) return encontrada[1]
+
+  const porPalabras = Object.entries(equivalenciasValeBodega).find(([patron]) => {
+    const palabras = patron.split(' ').filter((palabra) => palabra.length > 2)
+    if (palabras.length === 0) return false
+    return palabras.every((palabra) => clave.includes(palabra))
+  })
+
+  return porPalabras?.[1] || descripcion
+}
+
+async function leerTextoArchivoVale(archivo) {
+  const buffer = await archivo.arrayBuffer()
+  const nombreArchivo = archivo.name?.toLowerCase() || ''
+  const esPdf = archivo.type === 'application/pdf' || nombreArchivo.endsWith('.pdf')
+  const esDocx = archivo.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    || nombreArchivo.endsWith('.docx')
+  const esDoc = archivo.type === 'application/msword' || nombreArchivo.endsWith('.doc')
+
+  if (esPdf) {
+    const documento = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
+    const lineas = []
+
+    for (let numeroPagina = 1; numeroPagina <= documento.numPages; numeroPagina += 1) {
+      const pagina = await documento.getPage(numeroPagina)
+      const contenido = await pagina.getTextContent()
+      const grupos = []
+
+      contenido.items.forEach((item) => {
+        const y = item.transform?.[5] || 0
+        const x = item.transform?.[4] || 0
+        const texto = String(item.str || '').trim()
+        if (!texto) return
+
+        const grupoExistente = grupos.find((grupo) => Math.abs(grupo.y - y) <= 2)
+        if (grupoExistente) {
+          grupoExistente.items.push({ x, texto })
+          grupoExistente.y = (grupoExistente.y + y) / 2
+        } else {
+          grupos.push({ y, items: [{ x, texto }] })
+        }
+      })
+
+      grupos
+        .sort((a, b) => b.y - a.y)
+        .forEach((grupo) => {
+          lineas.push(
+            grupo.items
+              .sort((a, b) => a.x - b.x)
+              .map((parte) => parte.texto)
+              .join(' ')
+          )
+        })
+    }
+
+    return lineas.join('\n')
+  }
+
+  if (esDocx) {
+    const html = await mammoth.convertToHtml({ arrayBuffer: buffer })
+    const documento = new DOMParser().parseFromString(html.value || '', 'text/html')
+    return extraerLineasValeDesdeTablasWord(documento)
+  }
+
+  if (esDoc) {
+    throw new Error('Los archivos .doc antiguos no se pueden leer de forma confiable. Guarda el vale como .docx y vuelve a adjuntarlo.')
+  }
+
+  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer)
+  const latin1 = new TextDecoder('latin1', { fatal: false }).decode(buffer)
+  return `${utf8}\n${latin1}`
+}
+
+function extraerLineasValeDesdeTablasWord(documento) {
+  const lineas = []
+
+  documento.querySelectorAll('table').forEach((tabla) => {
+    const filas = [...tabla.querySelectorAll('tr')]
+      .map((fila) => [...fila.querySelectorAll('th, td')]
+        .map((celda) => celda.textContent.replace(/\s+/g, ' ').trim())
+        .filter(Boolean))
+      .filter((celdas) => celdas.length > 0)
+
+    if (filas.length === 0) return
+
+    const configuracion = detectarColumnasValeWord(filas)
+    if (!configuracion) return
+
+    filas.slice(configuracion.indiceInicioDatos).forEach((celdas) => {
+      const indiceTotalFila = configuracion.inferido
+        ? encontrarIndiceCantidadTotalVale(celdas)
+        : configuracion.indiceTotal
+      const material = limpiarDescripcionVale(celdas[configuracion.indiceMaterial] || '')
+      const cantidad = normalizarCantidadVale(celdas[indiceTotalFila] || '')
+
+      if (!cantidad || !esDescripcionMaterialVale(material)) return
+      lineas.push([material, cantidad].join('\t'))
+    })
+  })
+
+  return lineas.join('\n')
+}
+
+function detectarColumnasValeWord(filas) {
+  for (let indiceFila = 0; indiceFila < filas.length; indiceFila += 1) {
+    const encabezado = filas[indiceFila].map(normalizarTextoComparacion)
+    const indiceMaterial = encabezado.findIndex(esEncabezadoMaterialVale)
+    const indiceTotal = encontrarIndiceTotalEncabezadoVale(encabezado)
+
+    if (indiceMaterial >= 0 && indiceTotal >= 0 && indiceMaterial !== indiceTotal) {
+      return {
+        indiceMaterial,
+        indiceTotal,
+        indiceInicioDatos: indiceFila + 1,
+      }
+    }
+  }
+
+  return inferirColumnasValeWord(filas)
+}
+
+function inferirColumnasValeWord(filas) {
+  const filasConTotal = filas
+    .map((celdas, indice) => {
+      const indiceTotal = encontrarIndiceCantidadTotalVale(celdas)
+      return { celdas, indice, indiceTotal }
+    })
+    .filter(({ celdas, indiceTotal }) => indiceTotal > 0 && celdas.length >= 2)
+
+  if (filasConTotal.length < 2) return null
+
+  const puntajesPorColumna = new Map()
+  filasConTotal.forEach(({ celdas, indiceTotal }) => {
+    celdas.slice(0, indiceTotal).forEach((celda, indiceColumna) => {
+      const puntaje = puntuarCeldaMaterialVale(celda)
+      if (puntaje <= 0) return
+      puntajesPorColumna.set(
+        indiceColumna,
+        (puntajesPorColumna.get(indiceColumna) || 0) + puntaje
+      )
+    })
+  })
+
+  const columnasOrdenadas = [...puntajesPorColumna.entries()]
+    .sort((a, b) => b[1] - a[1])
+  const mejorColumna = columnasOrdenadas[0]
+  if (!mejorColumna || mejorColumna[1] < 8) return null
+
+  return {
+    indiceMaterial: mejorColumna[0],
+    indiceTotal: Math.max(...filasConTotal.map(({ indiceTotal }) => indiceTotal)),
+    indiceInicioDatos: Math.min(...filasConTotal.map(({ indice }) => indice)),
+    inferido: true,
+  }
+}
+
+function puntuarCeldaMaterialVale(valor) {
+  const texto = limpiarDescripcionVale(valor)
+  if (!esDescripcionMaterialVale(texto)) return 0
+
+  const textoNormalizado = normalizarTextoComparacion(texto)
+  let puntaje = 1
+
+  if (texto.length >= 10) puntaje += 2
+  if (texto.split(' ').length >= 2) puntaje += 2
+  if (equivalenciasValeBodega[textoNormalizado]) puntaje += 5
+  if (Object.keys(equivalenciasValeBodega).some((patron) => (
+    textoNormalizado.includes(patron) || patron.includes(textoNormalizado)
+  ))) puntaje += 3
+  if (camposMateriales.some(([item]) => normalizarTextoComparacion(item) === textoNormalizado)) puntaje += 4
+
+  return puntaje
+}
+
+function esEncabezadoMaterialVale(texto) {
+  return [
+    'material',
+    'descripcion',
+    'descripcion material',
+    'detalle',
+    'articulo',
+    'producto',
+    'nombre material',
+  ].some((patron) => texto === patron || texto.includes(patron))
+}
+
+function encontrarIndiceTotalEncabezadoVale(encabezado) {
+  for (let index = encabezado.length - 1; index >= 0; index -= 1) {
+    const texto = encabezado[index]
+    if (
+      texto === 'total' ||
+      texto.includes('total') ||
+      texto.includes('cantidad total') ||
+      texto.includes('cant total')
+    ) {
+      return index
+    }
+  }
+
+  return -1
+}
+
+function detectarFilasValeDesdeTexto(texto) {
+  const lineas = texto
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((linea) => linea.includes('\t')
+      ? linea.split('\t').map((celda) => celda.replace(/\s+/g, ' ').trim()).join('\t')
+      : linea.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+
+  return lineas.flatMap((linea) => {
+    const filaTabla = detectarFilaValeDesdeCeldas(linea)
+    if (filaTabla) return [filaTabla]
+
+    const match = linea.match(/^(\d{1,3})\s+\S+\s+(.+?)\s+c\/u\s+(.+)$/i)
+    if (!match) {
+      const filaSimple = detectarFilaValeSimple(linea)
+      return filaSimple ? [filaSimple] : []
+    }
+
+    const descripcion = match[2].trim()
+    const numeros = [...match[3].matchAll(/\b\d{1,4}\b/g)].map((item) => item[0])
+    if (numeros.length === 0) return []
+
+    const cantidad = Number(numeros[numeros.length - 1])
+    if (!cantidad) return []
+
+    return [{
+      id: `detectado-${match[1]}-${descripcion}`,
+      materialVale: descripcion,
+      materialBalance: materialBalanceDesdeVale(descripcion),
+      cantidad: String(cantidad),
+    }]
+  })
+}
+
+function detectarFilaValeDesdeCeldas(linea) {
+  if (!linea.includes('\t')) return null
+
+  const celdas = linea.split('\t').map((celda) => celda.trim()).filter(Boolean)
+  if (celdas.some(esCeldaEncabezadoVale)) return null
+  if (celdas.length < 2) return null
+
+  const indiceCantidad = encontrarIndiceCantidadTotalVale(celdas)
+  if (indiceCantidad < 0) return null
+
+  const cantidad = normalizarCantidadVale(celdas[indiceCantidad])
+  if (!cantidad) return null
+
+  const descripcion = obtenerDescripcionValeDesdeCeldas(celdas, indiceCantidad)
+  if (!descripcion) return null
+
+  return {
+    id: `detectado-tabla-${descripcion}-${cantidad}`,
+    materialVale: descripcion,
+    materialBalance: materialBalanceDesdeVale(descripcion),
+    cantidad: String(cantidad),
+  }
+}
+
+function detectarFilaValeSimple(linea) {
+  if (esCeldaEncabezadoVale(linea)) return null
+
+  const matchFinal = linea.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)$/)
+  if (!matchFinal) return null
+
+  const cantidad = normalizarCantidadVale(matchFinal[2])
+  const descripcion = limpiarDescripcionVale(matchFinal[1])
+  if (!cantidad || !esDescripcionMaterialVale(descripcion)) return null
+
+  return {
+    id: `detectado-linea-${descripcion}-${cantidad}`,
+    materialVale: descripcion,
+    materialBalance: materialBalanceDesdeVale(descripcion),
+    cantidad: String(cantidad),
+  }
+}
+
+function encontrarIndiceCantidadVale(celdas) {
+  for (let index = celdas.length - 1; index >= 0; index -= 1) {
+    const cantidad = normalizarCantidadVale(celdas[index])
+    if (cantidad > 0) return index
+  }
+  return -1
+}
+
+function encontrarIndiceCantidadTotalVale(celdas) {
+  const indiceUltimaCelda = celdas.length - 1
+  const cantidadUltimaCelda = normalizarCantidadVale(celdas[indiceUltimaCelda])
+  if (cantidadUltimaCelda > 0) return indiceUltimaCelda
+
+  return -1
+}
+
+function obtenerDescripcionValeDesdeCeldas(celdas, indiceCantidad) {
+  const celdasAntesTotal = celdas.slice(0, indiceCantidad)
+  const candidatas = celdasAntesTotal
+    .map(limpiarDescripcionVale)
+    .filter(esDescripcionMaterialVale)
+
+  if (candidatas.length === 0) return ''
+  return candidatas.sort((a, b) => b.length - a.length)[0]
+}
+
+function limpiarDescripcionVale(valor) {
+  return String(valor || '')
+    .replace(/^\d{1,4}\s+/, '')
+    .replace(/\bc\/u\b/gi, '')
+    .replace(/\bun(?:idad)?\.?\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function normalizarCantidadVale(valor) {
+  const texto = String(valor || '').trim()
+  if (!/^\d+(?:[.,]\d+)?$/.test(texto)) return 0
+  const numero = Number(texto.replace(',', '.'))
+  return Number.isFinite(numero) ? numero : 0
+}
+
+function esUnidadVale(valor) {
+  return /^(un|und|unidad|u|c\/u|mt|m|ml|gl|cj|caja)$/i.test(String(valor || '').trim())
+}
+
+function esDescripcionMaterialVale(valor) {
+  const textoOriginal = String(valor || '').trim()
+  const texto = normalizarTextoComparacion(textoOriginal)
+  if (!texto || texto.length < 4) return false
+  if (normalizarCantidadVale(textoOriginal)) return false
+  if (esUnidadVale(textoOriginal) || esCeldaEncabezadoVale(textoOriginal)) return false
+  if (!/[a-záéíóúñ]/i.test(textoOriginal)) return false
+  if (/^\d+[\w.-]*$/.test(textoOriginal)) return false
+  if (/^(fecha|solicitante|responsable|bodega|obra|ot|vale|numero|nro|rut|firma|subtotal|neto|iva|total)\b/i.test(textoOriginal)) return false
+  if (/\$/.test(textoOriginal)) return false
+  if (texto.split(' ').length === 1 && texto.length <= 5) return false
+  return true
+}
+
+function esCeldaEncabezadoVale(valor) {
+  const texto = normalizarTextoComparacion(valor)
+  if (!texto) return true
+  return [
+    'item',
+    'codigo',
+    'descripcion',
+    'material',
+    'unidad',
+    'cantidad',
+    'total',
+    'precio',
+    'observacion',
+  ].some((palabra) => texto === palabra || texto.includes(` ${palabra} `))
+}
+
+async function leerValeBodega() {
+  if (!archivoValeBodega) return
+
+  setLeyendoValeBodega(true)
+  let filas = []
+  try {
+    const texto = await leerTextoArchivoVale(archivoValeBodega)
+    filas = detectarFilasValeDesdeTexto(texto)
+  } catch (error) {
+    console.error(error)
+    mostrarNotificacion(error.message || 'No se pudo leer el archivo automáticamente. Puedes ingresar los materiales manualmente.')
+  } finally {
+    setLeyendoValeBodega(false)
+  }
+
+  if (filas.length === 0) {
+    mostrarNotificacion('No se pudieron detectar materiales autom?ticamente. Puedes ingresarlos manualmente.')
+    return
+  }
+
+  setFilasValeBodega(filas)
+  mostrarNotificacion(`Se detectaron ${filas.length} materiales del vale`)
+}
+
+async function guardarValeBodega() {
+  if (!fechaValeBodega || filasValeBodega.length === 0) return
+
+  const items = filasValeBodega
+    .map((fila) => ({
+      material_vale: String(fila.materialVale || '').trim(),
+      material_balance: String(fila.materialBalance || '').trim(),
+      cantidad: Number(fila.cantidad || 0),
+    }))
+    .filter((fila) => fila.material_balance && fila.cantidad > 0)
+
+  if (items.length === 0) {
+    mostrarNotificacion('No hay materiales válidos para guardar')
+    return
+  }
+
+  setGuardandoValeBodega(true)
+
+  const { data: vale, error: errorVale } = await supabase
+    .from('vales_bodega')
+    .insert([{
+      fecha: fechaValeBodega,
+      archivo_nombre: archivoValeBodega?.name || '',
+      usuario_nombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    }])
+    .select('id')
+    .single()
+
+  if (errorVale) {
+    setGuardandoValeBodega(false)
+    mostrarNotificacion('No se pudo guardar el vale. Revisa si existen las tablas vales_bodega y vales_bodega_items.')
+    return
+  }
+
+  const { error: errorItems } = await supabase
+    .from('vales_bodega_items')
+    .insert(items.map((item) => ({
+      vale_id: vale.id,
+      fecha: fechaValeBodega,
+      ...item,
+    })))
+
+  setGuardandoValeBodega(false)
+
+  if (errorItems) {
+    mostrarNotificacion('No se pudieron guardar los materiales del vale: ' + errorItems.message)
+    return
+  }
+
+  mostrarNotificacion('Vale de bodega guardado')
+  setFilasValeBodega([])
+  setArchivoValeBodega(null)
+  await cargarValesBodegaDia(fechaValeBodega)
+  setMostrarValesBodega(false)
+
+  if (mostrarBalanceMateriales) {
+    await cargarBalanceMateriales(fechaBalanceMateriales, rangoBalanceMateriales)
+  }
+}
+
+async function abrirValesBodega() {
+  if (!puedeVerValesBodega) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setFechaValeBodega(new Date().toISOString().slice(0, 10))
+  setArchivoValeBodega(null)
+  setFilasValeBodega([])
+  setMostrarValesBodega(true)
+  await cargarValesBodegaDia(new Date().toISOString().slice(0, 10))
 }
 
 function fechaInicialProtocoloManual() {
@@ -4062,6 +4902,24 @@ const ultimosFinalizados = [...historial]
       Balance materiales
     </button>
   )}
+  {puedeVerValesBodega && (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        abrirValesBodega()
+      }}
+      style={{
+        padding: '10px 20px',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        background: '#4e342e',
+        color: 'white',
+        border: '1px solid #8d6e63',
+      }}
+    >
+      Vales bodega
+    </button>
+  )}
 </div>
 
 {mostrarKPI && (
@@ -5016,6 +5874,7 @@ const ultimosFinalizados = [...historial]
     fecha={fechaBalanceMateriales}
     cargando={cargandoBalanceMateriales}
     filas={balanceMateriales}
+    configMateriales={configBalanceMateriales}
     formatearPrecio={formatearPrecioMaterial}
     onCambiarRango={(nuevoRango) => {
       setRangoBalanceMateriales(nuevoRango)
@@ -5023,7 +5882,30 @@ const ultimosFinalizados = [...historial]
     }}
     onCambiarFecha={setFechaBalanceMateriales}
     onActualizar={() => cargarBalanceMateriales(fechaBalanceMateriales, rangoBalanceMateriales)}
+    onActualizarConfigMaterial={actualizarConfigBalanceMaterial}
     onCerrar={() => setMostrarBalanceMateriales(false)}
+    onClickFondo={cerrarPanelesFlotantes}
+  />
+)}
+
+{mostrarValesBodega && puedeVerValesBodega && (
+  <ValesBodegaModal
+    fecha={fechaValeBodega}
+    archivo={archivoValeBodega}
+    filas={filasValeBodega}
+    valesDia={valesBodegaDia}
+    cargando={leyendoValeBodega}
+    cargandoValesDia={cargandoValesBodegaDia}
+    guardando={guardandoValeBodega}
+    opcionesMaterialBalance={opcionesMaterialesBalance}
+    onCambiarFecha={cambiarFechaValeBodega}
+    onCambiarArchivo={setArchivoValeBodega}
+    onLeerVale={leerValeBodega}
+    onAgregarFila={() => agregarFilaValeBodega()}
+    onActualizarFila={actualizarFilaValeBodega}
+    onEliminarFila={eliminarFilaValeBodega}
+    onGuardar={guardarValeBodega}
+    onCerrar={() => setMostrarValesBodega(false)}
     onClickFondo={cerrarPanelesFlotantes}
   />
 )}
