@@ -2,10 +2,32 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from './services/supabase'
 import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
+import RegistroAcciones from './components/RegistroAcciones'
+import ModalModulo from './components/ModalModulo'
+import EncabezadoModalModulo from './components/EncabezadoModalModulo'
+import FormularioDatosModulo from './components/FormularioDatosModulo'
+import VistaElectricoModulo from './components/VistaElectricoModulo'
+import BotonesModalModulo from './components/BotonesModalModulo'
+import ResumenMaterialesModal from './components/ResumenMaterialesModal'
+import EditorMaterialesModal from './components/EditorMaterialesModal'
+import ProtocolosMensualesToolbar from './components/ProtocolosMensualesToolbar'
+import ProtocolosMensualesTabla from './components/ProtocolosMensualesTabla'
+import ProtocolosMensualesModal from './components/ProtocolosMensualesModal'
+import PreciosMaterialesModal from './components/PreciosMaterialesModal'
+import DetalleCobroModal from './components/DetalleCobroModal'
+import ReintegrarModuloModal from './components/ReintegrarModuloModal'
+import DescargaProtocolosDiariosModal from './components/DescargaProtocolosDiariosModal'
+import BalanceMaterialesModal from './components/BalanceMaterialesModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
 import { formatearFecha } from './utils/fechas'
 import { descargarProtocolosDiariosPdf } from './services/protocolosDiariosPdf'
+import { tienePermiso } from './utils/permisos'
+import {
+  cargarRegistroAccionesDia,
+  marcarRegistroAccionDeshecha,
+  registrarRegistroAccionModulo,
+} from './services/registroAccionesService'
 
 function esSolicitudPruebaActiva(valor) {
   return valor === true || valor === 'true' || valor === 1
@@ -617,6 +639,7 @@ const [mostrarReintegrar, setMostrarReintegrar] = useState(false)
 const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false)
 const [mostrarPreciosMateriales, setMostrarPreciosMateriales] = useState(false)
 const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(false)
+const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
 const [preciosMateriales, setPreciosMateriales] = useState({})
 const [cargandoPreciosMateriales, setCargandoPreciosMateriales] = useState(false)
 const [guardandoPreciosMateriales, setGuardandoPreciosMateriales] = useState(false)
@@ -626,6 +649,10 @@ const [fechaProtocolosMensuales, setFechaProtocolosMensuales] = useState(new Dat
 const [protocolosMensuales, setProtocolosMensuales] = useState([])
 const [cargandoProtocolosMensuales, setCargandoProtocolosMensuales] = useState(false)
 const [busquedaProtocolosMensuales, setBusquedaProtocolosMensuales] = useState('')
+const [rangoBalanceMateriales, setRangoBalanceMateriales] = useState('mes')
+const [fechaBalanceMateriales, setFechaBalanceMateriales] = useState(new Date().toISOString().slice(0, 7))
+const [protocolosBalanceMateriales, setProtocolosBalanceMateriales] = useState([])
+const [cargandoBalanceMateriales, setCargandoBalanceMateriales] = useState(false)
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [idsOtEnEdicion, setIdsOtEnEdicion] = useState(['', '', ''])
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
@@ -646,24 +673,25 @@ const [protocoloDesdeHistorial, setProtocoloDesdeHistorial] = useState(false)
 const [protocoloManualMensual, setProtocoloManualMensual] = useState(false)
 const solicitudesPendientesRef = useRef(new Set())
 const autoScrollArrastreRef = useRef(null)
-const esRolSoloLectura = ['visor', 'analista', 'electrico'].includes(perfil?.rol)
-const puedeAgregarModulos = ['admin', 'operador', 'colaborador'].includes(perfil?.rol)
-const puedeMoverModulos = ['admin', 'operador', 'colaborador'].includes(perfil?.rol)
-const puedeFinalizarModulos = ['admin', 'colaborador'].includes(perfil?.rol)
-const puedeResolverPrueba = ['admin', 'control_calidad'].includes(perfil?.rol)
-const puedeUsarProtocolo = ['admin', 'operador', 'control_calidad', 'visor', 'analista'].includes(perfil?.rol)
-const puedeEditarProtocolo = ['admin', 'operador'].includes(perfil?.rol)
-const puedeEditarDatosProtocolo = ['admin', 'operador', 'control_calidad'].includes(perfil?.rol)
+const esRolSoloLectura = tienePermiso(perfil?.rol, 'soloLectura')
+const puedeAgregarModulos = tienePermiso(perfil?.rol, 'agregarModulos')
+const puedeMoverModulos = tienePermiso(perfil?.rol, 'moverModulos')
+const puedeFinalizarModulos = tienePermiso(perfil?.rol, 'finalizarModulos')
+const puedeResolverPrueba = tienePermiso(perfil?.rol, 'resolverPrueba')
+const puedeUsarProtocolo = tienePermiso(perfil?.rol, 'usarProtocolo')
+const puedeEditarProtocolo = tienePermiso(perfil?.rol, 'editarProtocolo')
+const puedeEditarDatosProtocolo = tienePermiso(perfil?.rol, 'editarDatosProtocolo')
 const puedeEditarDatosModulo = puedeEditarDatosProtocolo
-const recibeAvisosPrueba = ['admin', 'control_calidad', 'operador'].includes(perfil?.rol)
-const puedeDescargarProtocolosDiarios = ['analista', 'admin', 'operador', 'control_calidad'].includes(perfil?.rol)
-const puedeVerPreciosMateriales = ['operador', 'analista', 'admin'].includes(perfil?.rol)
-const puedeEditarPreciosMateriales = ['analista', 'admin'].includes(perfil?.rol)
-const puedeVerProtocolosMensuales = ['analista', 'admin'].includes(perfil?.rol)
-const puedeEliminarProtocolosMensuales = ['admin', 'analista'].includes(perfil?.rol)
-const puedeAjustarValoresProtocolos = ['admin', 'analista'].includes(perfil?.rol)
+const recibeAvisosPrueba = tienePermiso(perfil?.rol, 'recibirAvisosPrueba')
+const puedeDescargarProtocolosDiarios = tienePermiso(perfil?.rol, 'descargarProtocolosDiarios')
+const puedeVerPreciosMateriales = tienePermiso(perfil?.rol, 'verPreciosMateriales')
+const puedeEditarPreciosMateriales = tienePermiso(perfil?.rol, 'editarPreciosMateriales')
+const puedeVerProtocolosMensuales = tienePermiso(perfil?.rol, 'verProtocolosMensuales')
+const puedeVerBalanceMateriales = tienePermiso(perfil?.rol, 'verBalanceMateriales')
+const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
+const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
-const puedeVerMenuModulo = ['admin', 'operador'].includes(perfil?.rol)
+const puedeVerMenuModulo = tienePermiso(perfil?.rol, 'verMenuModulo')
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
 const llamadosPendientes = datos.filter(
   (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
@@ -683,6 +711,7 @@ const conteoClavesProtocolos = protocolosMensuales.reduce((conteo, registro) => 
   conteo[clave] = (conteo[clave] || 0) + 1
   return conteo
 }, {})
+const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales)
 const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
 const resumenMateriales = Object.entries(materialesModuloSeleccionado)
   .map(([material, valor]) => {
@@ -713,16 +742,6 @@ function mostrarNotificacion(mensaje) {
   setNotificacion(mensaje)
 }
 
-function rangoDiaActual() {
-  const hoy = formatearFechaInput(new Date())
-  const manana = new Date(`${hoy}T00:00:00`)
-  manana.setDate(manana.getDate() + 1)
-  return {
-    inicio: `${hoy}T00:00:00`,
-    fin: `${formatearFechaInput(manana)}T00:00:00`,
-  }
-}
-
 function nombreTipoAccion(tipo) {
   if (tipo === 'ingreso') return 'Ingreso'
   if (tipo === 'finalizacion') return 'Finalización'
@@ -736,13 +755,7 @@ async function cargarAccionesDia() {
   if (perfil?.rol !== 'admin') return
 
   setCargandoAccionesDia(true)
-  const { inicio, fin } = rangoDiaActual()
-  const { data, error } = await supabase
-    .from('registro_acciones_modulos')
-    .select('*')
-    .gte('created_at', inicio)
-    .lt('created_at', fin)
-    .order('created_at', { ascending: false })
+  const { data, error } = await cargarRegistroAccionesDia()
   setCargandoAccionesDia(false)
 
   if (error) {
@@ -755,22 +768,15 @@ async function cargarAccionesDia() {
 }
 
 async function registrarAccionModulo({ tipo, modulo = {}, datosAntes = null, datosDespues = null, descripcion = '' }) {
-  const payload = {
+  const { error } = await registrarRegistroAccionModulo({
     tipo,
-    modulo_id: String(modulo?.id || datosDespues?.id || datosAntes?.id || ''),
-    serie: modulo?.serie || datosDespues?.serie || datosAntes?.serie || '',
-    linea: modulo?.linea || datosDespues?.linea || datosAntes?.linea || null,
     descripcion,
-    usuario_id: session?.user?.id || null,
-    usuario_nombre: perfil?.nombre || perfil?.email || session?.user?.email || perfil?.rol || '',
-    datos_antes: datosAntes,
-    datos_despues: datosDespues,
-    deshecho: false,
-  }
-
-  const { error } = await supabase
-    .from('registro_acciones_modulos')
-    .insert([payload])
+    modulo,
+    datosAntes,
+    datosDespues,
+    usuarioId: session?.user?.id || null,
+    usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || perfil?.rol || '',
+  })
 
   if (error) {
     console.error(error)
@@ -781,14 +787,10 @@ async function registrarAccionModulo({ tipo, modulo = {}, datosAntes = null, dat
 }
 
 async function marcarAccionDeshecha(accion) {
-  const { error } = await supabase
-    .from('registro_acciones_modulos')
-    .update({
-      deshecho: true,
-      fecha_deshacer: new Date().toISOString(),
-      deshecho_por: perfil?.nombre || session?.user?.email || '',
-    })
-    .eq('id', accion.id)
+  const { error } = await marcarRegistroAccionDeshecha(
+    accion.id,
+    perfil?.nombre || session?.user?.email || ''
+  )
 
   if (error) {
     mostrarNotificacion('La acción se deshizo, pero no se pudo marcar en el registro: ' + error.message)
@@ -979,6 +981,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
   setMostrarReintegrar(false)
   setMostrarDescargaProtocolos(false)
   setMostrarPreciosMateriales(false)
+  setMostrarBalanceMateriales(false)
   setPrecioMaterialEnEdicion(null)
   setDetalleCobroSeleccionado(null)
 
@@ -1595,6 +1598,78 @@ function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMat
   }
 }
 
+function compilarBalanceMateriales(registros = []) {
+  const catalogoPorNombre = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
+    normalizarTextoComparacion(item.material),
+    item,
+  ]))
+
+  const acumulado = new Map()
+  const materialesExcluidos = new Set([
+    normalizarTextoComparacion('Mano de obra base'),
+    normalizarTextoComparacion('Módulo en garantía'),
+    normalizarTextoComparacion('Módulo en garantía sin cobro de material'),
+  ])
+
+  function agregarItem(item, tipoCobro) {
+    const materialBase = String(item.material || '').replace(/\s+reutilizado$/i, '').trim()
+    const claveMaterial = normalizarTextoComparacion(materialBase)
+    if (!materialBase || materialesExcluidos.has(claveMaterial)) return
+
+    const materialPrecio = item.materialPrecio || materialBase
+    const catalogo = catalogoPorNombre[normalizarTextoComparacion(materialBase)]
+      || catalogoPorNombre[normalizarTextoComparacion(materialPrecio)]
+      || {}
+    const clave = catalogo.material || materialBase
+    const esReutilizado = normalizarTextoComparacion(item.tipoCantidad || item.material).includes('reutilizado')
+    const cantidad = Number(item.cantidad || 0)
+    const subtotal = Number(item.subtotal || 0)
+
+    const fila = acumulado.get(clave) || {
+      clave,
+      idArt: catalogo.idArt || '',
+      material: materialBase,
+      nuevo: 0,
+      reutilizado: 0,
+      totalCantidad: 0,
+      valorNuevo: 0,
+      valorReutilizado: 0,
+      precioUnitarioNuevo: 0,
+      precioUnitarioReutilizado: 0,
+      valorMantencion: 0,
+      valorModificacion: 0,
+      valorTotal: 0,
+    }
+
+    if (esReutilizado) {
+      fila.reutilizado += cantidad
+      fila.valorReutilizado += subtotal
+      fila.precioUnitarioReutilizado = Number(item.precioUnitario || 0)
+    } else {
+      fila.nuevo += cantidad
+      fila.valorNuevo += subtotal
+      fila.precioUnitarioNuevo = Number(item.precioUnitario || 0)
+    }
+
+    fila.totalCantidad += cantidad
+    if (tipoCobro === 'modificacion') {
+      fila.valorModificacion += subtotal
+    } else {
+      fila.valorMantencion += subtotal
+    }
+    fila.valorTotal += subtotal
+
+    acumulado.set(clave, fila)
+  }
+
+  registros.forEach((registro) => {
+    ;(registro.detalleCobro?.mantencion || []).forEach((item) => agregarItem(item, 'mantencion'))
+    ;(registro.detalleCobro?.modificacion || []).forEach((item) => agregarItem(item, 'modificacion'))
+  })
+
+  return [...acumulado.values()].sort((a, b) => a.material.localeCompare(b.material))
+}
+
 function abrirDetalleCobro(registro, tipo) {
   const detalleMantencion = registro.detalleCobro?.mantencion || []
   const detalleModificacion = registro.detalleCobro?.modificacion || []
@@ -1739,10 +1814,7 @@ async function guardarAjusteValorizacionProtocolo() {
   mostrarNotificacion('Ajuste de valorización guardado')
 }
 
-async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango = rangoProtocolosMensuales) {
-  if (!puedeVerProtocolosMensuales || !valor) return
-
-  setCargandoProtocolosMensuales(true)
+async function obtenerRegistrosProtocolosPorRango(valor, rango) {
   const preciosParaCalculo = Object.keys(preciosMateriales).length === 0
     ? await cargarPreciosMateriales()
     : preciosMateriales
@@ -1819,13 +1891,10 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
     ),
   ])
 
-  setCargandoProtocolosMensuales(false)
-
   const tablaManualNoExiste = respuestaManuales.error?.message?.includes('protocolos_manuales')
   const error = respuestaActivos.error || respuestaHistorial.error || (tablaManualNoExiste ? null : respuestaManuales.error)
   if (error) {
-    mostrarNotificacion('No se pudieron cargar los protocolos mensuales: ' + error.message)
-    return
+    return { error, registros: [] }
   }
 
   const preciosActuales = Object.keys(preciosParaCalculo || {}).length > 0
@@ -1838,6 +1907,21 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
     ...((tablaManualNoExiste ? [] : respuestaManuales.data) || []).map((item) => prepararRegistroProtocoloMensual(item, 'manual', preciosActuales)),
   ].sort((a, b) => new Date(b.fecha_prueba_electrica || 0) - new Date(a.fecha_prueba_electrica || 0))
 
+  return { registros, error: null }
+}
+
+async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango = rangoProtocolosMensuales) {
+  if (!puedeVerProtocolosMensuales || !valor) return
+
+  setCargandoProtocolosMensuales(true)
+  const { registros, error } = await obtenerRegistrosProtocolosPorRango(valor, rango)
+  setCargandoProtocolosMensuales(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudieron cargar los protocolos mensuales: ' + error.message)
+    return
+  }
+
   setProtocolosMensuales(registros)
 }
 
@@ -1847,6 +1931,29 @@ async function abrirProtocolosMensuales() {
   setMostrarMenuAcciones(false)
   setMostrarProtocolosMensuales(true)
   await cargarProtocolosMensuales()
+}
+
+async function cargarBalanceMateriales(valor = fechaBalanceMateriales, rango = rangoBalanceMateriales) {
+  if (!puedeVerBalanceMateriales || !valor) return
+
+  setCargandoBalanceMateriales(true)
+  const { registros, error } = await obtenerRegistrosProtocolosPorRango(valor, rango)
+  setCargandoBalanceMateriales(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudo cargar el balance de materiales: ' + error.message)
+    return
+  }
+
+  setProtocolosBalanceMateriales(registros)
+}
+
+async function abrirBalanceMateriales() {
+  if (!puedeVerBalanceMateriales) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setMostrarBalanceMateriales(true)
+  await cargarBalanceMateriales()
 }
 
 function fechaInicialProtocoloManual() {
@@ -3655,149 +3762,24 @@ const ultimosFinalizados = [...historial]
         )}
 
         {perfil?.rol === 'admin' && (
-          <>
-            <button
-              aria-label="Ver acciones del dÃ­a"
-              onClick={async (e) => {
-                e.stopPropagation()
-                const abrir = !mostrarRegistroAcciones
-                cerrarVentanasEmergentes()
-                setMostrarRegistroAcciones(abrir)
-                setMostrarTodasAccionesDia(false)
-                if (abrir) await cargarAccionesDia()
-              }}
-              style={{
-                position: 'fixed',
-                left: '12px',
-                bottom: '84px',
-                width: '52px',
-                height: '52px',
-                borderRadius: '50%',
-                border: '2px solid white',
-                background: '#1976d2',
-                color: 'white',
-                fontSize: '30px',
-                lineHeight: '52px',
-                zIndex: 2501,
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
-              }}
-            >
-              🔂
-            </button>
-
-            {mostrarRegistroAcciones && (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  position: 'fixed',
-                  left: '12px',
-                  bottom: '146px',
-                  width: 'calc(100vw - 24px)',
-                  maxWidth: '420px',
-                  maxHeight: '62vh',
-                  overflowY: 'auto',
-                  padding: '16px',
-                  boxSizing: 'border-box',
-                  border: '1px solid white',
-                  borderRadius: '10px',
-                  background: '#222',
-                  color: 'white',
-                  textAlign: 'left',
-                  zIndex: 2500,
-                  boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
-                  <h3 style={{ margin: 0 }}>Acciones de hoy</h3>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    {accionesDia.length > 5 && (
-                      <button
-                        type="button"
-                        onClick={() => setMostrarTodasAccionesDia((actual) => !actual)}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '7px',
-                          border: '1px solid #777',
-                          background: '#333',
-                          color: 'white',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {mostrarTodasAccionesDia ? 'Ver menos' : 'Ver más'}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={cargarAccionesDia}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: '7px',
-                        border: '1px solid #777',
-                        background: '#333',
-                        color: 'white',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Actualizar
-                    </button>
-                  </div>
-                </div>
-
-                {cargandoAccionesDia ? (
-                  <p>Cargando...</p>
-                ) : accionesDia.length === 0 ? (
-                  <p>No hay ingresos, finalizaciones o cambios de estado registrados hoy.</p>
-                ) : (
-                  (mostrarTodasAccionesDia ? accionesDia : accionesDia.slice(0, 5)).map((accion) => (
-                    <div
-                      key={accion.id}
-                      style={{
-                        padding: '10px 0',
-                        borderBottom: '1px solid #444',
-                        opacity: accion.deshecho ? 0.55 : 1,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <strong>{nombreTipoAccion(accion.tipo)}</strong>
-                        <span style={{ color: '#bbb', fontSize: '12px' }}>
-                          {accion.created_at ? new Date(accion.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''}
-                        </span>
-                      </div>
-                      <div style={{ marginTop: '4px', fontSize: '13px', color: '#ddd' }}>
-                        Serie: <strong>{accion.serie || '-'}</strong>
-                        {accion.linea ? ` | Línea ${accion.linea}` : ''}
-                        {' | '}
-                        <span style={{ color: '#ccc' }}>{accion.usuario_nombre || 'No registrado'}</span>
-                      </div>
-                      {accion.descripcion && (
-                        <div style={{ marginTop: '3px', fontSize: '13px', color: '#ffecb3' }}>
-                          {accion.descripcion}
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        disabled={accion.deshecho}
-                        onClick={() => deshacerAccionModulo(accion)}
-                        style={{
-                          marginTop: '8px',
-                          padding: '7px 10px',
-                          borderRadius: '7px',
-                          border: '1px solid #ffb74d',
-                          background: accion.deshecho ? '#555' : '#bf360c',
-                          color: 'white',
-                          cursor: accion.deshecho ? 'not-allowed' : 'pointer',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {accion.deshecho ? 'Deshecho' : 'Deshacer'}
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </>
+          <RegistroAcciones
+            visible={mostrarRegistroAcciones}
+            acciones={accionesDia}
+            cargando={cargandoAccionesDia}
+            mostrarTodas={mostrarTodasAccionesDia}
+            nombreTipoAccion={nombreTipoAccion}
+            onToggle={async (e) => {
+              e.stopPropagation()
+              const abrir = !mostrarRegistroAcciones
+              cerrarVentanasEmergentes()
+              setMostrarRegistroAcciones(abrir)
+              setMostrarTodasAccionesDia(false)
+              if (abrir) await cargarAccionesDia()
+            }}
+            onToggleVerMas={() => setMostrarTodasAccionesDia((actual) => !actual)}
+            onActualizar={cargarAccionesDia}
+            onDeshacer={deshacerAccionModulo}
+          />
         )}
 
         {recibeAvisosPrueba && (
@@ -4060,6 +4042,24 @@ const ultimosFinalizados = [...historial]
       }}
     >
       Protocolos mensuales
+    </button>
+  )}
+  {puedeVerBalanceMateriales && (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        abrirBalanceMateriales()
+      }}
+      style={{
+        padding: '10px 20px',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        background: '#37474f',
+        color: 'white',
+        border: '1px solid #78909c',
+      }}
+    >
+      Balance materiales
     </button>
   )}
 </div>
@@ -4856,1440 +4856,208 @@ const ultimosFinalizados = [...historial]
 
       {moduloSeleccionado &&
        !(esSolicitudPruebaActiva(moduloSeleccionado.solicitud_prueba) && puedeResolverPrueba) && (
-  <div
-    style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      background: '#222',
-      padding: '20px',
-      borderRadius: '10px',
-      border: '1px solid white',
-      width: 'calc(100vw - 32px)',
-      maxWidth: '420px',
-      maxHeight: 'calc(100vh - 32px)',
-      overflowY: 'auto',
-      boxSizing: 'border-box',
-      zIndex: 1000,
-      color: 'white',
-    }}
-  >
-    <div style={{ marginBottom: '16px' }}>
-      <h2 style={{ margin: '0 0 12px' }}>Módulo</h2>
-      {puedeVerMenuModulo && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ position: 'relative', flex: '0 0 auto' }}>
-            <button
-              type="button"
-              aria-label="Opciones del módulo"
-              onClick={(e) => {
-                e.stopPropagation()
-                setMostrarMenuModulo((actual) => !actual)
-              }}
-              style={{
-                width: '44px',
-                height: '44px',
-                background: 'transparent',
-                color: 'white',
-                padding: '4px',
-                border: 'none',
-                cursor: 'pointer',
-                lineHeight: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              title="Opciones del módulo"
-            >
-              <svg
-                viewBox="0 0 64 64"
-                width="34"
-                height="34"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <line x1="16" y1="8" x2="16" y2="56" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-                <circle cx="16" cy="42" r="9" fill="currentColor" />
-                <line x1="32" y1="8" x2="32" y2="56" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-                <circle cx="32" cy="20" r="9" fill="currentColor" />
-                <line x1="48" y1="8" x2="48" y2="56" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-                <circle cx="48" cy="34" r="9" fill="currentColor" />
-              </svg>
-            </button>
-
-            {mostrarMenuModulo && (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 'calc(100% + 6px)',
-                  width: '170px',
-                  background: '#111',
-                  border: '1px solid #555',
-                  borderRadius: '8px',
-                  padding: '6px',
-                  boxShadow: '0 8px 18px rgba(0,0,0,0.35)',
-                  zIndex: 1200,
-                  boxSizing: 'border-box',
-                }}
-              >
-                {perfil?.rol === 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMostrarMenuModulo(false)
-                      eliminarModuloSinRegistro()
-                    }}
-                    style={{
-                      width: '100%',
-                      background: '#5d4037',
-                      color: 'white',
-                      padding: '10px',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      fontWeight: 700,
-                      marginBottom: '6px',
-                    }}
-                  >
-                    Eliminar módulo
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={abrirEditorMateriales}
-                  style={{
-                    width: '100%',
-                    background: '#455a64',
-                    color: 'white',
-                    padding: '10px',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    fontWeight: 700,
-                    marginBottom: '6px',
-                  }}
-                >
-                  Materiales 📝
-                </button>
-
-                <button
-                  type="button"
-                  disabled={
-                    esEstadoPruebaElectrica(moduloSeleccionado?.estado) ||
-                    esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba)
-                  }
-                  onClick={() => {
-                    setMostrarMenuModulo(false)
-                    solicitarPruebaElectrica()
-                  }}
-                  style={{
-                    width: '100%',
-                    background: '#1976d2',
-                    color: 'white',
-                    padding: '10px',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor:
-                      esEstadoPruebaElectrica(moduloSeleccionado?.estado) ||
-                      esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba)
-                        ? 'not-allowed'
-                        : 'pointer',
-                    textAlign: 'left',
-                    fontWeight: 700,
-                    opacity:
-                      esEstadoPruebaElectrica(moduloSeleccionado?.estado) ||
-                      esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba)
-                        ? 0.65
-                        : 1,
-                    marginBottom: puedeDejarObservacionAlerta ? '6px' : 0,
-                  }}
-                >
-                  Llamar a prueba eléctrica ⚡
-                </button>
-
-                {puedeDejarObservacionAlerta && (
-                  <button
-                    type="button"
-                    onClick={dejarObservacionAlerta}
-                    style={{
-                      width: '100%',
-                      background: '#b71c1c',
-                      color: 'white',
-                      padding: '10px',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      fontWeight: 700,
-                    }}
-                  >
-                    Dejar observación 🚨
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {puedeFinalizarModulos && (
-            <button
-              onClick={finalizarModulo}
-              style={{
-                background: '#d32f2f',
-                color: 'white',
-                padding: '10px 14px',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                flex: '0 0 180px',
-                maxWidth: '55%',
-              }}
-            >
-              Finalizar módulo
-            </button>
-          )}
-        </div>
-      )}
-    </div>
+  <ModalModulo>
+    <EncabezadoModalModulo
+      puedeVerMenuModulo={puedeVerMenuModulo}
+      puedeFinalizarModulos={puedeFinalizarModulos}
+      puedeEliminarModulo={perfil?.rol === 'admin'}
+      mostrarMenuModulo={mostrarMenuModulo}
+      pruebaBloqueada={
+        esEstadoPruebaElectrica(moduloSeleccionado?.estado) ||
+        esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba)
+      }
+      puedeDejarObservacionAlerta={puedeDejarObservacionAlerta}
+      onToggleMenu={(e) => {
+        e.stopPropagation()
+        setMostrarMenuModulo((actual) => !actual)
+      }}
+      onEliminarModulo={() => {
+        setMostrarMenuModulo(false)
+        eliminarModuloSinRegistro()
+      }}
+      onAbrirEditorMateriales={abrirEditorMateriales}
+      onSolicitarPrueba={() => {
+        setMostrarMenuModulo(false)
+        solicitarPruebaElectrica()
+      }}
+      onDejarObservacion={dejarObservacionAlerta}
+      onFinalizarModulo={finalizarModulo}
+    />
 
     {perfil?.rol === 'electrico' ? (
-      <>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-            gap: '10px 18px',
-            textAlign: 'left',
-            marginBottom: '12px',
-          }}
-        >
-          <div><strong>Serie:</strong> {serieEditada}</div>
-          <div><strong>Tipo:</strong> {tipoEditado}</div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <strong>Proyecto:</strong> {proyectoEditado}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '12px', textAlign: 'left' }}>
-          <strong>Nota:</strong>
-          <textarea
-            value={notaEditada}
-            onChange={(e) => setNotaEditada(e.target.value)}
-            rows={3}
-            style={{
-              width: '100%',
-              marginTop: '5px',
-              padding: '8px',
-              resize: 'vertical',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
-
+      <VistaElectricoModulo
+        serieEditada={serieEditada}
+        tipoEditado={tipoEditado}
+        proyectoEditado={proyectoEditado}
+        notaEditada={notaEditada}
+        setNotaEditada={setNotaEditada}
+      >
         <FormularioElectrico
           valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
           onChange={actualizarMaterialFormulario}
         />
-      </>
+      </VistaElectricoModulo>
     ) : (
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-          gap: '10px',
-          textAlign: 'left',
-        }}
-      >
-        <div style={{ marginBottom: '10px' }}>
-          <strong>Serie</strong>
-          <input
-            value={serieEditada}
-            onChange={(e) => setSerieEditada(e.target.value)}
-            disabled={!puedeEditarDatosModulo}
-            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
-          />
-        </div>
-
-        <div style={{ marginBottom: '10px' }}>
-          <strong>Tipo</strong>
-          <input
-            value={tipoEditado}
-            onChange={(e) => setTipoEditado(e.target.value)}
-            disabled={!puedeEditarDatosModulo}
-            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
-          />
-        </div>
-
-        <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
-          <strong>Proyecto</strong>
-          <input
-            value={proyectoEditado}
-            onChange={(e) => setProyectoEditado(e.target.value)}
-            disabled={!puedeEditarDatosModulo}
-            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
-          />
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-          <strong style={{ whiteSpace: 'nowrap' }}>Línea</strong>
-
-          <select
-            value={lineaEditada}
-            onChange={(e) => setLineaEditada(Number(e.target.value))}
-            disabled={!puedeEditarDatosModulo}
-            style={{
-              width: '64px',
-              padding: '8px',
-              boxSizing: 'border-box',
-            }}
-          >
-            {[1,2,3,4,5,6,7,8,9].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-          <strong style={{ whiteSpace: 'nowrap' }}>Estado</strong>
-
-          <select
-            value={estadoEditado}
-            onChange={(e) => setEstadoEditado(e.target.value)}
-            disabled={!puedeEditarDatosModulo}
-            style={{
-              width: '170px',
-              maxWidth: 'calc(100% - 62px)',
-              padding: '8px',
-              boxSizing: 'border-box',
-            }}
-          >
-            <option value="Sin iniciar">Sin iniciar</option>
-            <option value="Canalizado">Canalizado</option>
-            <option value="Cableado">Cableado</option>
-            <option value="Terminaciones">Terminaciones</option>
-            <option value="Prueba eléctrica">Prueba eléctrica</option>
-            {(esTipoBodega(tipoEditado) || estadoEditado === 'Sin instalación') && (
-              <option value="Sin instalación">Sin instalación</option>
-            )}
-            <option value="En garantía">En garantía</option>
-          </select>
-        </div>
-
-        {estadoEditado === 'En garantía' && (
-          <div style={{ gridColumn: '1 / -1', marginBottom: '10px', textAlign: 'left' }}>
-            <strong>Fecha prueba eléctrica</strong>
-            <input
-              type="date"
-              value={fechaPruebaEditada}
-              onChange={(e) => setFechaPruebaEditada(e.target.value)}
-              disabled={!puedeEditarDatosModulo}
-              style={{
-                width: '190px',
-                maxWidth: '100%',
-                padding: '8px',
-                marginLeft: '8px',
-                boxSizing: 'border-box',
-              }}
-            />
-            {fechaPruebaEditada && !estaDentroDeGarantia(fechaPruebaEditada) && (
-              <div style={{ color: '#ff8a80', fontWeight: 800, marginTop: '6px' }}>
-                Fuera de garantía
-              </div>
-            )}
-          </div>
-        )}
-
-        <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
-          <strong>Responsable</strong>
-          <input
-            value={responsableEditado}
-            onChange={(e) => setResponsableEditado(e.target.value)}
-            disabled={!puedeEditarDatosModulo}
-            style={{ width: '100%', padding: '8px', marginTop: '5px', boxSizing: 'border-box' }}
-          />
-        </div>
-
-        <div style={{ marginBottom: '5px', gridColumn: '1 / -1' }}>
-          <strong>Nota</strong>
-          <textarea
-            value={notaEditada}
-            onChange={(e) => setNotaEditada(e.target.value)}
-            rows={2}
-            style={{ width: '100%', marginTop: '5px', padding: '8px', resize: 'vertical', boxSizing: 'border-box' }}
-          />
-        </div>
-      </div>
+      <FormularioDatosModulo
+        serieEditada={serieEditada}
+        setSerieEditada={setSerieEditada}
+        tipoEditado={tipoEditado}
+        setTipoEditado={setTipoEditado}
+        proyectoEditado={proyectoEditado}
+        setProyectoEditado={setProyectoEditado}
+        lineaEditada={lineaEditada}
+        setLineaEditada={setLineaEditada}
+        estadoEditado={estadoEditado}
+        setEstadoEditado={setEstadoEditado}
+        fechaPruebaEditada={fechaPruebaEditada}
+        setFechaPruebaEditada={setFechaPruebaEditada}
+        responsableEditado={responsableEditado}
+        setResponsableEditado={setResponsableEditado}
+        notaEditada={notaEditada}
+        setNotaEditada={setNotaEditada}
+        puedeEditarDatosModulo={puedeEditarDatosModulo}
+        esTipoBodega={esTipoBodega}
+        estaDentroDeGarantia={estaDentroDeGarantia}
+      />
     )}
-
-    {false && perfil?.rol !== 'electrico' && !['admin', 'operador'].includes(perfil?.rol) && (
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-          gap: '10px',
-          textAlign: 'left',
-          marginTop: '10px',
-        }}
-      >
-        <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
-          <strong>Estado</strong>
-
-          <select
-            value={estadoEditado}
-            onChange={(e) => setEstadoEditado(e.target.value)}
-            disabled={esRolSoloLectura}
-            style={{
-              width: '100%',
-              padding: '8px',
-              marginTop: '5px',
-            }}
-          >
-            <option value="Sin iniciar">Sin iniciar</option>
-            <option value="Canalizado">Canalizado</option>
-            <option value="Cableado">Cableado</option>
-            <option value="Terminaciones">Terminaciones</option>
-            <option value="Prueba eléctrica">Prueba eléctrica</option>
-            {(esTipoBodega(tipoEditado) || estadoEditado === 'Sin instalación') && (
-              <option value="Sin instalación">Sin instalación</option>
-            )}
-            <option value="En garantía">En garantía</option>
-          </select>
-        </div>
-
-        {estadoEditado === 'En garantía' && (
-          <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
-            <strong>Fecha prueba eléctrica</strong>
-            <input
-              type="date"
-              value={fechaPruebaEditada}
-              onChange={(e) => setFechaPruebaEditada(e.target.value)}
-              disabled={esRolSoloLectura}
-              style={{
-                width: '100%',
-                padding: '8px',
-                marginTop: '5px',
-              }}
-            />
-            {fechaPruebaEditada && !estaDentroDeGarantia(fechaPruebaEditada) && (
-              <div style={{ color: '#ff8a80', fontWeight: 800, marginTop: '6px' }}>
-                Fuera de garantía
-              </div>
-            )}
-          </div>
-        )}
-
-        <div style={{ marginBottom: '10px' }}>
-          <strong>Línea</strong>
-
-          <select
-            value={lineaEditada}
-            onChange={(e) => setLineaEditada(Number(e.target.value))}
-            disabled={esRolSoloLectura}
-            style={{
-              width: '100%',
-              padding: '8px',
-              marginTop: '5px',
-            }}
-          >
-            {[1,2,3,4,5,6,7,8,9].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
-
-      </div>
-    )}
-
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '10px',
-      }}
-    >
-      <button
-        onClick={guardarCambios}
-        style={{
-          padding: '10px',
-          flex: 1,
-        }}
-      >
-        {puedeEditarDatosModulo ? 'Guardar cambios' : 'Guardar nota'}
-      </button>
-
-       {['electrico', 'operador'].includes(perfil?.rol) && (
-  esEstadoPruebaElectrica(moduloSeleccionado?.estado) ? (
-    <button
-      disabled
-      style={{
-        backgroundColor: '#388e3c',
-        color: 'white',
-        padding: '10px',
-        flex: 1,
-        opacity: 0.75,
-        cursor: 'not-allowed',
-      }}
-    >
-      ✓ Prueba eléctrica aprobada
-    </button>
-  ) : esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba) ? (
-    <button
-      onClick={cancelarSolicitudPruebaElectrica}
-      style={{
-        backgroundColor: '#ff9800',
-        color: 'white',
-        padding: '10px',
-        flex: 1,
-        cursor: 'pointer',
-      }}
-    >
-      <span style={{ display: 'block' }}>🟡 Esperando aprobación</span>
-      <small style={{ display: 'block', marginTop: '3px' }}>
-        (presione para cancelar)
-      </small>
-    </button>
-  ) : (
-    <button
-      onClick={solicitarPruebaElectrica}
-      style={{
-        backgroundColor: '#1976d2',
-        color: 'white',
-        padding: '10px',
-        flex: 1,
-      }}
-    >
-      ⚡ Solicitar Prueba Eléctrica
-    </button>
-  )
-)}
-      {['visor', 'analista', 'operador', 'admin'].includes(perfil?.rol) && (
-        <button
-          onClick={abrirResumenMateriales}
-          style={{ padding: '10px', flex: 1 }}
-        >
-          Resumen materiales
-        </button>
-      )}
-      {puedeUsarProtocolo && (
-        <button
-          onClick={abrirProtocoloEntrega}
-          style={{ padding: '10px', flex: 1 }}
-        >
-          Protocolo
-        </button>
-      )}
-      <button
-        onClick={limpiarEstadosModal}
-        style={{
-          padding: '10px',
-          flex: 1,
-        }}
-      >
-        Cerrar
-      </button>
-    </div>
-  </div>
+    <BotonesModalModulo
+      perfilRol={perfil?.rol}
+      moduloSeleccionado={moduloSeleccionado}
+      puedeEditarDatosModulo={puedeEditarDatosModulo}
+      puedeUsarProtocolo={puedeUsarProtocolo}
+      esEstadoPruebaElectrica={esEstadoPruebaElectrica}
+      esSolicitudPruebaActiva={esSolicitudPruebaActiva}
+      onGuardarCambios={guardarCambios}
+      onSolicitarPrueba={solicitarPruebaElectrica}
+      onCancelarSolicitudPrueba={cancelarSolicitudPruebaElectrica}
+      onAbrirResumenMateriales={abrirResumenMateriales}
+      onAbrirProtocolo={abrirProtocoloEntrega}
+      onCerrar={limpiarEstadosModal}
+    />
+  </ModalModulo>
 )}
 
 {mostrarResumenMateriales && moduloSeleccionado && (
-  <div
-    onClick={cerrarPanelesFlotantes}
-    style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: 'calc(100vw - 32px)',
-      maxWidth: '420px',
-      maxHeight: 'calc(100vh - 32px)',
-      overflowY: 'auto',
-      boxSizing: 'border-box',
-      padding: '20px',
-      background: '#222',
-      border: '1px solid white',
-      borderRadius: '10px',
-      zIndex: 1200,
-      color: 'white',
-      textAlign: 'left',
-    }}
-  >
-    <h2 style={{ marginTop: 0 }}>Materiales — {moduloSeleccionado.serie}</h2>
-
-    {cargandoMateriales ? (
-      <p>Cargando...</p>
-    ) : resumenMateriales.length === 0 ? (
-      <p>No hay materiales registrados.</p>
-    ) : (
-      <div style={{ display: 'grid', gap: '8px' }}>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) 64px 76px',
-            gap: '7px',
-            fontSize: '12px',
-            fontWeight: 700,
-            textAlign: 'center',
-          }}
-        >
-          <span />
-          <span>Nuevo</span>
-          <span>Reutilizado</span>
-        </div>
-
-        {resumenMateriales.map(([material, nuevo, reutilizado]) => (
-          <div
-            key={material}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) 64px 76px',
-              gap: '7px',
-              paddingBottom: '8px',
-              borderBottom: '1px solid #444',
-              alignItems: 'center',
-            }}
-          >
-            <span>{material}</span>
-            <strong style={{ textAlign: 'center' }}>{nuevo || '—'}</strong>
-            <strong style={{ textAlign: 'center' }}>{reutilizado || '—'}</strong>
-          </div>
-        ))}
-      </div>
-    )}
-
-    <button
-      onClick={() => setMostrarResumenMateriales(false)}
-      style={{ width: '100%', marginTop: '18px', padding: '12px' }}
-    >
-      Cerrar
-    </button>
-  </div>
+  <ResumenMaterialesModal
+    modulo={moduloSeleccionado}
+    cargandoMateriales={cargandoMateriales}
+    resumenMateriales={resumenMateriales}
+    onCerrar={() => setMostrarResumenMateriales(false)}
+    onClickFondo={cerrarPanelesFlotantes}
+  />
 )}
 
 {mostrarEditorMateriales && moduloSeleccionado && puedeVerMenuModulo && (
-  <div
-    onClick={cerrarPanelesFlotantes}
-    style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: 'calc(100vw - 32px)',
-      maxWidth: '460px',
-      maxHeight: 'calc(100vh - 32px)',
-      overflowY: 'auto',
-      boxSizing: 'border-box',
-      padding: '20px',
-      background: '#222',
-      border: '1px solid white',
-      borderRadius: '10px',
-      zIndex: 1200,
-      color: 'white',
-      textAlign: 'left',
-    }}
+  <EditorMaterialesModal
+    modulo={moduloSeleccionado}
+    cargandoMateriales={cargandoMateriales}
+    onGuardar={guardarMaterialesModulo}
+    onCerrar={cerrarEditorMateriales}
+    onClickFondo={cerrarPanelesFlotantes}
   >
-    <h2 style={{ marginTop: 0 }}>Materiales 📝 — {moduloSeleccionado.serie}</h2>
-
-    {cargandoMateriales ? (
-      <p>Cargando...</p>
-    ) : (
-      <FormularioElectrico
-        valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
-        onChange={actualizarMaterialFormulario}
-      />
-    )}
-
-    <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
-      <button
-        type="button"
-        onClick={guardarMaterialesModulo}
-        disabled={cargandoMateriales}
-        style={{
-          flex: 1,
-          padding: '12px',
-          background: '#2e7d32',
-          color: 'white',
-          border: 'none',
-          borderRadius: '6px',
-          cursor: cargandoMateriales ? 'not-allowed' : 'pointer',
-        }}
-      >
-        Guardar materiales
-      </button>
-
-      <button
-        type="button"
-        onClick={() => cerrarEditorMateriales()}
-        style={{
-          flex: 1,
-          padding: '12px',
-        }}
-      >
-        Cerrar
-      </button>
-    </div>
-  </div>
+    <FormularioElectrico
+      valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
+      onChange={actualizarMaterialFormulario}
+    />
+  </EditorMaterialesModal>
 )}
 
 {mostrarProtocolosMensuales && puedeVerProtocolosMensuales && (
-  <div
-    onClick={cerrarPanelesFlotantes}
-    style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: 'calc(100vw - 24px)',
-      maxWidth: '1180px',
-      maxHeight: 'calc(100vh - 32px)',
-      overflowY: 'auto',
-      boxSizing: 'border-box',
-      padding: '20px',
-      background: '#222',
-      border: '1px solid white',
-      borderRadius: '10px',
-      zIndex: 1300,
-      color: 'white',
-      textAlign: 'left',
-    }}
-  >
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-      <h2 style={{ margin: 0 }}>Protocolos mensuales</h2>
-      <div style={{ display: 'grid', gap: '8px', minWidth: '150px' }}>
-        <button
-          type="button"
-          onClick={() => setMostrarProtocolosMensuales(false)}
-          style={{
-            padding: '9px 14px',
-            borderRadius: '8px',
-            border: '1px solid #777',
-            background: '#555',
-            color: 'white',
-            cursor: 'pointer',
-            fontWeight: 700,
-          }}
-        >
-          Cerrar
-        </button>
-        <button
-          type="button"
-          onClick={abrirIngresoManualProtocolo}
-          style={{
-            padding: '9px 14px',
-            borderRadius: '8px',
-            border: '1px solid #66bb6a',
-            background: '#1b5e20',
-            color: 'white',
-            cursor: 'pointer',
-            fontWeight: 700,
-          }}
-        >
-          Ingreso manual
-        </button>
-      </div>
-    </div>
-
-    <div
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '12px 16px',
-        marginBottom: '16px',
-        borderRadius: '10px',
-        background: '#1b5e20',
-        border: '1px solid #66bb6a',
-        color: 'white',
-        fontWeight: 800,
-        fontSize: '18px',
+  <ProtocolosMensualesModal onClickFondo={cerrarPanelesFlotantes}>
+    <ProtocolosMensualesToolbar
+      ingresos={ingresosProtocolosMensuales}
+      formatearPrecio={formatearPrecioMaterial}
+      rango={rangoProtocolosMensuales}
+      fecha={fechaProtocolosMensuales}
+      busqueda={busquedaProtocolosMensuales}
+      totalResultados={protocolosMensuales.length}
+      resultadosFiltrados={protocolosMensualesFiltrados.length}
+      cargando={cargandoProtocolosMensuales}
+      onCerrar={() => setMostrarProtocolosMensuales(false)}
+      onIngresoManual={abrirIngresoManualProtocolo}
+      onCambiarRango={(nuevoRango) => {
+        setRangoProtocolosMensuales(nuevoRango)
+        setFechaProtocolosMensuales(obtenerValorInicialRangoProtocolo(nuevoRango))
       }}
-    >
-      <span>💰 ingresos</span>
-      <span>{formatearPrecioMaterial(ingresosProtocolosMensuales)}</span>
-    </div>
+      onCambiarFecha={setFechaProtocolosMensuales}
+      onActualizar={() => cargarProtocolosMensuales(fechaProtocolosMensuales, rangoProtocolosMensuales)}
+      onCambiarBusqueda={setBusquedaProtocolosMensuales}
+      onLimpiarBusqueda={() => setBusquedaProtocolosMensuales('')}
+    />
 
-    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
-      <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <select
-          value={rangoProtocolosMensuales}
-          onChange={(e) => {
-            const nuevoRango = e.target.value
-            setRangoProtocolosMensuales(nuevoRango)
-            setFechaProtocolosMensuales(obtenerValorInicialRangoProtocolo(nuevoRango))
-          }}
-          style={{ padding: '8px', fontWeight: 700 }}
-          title="Cambiar rango"
-        >
-          <option value="dia">Dia</option>
-          <option value="semana">Semana</option>
-          <option value="mes">Mes</option>
-        </select>
-        <input
-          type={rangoProtocolosMensuales === 'dia' ? 'date' : rangoProtocolosMensuales === 'semana' ? 'week' : 'month'}
-          value={fechaProtocolosMensuales}
-          onChange={(e) => setFechaProtocolosMensuales(e.target.value)}
-          style={{ padding: '8px' }}
-        />
-      </label>
-      <button
-        type="button"
-        onClick={() => cargarProtocolosMensuales(fechaProtocolosMensuales, rangoProtocolosMensuales)}
-        disabled={cargandoProtocolosMensuales}
-        style={{
-          padding: '9px 14px',
-          borderRadius: '8px',
-          border: '1px solid #777',
-          background: '#1565c0',
-          color: 'white',
-          cursor: cargandoProtocolosMensuales ? 'not-allowed' : 'pointer',
-          fontWeight: 700,
-        }}
-      >
-        {cargandoProtocolosMensuales ? 'Cargando...' : 'Actualizar'}
-      </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <input
-          type="search"
-          value={busquedaProtocolosMensuales}
-          onChange={(e) => setBusquedaProtocolosMensuales(e.target.value)}
-          placeholder="Buscar serie o ID OT"
-          style={{
-            padding: '9px 10px',
-            minWidth: '210px',
-            borderRadius: '6px',
-            border: '1px solid #777',
-            background: '#333',
-            color: 'white',
-            fontWeight: 700,
-          }}
-        />
-        {busquedaProtocolosMensuales && (
-          <button
-            type="button"
-            onClick={() => setBusquedaProtocolosMensuales('')}
-            title="Limpiar búsqueda"
-            style={{
-              padding: '9px 11px',
-              borderRadius: '6px',
-              border: '1px solid #777',
-              background: '#444',
-              color: 'white',
-              cursor: 'pointer',
-              fontWeight: 800,
-            }}
-          >
-            ×
-          </button>
-        )}
-      </div>
-      <span style={{ color: '#ddd', fontWeight: 700 }}>
-        {busquedaProtocolosMensuales
-          ? `${protocolosMensualesFiltrados.length} de ${protocolosMensuales.length} resultados`
-          : `${protocolosMensuales.length} resultados`}
-      </span>
-    </div>
+    <ProtocolosMensualesTabla
+      protocolos={protocolosMensuales}
+      protocolosFiltrados={protocolosMensualesFiltrados}
+      cargando={cargandoProtocolosMensuales}
+      encabezados={encabezadosProtocolosMensuales}
+      conteoClaves={conteoClavesProtocolos}
+      puedeEliminarProtocolosMensuales={puedeEliminarProtocolosMensuales}
+      BotonValorCobro={BotonValorCobro}
+      formatearFecha={formatearFecha}
+      formatearPrecio={formatearPrecioMaterial}
+      claveProtocoloUnico={claveProtocoloUnico}
+      idOtEnEdicion={idOtEnEdicion}
+      idsOtEnEdicion={idsOtEnEdicion}
+      setIdsOtEnEdicion={setIdsOtEnEdicion}
+      setIdOtEnEdicion={setIdOtEnEdicion}
+      separarIdsOt={separarIdsOt}
+      unirIdsOt={unirIdsOt}
+      onEliminar={eliminarProtocoloMensual}
+      onAbrirProtocolo={abrirProtocoloDesdeBusqueda}
+      onGuardarIdOt={guardarIdOtProtocoloMensual}
+    />
 
-    {protocolosMensuales.length === 0 && !cargandoProtocolosMensuales ? (
-      <p style={{ color: '#ccc' }}>No hay protocolos con fecha de prueba electrica en el rango seleccionado.</p>
-    ) : protocolosMensualesFiltrados.length === 0 && !cargandoProtocolosMensuales ? (
-      <p style={{ color: '#ccc' }}>No hay resultados para la búsqueda indicada.</p>
-    ) : (
-      <div style={{ overflowX: 'auto', paddingLeft: puedeEliminarProtocolosMensuales ? '38px' : 0 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px' }}>
-          <thead>
-            <tr style={{ background: '#333' }}>
-              {encabezadosProtocolosMensuales.map((encabezado) => (
-                <th key={encabezado.clave} style={{ padding: '8px 10px', border: '1px solid #555', textAlign: encabezado.align || 'left', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
-                  {encabezado.lineas.map((linea) => (
-                    <span key={linea} style={{ display: 'block' }}>{linea}</span>
-                  ))}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {protocolosMensualesFiltrados.map((registro) => {
-              const claveRegistro = `${registro.origen}-${registro.id}`
-              const claveUnica = claveProtocoloUnico(registro.serie, registro.fecha_prueba_electrica)
-              const estaDuplicado = claveUnica && conteoClavesProtocolos[claveUnica] > 1
-              return (
-                <tr key={claveRegistro} style={{ background: estaDuplicado ? 'rgba(255, 152, 0, 0.16)' : 'transparent' }}>
-                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'center', position: 'relative', overflow: 'visible' }}>
-                    {puedeEliminarProtocolosMensuales && (
-                      <button
-                        type="button"
-                        onClick={() => eliminarProtocoloMensual(registro)}
-                        title="Eliminar protocolo"
-                        style={{
-                          position: 'absolute',
-                          left: '-34px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          width: '28px',
-                          height: '28px',
-                          display: 'grid',
-                          placeItems: 'center',
-                          background: '#050505',
-                          border: '1px solid #777',
-                          borderRadius: '4px',
-                          color: 'white',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          lineHeight: 1,
-                          zIndex: 2,
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none">
-                          <path d="M9 4h6l1 2h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M4 6h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M7 9l1 11h8l1-11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => abrirProtocoloDesdeBusqueda(registro)}
-                      title="Ver protocolo"
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'white',
-                        cursor: 'pointer',
-                        fontSize: '24px',
-                      }}
-                    >
-                      📜
-                    </button>
-                  </td>
-                  <td style={{ padding: '8px', border: '1px solid #444', fontWeight: 700 }}>
-                    {registro.serie}
-                    {estaDuplicado && (
-                      <div style={{ color: '#ffb74d', fontSize: '11px', marginTop: '2px' }}>
-                        Duplicado
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: '8px', border: '1px solid #444' }}>
-                    {registro.fecha_prueba_electrica ? formatearFecha(registro.fecha_prueba_electrica) : '-'}
-                  </td>
-                  <td style={{ padding: '8px', border: '1px solid #444' }}>{registro.tipo || '-'}</td>
-                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>
-                    <BotonValorCobro registro={registro} tipo="mantencion">
-                      {formatearPrecioMaterial(registro.valorMantencion)}
-                      {registro.tieneAjusteValorizacion ? ' *' : ''}
-                    </BotonValorCobro>
-                  </td>
-                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>
-                    <BotonValorCobro registro={registro} tipo="modificacion">
-                      {formatearPrecioMaterial(registro.valorModificacion)}
-                      {registro.tieneAjusteValorizacion ? ' *' : ''}
-                    </BotonValorCobro>
-                  </td>
-                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right', fontWeight: 800 }}>
-                    <BotonValorCobro registro={registro} tipo="total" destacado>
-                      {formatearPrecioMaterial(registro.valorTotal)}
-                      {registro.tieneAjusteValorizacion ? ' *' : ''}
-                    </BotonValorCobro>
-                  </td>
-                  <td style={{ padding: '8px', border: '1px solid #444' }}>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      {idOtEnEdicion === claveRegistro ? (
-                        <div style={{ display: 'grid', gap: '4px' }}>
-                          {idsOtEnEdicion.map((valorOt, indiceOt) => (
-                            <input
-                              key={indiceOt}
-                              type="text"
-                              value={valorOt}
-                              placeholder={`OT ${indiceOt + 1}`}
-                              onChange={(e) => {
-                                const nuevosValores = [...idsOtEnEdicion]
-                                nuevosValores[indiceOt] = e.target.value
-                                setIdsOtEnEdicion(nuevosValores)
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') guardarIdOtProtocoloMensual(registro, unirIdsOt(idsOtEnEdicion))
-                              }}
-                              style={{
-                                width: '92px',
-                                padding: '6px',
-                                background: 'white',
-                                color: '#111',
-                                border: '1px solid #777',
-                                borderRadius: '6px',
-                                font: 'inherit',
-                                fontWeight: 700,
-                              }}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', minWidth: '98px' }}>
-                          {separarIdsOt(registro.idOt).filter(Boolean).length > 0 ? (
-                            separarIdsOt(registro.idOt).filter(Boolean).map((valorOt, indiceOt) => (
-                              <span
-                                key={`${valorOt}-${indiceOt}`}
-                                style={{
-                                  padding: '3px 7px',
-                                  borderRadius: '999px',
-                                  background: '#263238',
-                                  border: '1px solid #546e7a',
-                                  color: 'white',
-                                  fontWeight: 700,
-                                  fontSize: '13px',
-                                }}
-                              >
-                                {valorOt}
-                              </span>
-                            ))
-                          ) : (
-                            <span style={{ color: '#aaa', fontWeight: 700 }}>-</span>
-                          )}
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (idOtEnEdicion === claveRegistro) {
-                            guardarIdOtProtocoloMensual(registro, unirIdsOt(idsOtEnEdicion))
-                          } else {
-                            setIdsOtEnEdicion(separarIdsOt(registro.idOt))
-                            setIdOtEnEdicion(claveRegistro)
-                          }
-                        }}
-                        title={idOtEnEdicion === claveRegistro ? 'Guardar ID OT' : 'Editar ID OT'}
-                        style={{
-                          width: '30px',
-                          height: '30px',
-                          borderRadius: '50%',
-                          border: idOtEnEdicion === claveRegistro ? '1px solid #66bb6a' : '1px solid #555',
-                          background: idOtEnEdicion === claveRegistro ? '#2e7d32' : 'transparent',
-                          color: 'white',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                        }}
-                      >
-                        {idOtEnEdicion === claveRegistro ? '✓' : '✏️'}
-                      </button>
-                    </div>
-                  </td>
-                  {false && (
-                  <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'center' }}>
-                    {puedeEliminarProtocolosMensuales && registro.origen !== 'actual' ? (
-                      <button
-                        type="button"
-                        onClick={() => eliminarProtocoloMensual(registro)}
-                        title="Eliminar protocolo"
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#ff8a80',
-                          cursor: 'pointer',
-                          fontSize: '20px',
-                        }}
-                      >
-                        🗑️
-                      </button>
-                    ) : (
-                      <span title={registro.origen === 'actual' ? 'Módulo activo: no se elimina desde esta vista' : 'Sin permiso para eliminar'} style={{ color: '#777' }}>
-                        —
-                      </span>
-                    )}
-                  </td>
-                  )}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    )}
+  </ProtocolosMensualesModal>
+)}
 
-  </div>
+{mostrarBalanceMateriales && puedeVerBalanceMateriales && (
+  <BalanceMaterialesModal
+    rango={rangoBalanceMateriales}
+    fecha={fechaBalanceMateriales}
+    cargando={cargandoBalanceMateriales}
+    filas={balanceMateriales}
+    formatearPrecio={formatearPrecioMaterial}
+    onCambiarRango={(nuevoRango) => {
+      setRangoBalanceMateriales(nuevoRango)
+      setFechaBalanceMateriales(obtenerValorInicialRangoProtocolo(nuevoRango))
+    }}
+    onCambiarFecha={setFechaBalanceMateriales}
+    onActualizar={() => cargarBalanceMateriales(fechaBalanceMateriales, rangoBalanceMateriales)}
+    onCerrar={() => setMostrarBalanceMateriales(false)}
+    onClickFondo={cerrarPanelesFlotantes}
+  />
 )}
 
 {mostrarPreciosMateriales && puedeVerPreciosMateriales && (
-  <div
-    onClick={cerrarPanelesFlotantes}
-    style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: 'calc(100vw - 32px)',
-      maxWidth: '520px',
-      maxHeight: 'calc(100vh - 32px)',
-      overflowY: 'auto',
-      boxSizing: 'border-box',
-      padding: '20px',
-      background: '#222',
-      border: '1px solid white',
-      borderRadius: '10px',
-      zIndex: 1300,
-      color: 'white',
-      textAlign: 'left',
-    }}
-  >
-    <h2 style={{ marginTop: 0 }}>Precios materiales</h2>
-    <p style={{ marginTop: 0, color: '#ccc' }}>
-      {puedeEditarPreciosMateriales
-        ? 'Estos precios quedan como catálogo global para cálculos futuros.'
-        : 'Consulta de precios de materiales.'}
-    </p>
-
-    {cargandoPreciosMateriales ? (
-      <p>Cargando precios...</p>
-    ) : (
-      <div style={{ display: 'grid', gap: '8px' }}>
-        {seccionesCatalogoPrecios.map((seccion, index) => (
-          <details
-            key={seccion}
-            defaultOpen={index === 0}
-            style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}
-          >
-            <summary
-              style={{
-                padding: '10px 12px',
-                background: '#333',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {seccion}
-            </summary>
-
-            <div style={{ padding: '8px 10px' }}>
-              {catalogoPreciosProtocolo
-                .filter((item) => item.seccion === seccion)
-                .map((item) => (
-                <div
-                  key={item.material}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: puedeEditarPreciosMateriales
-                      ? '72px minmax(0, 1fr) 120px 42px'
-                      : '72px minmax(0, 1fr) 120px',
-                    gap: '10px',
-                    alignItems: 'center',
-                    padding: '7px 0',
-                    borderBottom: '1px solid #444',
-                  }}
-                >
-                  <strong style={{ color: '#bbb', fontSize: '13px' }}>
-                    {item.idArt}
-                  </strong>
-                  <span style={{ lineHeight: 1.2 }}>{item.material}</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={formatearPrecioMaterial(preciosMateriales[item.material])}
-                    onChange={(e) => actualizarPrecioMaterial(item.material, e.target.value)}
-                    disabled={!puedeEditarPreciosMateriales || precioMaterialEnEdicion !== item.material}
-                    placeholder="$ 0"
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      boxSizing: 'border-box',
-                      textAlign: 'right',
-                      opacity: puedeEditarPreciosMateriales ? 1 : 0.8,
-                      background: precioMaterialEnEdicion === item.material ? 'white' : '#ddd',
-                      color: '#111',
-                    }}
-                  />
-                  {puedeEditarPreciosMateriales && (
-                    <button
-                      type="button"
-                      onClick={() => setPrecioMaterialEnEdicion((actual) => (
-                        actual === item.material ? null : item.material
-                      ))}
-                      style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: '8px',
-                        border: '1px solid #777',
-                        background: precioMaterialEnEdicion === item.material ? '#fbc02d' : '#333',
-                        color: precioMaterialEnEdicion === item.material ? '#111' : 'white',
-                        cursor: 'pointer',
-                        fontSize: '18px',
-                      }}
-                      title="Editar precio"
-                    >
-                      ✏️
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </details>
-        ))}
-      </div>
-    )}
-
-    <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
-      {puedeEditarPreciosMateriales && (
-        <button
-          type="button"
-          onClick={guardarPreciosMateriales}
-          disabled={cargandoPreciosMateriales || guardandoPreciosMateriales}
-          style={{
-            flex: 1,
-            padding: '12px',
-            background: '#2e7d32',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: cargandoPreciosMateriales || guardandoPreciosMateriales ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {guardandoPreciosMateriales ? 'Guardando...' : 'Guardar precios'}
-        </button>
-      )}
-
-      <button
-        type="button"
-        onClick={() => setMostrarPreciosMateriales(false)}
-        style={{ flex: 1, padding: '12px' }}
-      >
-        Cerrar
-      </button>
-    </div>
-  </div>
+  <PreciosMaterialesModal
+    puedeEditar={puedeEditarPreciosMateriales}
+    cargando={cargandoPreciosMateriales}
+    guardando={guardandoPreciosMateriales}
+    secciones={seccionesCatalogoPrecios}
+    catalogo={catalogoPreciosProtocolo}
+    precios={preciosMateriales}
+    precioEnEdicion={precioMaterialEnEdicion}
+    formatearPrecio={formatearPrecioMaterial}
+    onActualizarPrecio={actualizarPrecioMaterial}
+    onCambiarEdicion={setPrecioMaterialEnEdicion}
+    onGuardar={guardarPreciosMateriales}
+    onCerrar={() => setMostrarPreciosMateriales(false)}
+    onClickFondo={cerrarPanelesFlotantes}
+  />
 )}
 
 {detalleCobroSeleccionado && (
-  <div
-    onClick={cerrarPanelesFlotantes}
-    style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: 'calc(100vw - 32px)',
-      maxWidth: '560px',
-      maxHeight: 'calc(100vh - 32px)',
-      overflowY: 'auto',
-      boxSizing: 'border-box',
-      padding: '18px',
-      background: '#222',
-      border: '1px solid white',
-      borderRadius: '10px',
-      zIndex: 1500,
-      color: 'white',
-      textAlign: 'left',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-    }}
-  >
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start', marginBottom: '12px' }}>
-      <div>
-        <h3 style={{ margin: 0 }}>Detalle de cobro</h3>
-        <div style={{ color: '#ccc', marginTop: '4px' }}>
-          Serie: {detalleCobroSeleccionado.serie || '-'}
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={() => setDetalleCobroSeleccionado(null)}
-        style={{
-          padding: '8px 12px',
-          borderRadius: '8px',
-          border: '1px solid #777',
-          background: '#555',
-          color: 'white',
-          cursor: 'pointer',
-        }}
-      >
-        Cerrar
-      </button>
-    </div>
-
-    {detalleCobroSeleccionado.lineas.length === 0 ? (
-      <p style={{ color: '#ccc' }}>No hay cobros asociados a este valor.</p>
-    ) : (
-      <div style={{ display: 'grid', gap: '8px' }}>
-        {detalleCobroSeleccionado.lineas.map((item, index) => (
-          <div
-            key={`${item.material}-${index}`}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) auto',
-              gap: '8px',
-              padding: '10px',
-              border: '1px solid #444',
-              borderRadius: '8px',
-              background: '#2b2b2b',
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 800 }}>{item.material}</div>
-              <div style={{ color: '#ccc', fontSize: '13px', marginTop: '3px' }}>
-                {item.cantidad} x {formatearPrecioMaterial(item.precioUnitario)}
-                {item.tipoCantidad ? ` · ${item.tipoCantidad}` : ''}
-                {item.materialPrecio && item.materialPrecio !== item.material ? ` · precio: ${item.materialPrecio}` : ''}
-              </div>
-            </div>
-            <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
-              <div style={{ fontWeight: 800, textAlign: 'right' }}>
-                {formatearPrecioMaterial(item.subtotal)}
-              </div>
-              {item.ajusteValorizacionItem && (
-                <div style={{ color: '#ffcc80', fontSize: '12px', textAlign: 'right' }}>
-                  Ajustado{item.subtotalOriginal !== undefined ? ` desde ${formatearPrecioMaterial(item.subtotalOriginal)}` : ''}
-                </div>
-              )}
-              {puedeAjustarValoresProtocolos && (
-                <button
-                  type="button"
-                  onClick={() => setAjusteCobroMensual({
-                    itemKey: item.claveAjuste || claveItemCobro(item.tipoCobro || detalleCobroSeleccionado.tipo, item),
-                    itemLabel: item.material,
-                    tipoCobro: item.tipoCobro || detalleCobroSeleccionado.tipo,
-                    valor: String(item.subtotal ?? 0),
-                    motivo: item.ajusteValorizacionItem?.motivo || '',
-                  })}
-                  title="Modificar este cobro"
-                  style={{
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '50%',
-                    border: '1px solid #777',
-                    background: '#333',
-                    color: 'white',
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✏️
-                </button>
-              )}
-            </div>
-            {ajusteCobroMensual.itemKey === (item.claveAjuste || claveItemCobro(item.tipoCobro || detalleCobroSeleccionado.tipo, item)) && (
-              <div style={{ gridColumn: '1 / -1', display: 'grid', gap: '8px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #555' }}>
-                <strong>Modificar: {item.material}</strong>
-                <input
-                  value={ajusteCobroMensual.valor}
-                  onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, valor: e.target.value }))}
-                  inputMode="numeric"
-                  placeholder="Nuevo valor"
-                  style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777' }}
-                />
-                <textarea
-                  value={ajusteCobroMensual.motivo}
-                  onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, motivo: e.target.value }))}
-                  rows={2}
-                  placeholder="Motivo de la modificación"
-                  style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777', resize: 'vertical' }}
-                />
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={guardarAjusteValorizacionProtocolo}
-                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #66bb6a', background: '#1b5e20', color: 'white', cursor: 'pointer', fontWeight: 800 }}
-                  >
-                    Guardar item
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAjusteCobroMensual({ itemKey: '', itemLabel: '', tipoCobro: '', valor: '', motivo: '' })}
-                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #777', background: '#555', color: 'white', cursor: 'pointer' }}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    )}
-
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: '14px',
-        paddingTop: '12px',
-        borderTop: '1px solid #555',
-        fontWeight: 900,
-        fontSize: '18px',
-      }}
-    >
-      <span>Total detalle</span>
-      <span>{formatearPrecioMaterial(detalleCobroSeleccionado.total)}</span>
-    </div>
-
-    {false && puedeAjustarValoresProtocolos && (
-      <div
-        style={{
-          marginTop: '14px',
-          paddingTop: '12px',
-          borderTop: '1px solid #555',
-          display: 'grid',
-          gap: '10px',
-        }}
-      >
-        <div style={{ fontWeight: 900 }}>Modificar valorización</div>
-        {detalleCobroSeleccionado.registro?.ajusteValorizacion?.motivo && (
-          <div style={{ color: '#ffcc80', fontSize: '13px' }}>
-            Ajuste actual: {detalleCobroSeleccionado.registro.ajusteValorizacion.motivo}
-          </div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          <label style={{ display: 'grid', gap: '4px' }}>
-            <span>Valor mantención</span>
-            <input
-              value={ajusteCobroMensual.mantencion}
-              onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, mantencion: e.target.value }))}
-              inputMode="numeric"
-              style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: '4px' }}>
-            <span>Valor modificación</span>
-            <input
-              value={ajusteCobroMensual.modificacion}
-              onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, modificacion: e.target.value }))}
-              inputMode="numeric"
-              style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777' }}
-            />
-          </label>
-        </div>
-        <label style={{ display: 'grid', gap: '4px' }}>
-          <span>Motivo de la modificación</span>
-          <textarea
-            value={ajusteCobroMensual.motivo}
-            onChange={(e) => setAjusteCobroMensual((actual) => ({ ...actual, motivo: e.target.value }))}
-            rows={3}
-            placeholder="Ej: se anula cobro por garantía / se agrega cobro adicional..."
-            style={{ padding: '8px', borderRadius: '6px', border: '1px solid #777', resize: 'vertical' }}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={guardarAjusteValorizacionProtocolo}
-          style={{
-            justifySelf: 'start',
-            padding: '9px 14px',
-            borderRadius: '8px',
-            border: '1px solid #66bb6a',
-            background: '#1b5e20',
-            color: 'white',
-            cursor: 'pointer',
-            fontWeight: 800,
-          }}
-        >
-          Guardar modificación
-        </button>
-      </div>
-    )}
-  </div>
+  <DetalleCobroModal
+    detalle={detalleCobroSeleccionado}
+    puedeAjustar={puedeAjustarValoresProtocolos}
+    ajusteCobro={ajusteCobroMensual}
+    setAjusteCobro={setAjusteCobroMensual}
+    formatearPrecio={formatearPrecioMaterial}
+    claveItemCobro={claveItemCobro}
+    onGuardarAjuste={guardarAjusteValorizacionProtocolo}
+    onCerrar={() => setDetalleCobroSeleccionado(null)}
+    onClickFondo={cerrarPanelesFlotantes}
+  />
 )}
 
 {mostrarProtocoloEntrega && moduloSeleccionado && (
@@ -6314,122 +5082,22 @@ const ultimosFinalizados = [...historial]
 )}
 
 {mostrarReintegrar && puedeAgregarModulos && (
-  <div
-    style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      background: '#222',
-      padding: '20px',
-      borderRadius: '10px',
-      border: '1px solid white',
-      width: 'calc(100vw - 32px)',
-      maxWidth: '430px',
-      maxHeight: 'calc(100vh - 32px)',
-      overflowY: 'auto',
-      boxSizing: 'border-box',
-      zIndex: 3200,
-      color: 'white',
-      textAlign: 'left',
-    }}
-  >
-    <h2 style={{ marginTop: 0 }}>Reintegrar módulo</h2>
-    <p style={{ color: '#ccc', marginTop: 0 }}>
-      Selecciona uno de los últimos finalizados o ingresa una serie.
-    </p>
-
-    <div style={{ display: 'grid', gap: '8px', marginBottom: '14px' }}>
-      {ultimosFinalizados.length === 0 ? (
-        <p style={{ margin: 0 }}>No hay módulos finalizados recientes.</p>
-      ) : (
-        ultimosFinalizados.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => seleccionarHistorialParaReintegrar(item)}
-            style={{
-              padding: '10px',
-              borderRadius: '8px',
-              border: historialSeleccionadoReintegrar?.id === item.id ? '2px solid #64b5f6' : '1px solid #555',
-              background: historialSeleccionadoReintegrar?.id === item.id ? '#0d47a1' : '#333',
-              color: 'white',
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-          >
-            <strong>{item.serie}</strong>
-            <span style={{ display: 'block', color: '#ccc', fontSize: '12px', marginTop: '2px' }}>
-              {item.tipo} · Salida {formatearFecha(item.fecha_salida) || 'sin fecha'}
-            </span>
-          </button>
-        ))
-      )}
-    </div>
-
-    <label style={{ display: 'block', marginBottom: '12px' }}>
-      <strong>Serie</strong>
-      <input
-        value={serieReintegrar}
-        onChange={(e) => {
-          setSerieReintegrar(e.target.value)
-          setHistorialSeleccionadoReintegrar(null)
-        }}
-        placeholder="Ingresar serie"
-        style={{
-          width: '100%',
-          padding: '9px',
-          marginTop: '5px',
-          boxSizing: 'border-box',
-        }}
-      />
-    </label>
-
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-      <label>
-        <strong>Línea</strong>
-        <select
-          value={lineaReintegrar}
-          onChange={(e) => setLineaReintegrar(Number(e.target.value))}
-          style={{ width: '100%', padding: '9px', marginTop: '5px' }}
-        >
-          {[1,2,3,4,5,6,7,8,9].map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
-      </label>
-
-      <label>
-        <strong>Ubicación</strong>
-        <select
-          value={extremoReintegrar}
-          onChange={(e) => setExtremoReintegrar(e.target.value)}
-          style={{ width: '100%', padding: '9px', marginTop: '5px' }}
-        >
-          <option value="inicio">Calle acopio</option>
-          <option value="fin">Calle agua</option>
-        </select>
-      </label>
-    </div>
-
-    <div style={{ display: 'flex', gap: '10px' }}>
-      <button
-        type="button"
-        onClick={reintegrarModuloFinalizado}
-        disabled={reintegrandoModulo}
-        style={{ flex: 1, padding: '12px', background: '#2e7d32', color: 'white' }}
-      >
-        {reintegrandoModulo ? 'Reintegrando...' : 'Reintegrar'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setMostrarReintegrar(false)}
-        style={{ flex: 1, padding: '12px' }}
-      >
-        Cerrar
-      </button>
-    </div>
-  </div>
+  <ReintegrarModuloModal
+    ultimosFinalizados={ultimosFinalizados}
+    historialSeleccionado={historialSeleccionadoReintegrar}
+    serie={serieReintegrar}
+    linea={lineaReintegrar}
+    extremo={extremoReintegrar}
+    reintegrando={reintegrandoModulo}
+    formatearFecha={formatearFecha}
+    onSeleccionarHistorial={seleccionarHistorialParaReintegrar}
+    onCambiarSerie={setSerieReintegrar}
+    onLimpiarHistorialSeleccionado={() => setHistorialSeleccionadoReintegrar(null)}
+    onCambiarLinea={setLineaReintegrar}
+    onCambiarExtremo={setExtremoReintegrar}
+    onReintegrar={reintegrarModuloFinalizado}
+    onCerrar={() => setMostrarReintegrar(false)}
+  />
 )}
 
 {mostrarKPI && (
@@ -6439,65 +5107,13 @@ const ultimosFinalizados = [...historial]
 )}
 
 {mostrarDescargaProtocolos && puedeDescargarProtocolosDiarios && (
-  <div
-    style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      background: '#222',
-      padding: '20px',
-      borderRadius: '10px',
-      border: '1px solid white',
-      width: 'calc(100vw - 32px)',
-      maxWidth: '380px',
-      boxSizing: 'border-box',
-      zIndex: 3200,
-      color: 'white',
-      textAlign: 'left',
-    }}
-  >
-    <h2 style={{ marginTop: 0 }}>Descargar protocolos diarios</h2>
-    <p style={{ color: '#ccc', marginTop: 0 }}>
-      Selecciona la fecha de prueba eléctrica.
-    </p>
-
-    <label style={{ display: 'block', marginBottom: '16px' }}>
-      <strong>Fecha</strong>
-      <input
-        type="date"
-        value={fechaProtocolosDiarios}
-        onChange={(e) => setFechaProtocolosDiarios(e.target.value)}
-        style={{
-          width: '100%',
-          padding: '10px',
-          marginTop: '6px',
-          boxSizing: 'border-box',
-        }}
-      />
-      <small style={{ display: 'block', color: '#bbb', marginTop: '5px' }}>
-        Formato visual: dd-mm-aaaa
-      </small>
-    </label>
-
-    <div style={{ display: 'flex', gap: '10px' }}>
-      <button
-        type="button"
-        onClick={generarDescargaProtocolosDiarios}
-        disabled={descargandoProtocolos}
-        style={{ flex: 1, padding: '12px', background: '#2e7d32', color: 'white' }}
-      >
-        {descargandoProtocolos ? 'Generando...' : 'Descargar'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setMostrarDescargaProtocolos(false)}
-        style={{ flex: 1, padding: '12px' }}
-      >
-        Cerrar
-      </button>
-    </div>
-  </div>
+  <DescargaProtocolosDiariosModal
+    fecha={fechaProtocolosDiarios}
+    descargando={descargandoProtocolos}
+    onCambiarFecha={setFechaProtocolosDiarios}
+    onDescargar={generarDescargaProtocolosDiarios}
+    onCerrar={() => setMostrarDescargaProtocolos(false)}
+  />
 )}
 
 {mostrarNuevoModulo && puedeAgregarModulos && (
