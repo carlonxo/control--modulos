@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 function BalanceMaterialesModal({
   rango,
   fecha,
@@ -10,6 +12,7 @@ function BalanceMaterialesModal({
   onCerrar,
   onClickFondo,
 }) {
+  const [mostrarReutilizados, setMostrarReutilizados] = useState(false)
   const filasBalance = filas.map((fila) => ({
     ...fila,
     instalado: Number(fila.nuevo || 0),
@@ -22,6 +25,23 @@ function BalanceMaterialesModal({
     (total, fila) => total + Number(fila.balance || 0),
     0
   )
+  const filasReutilizadas = filas
+    .filter((fila) => Number(fila.reutilizado || 0) > 0)
+    .map((fila) => ({
+      ...fila,
+      cantidadReutilizada: Number(fila.reutilizado || 0),
+      valorUnitarioReutilizado: Number(fila.precioUnitarioReutilizado || 0),
+      valorTotalReutilizado: Number(fila.valorReutilizado || 0),
+    }))
+  const totalReutilizados = filasReutilizadas.reduce(
+    (total, fila) => total + Number(fila.cantidadReutilizada || 0),
+    0
+  )
+  const totalValorReutilizados = filasReutilizadas.reduce(
+    (total, fila) => total + Number(fila.valorTotalReutilizado || 0),
+    0
+  )
+  const indicadorBalance = mostrarReutilizados ? totalValorReutilizados : balanceTotal
   const colorBalanceTotal = balanceTotal > 0 ? '#66bb6a' : balanceTotal < 0 ? '#ff5252' : 'white'
 
   return (
@@ -117,22 +137,80 @@ function BalanceMaterialesModal({
         }}
       >
         <div style={{ padding: '10px 14px', borderRadius: '10px', background: '#263238', border: '1px solid #546e7a', fontWeight: 800 }}>
-          {filasBalance.length} materiales
+          {mostrarReutilizados ? filasReutilizadas.length : filasBalance.length} materiales
         </div>
-        <div style={{ padding: '10px 14px', borderRadius: '10px', background: '#1b5e20', border: '1px solid #66bb6a', fontWeight: 800, color: colorBalanceTotal }}>
-          Balance: {formatearPrecio(balanceTotal)}
+        <button
+          type="button"
+          onClick={() => setMostrarReutilizados((actual) => !actual)}
+          style={{
+            padding: '10px 14px',
+            borderRadius: '10px',
+            background: mostrarReutilizados ? '#0d47a1' : '#263238',
+            border: '1px solid #64b5f6',
+            color: 'white',
+            fontWeight: 800,
+            cursor: 'pointer',
+          }}
+        >
+          Reutilizados ({totalReutilizados})
+        </button>
+        <div style={{ padding: '10px 14px', borderRadius: '10px', background: '#1b5e20', border: '1px solid #66bb6a', fontWeight: 800, color: mostrarReutilizados ? 'white' : colorBalanceTotal }}>
+          Balance: {formatearPrecio(indicadorBalance)}
         </div>
       </div>
 
       {filas.length === 0 && !cargando ? (
         <p style={{ color: '#ccc' }}>No hay materiales cobrados en el rango seleccionado.</p>
       ) : (
-        <TablaBalanceMateriales
-          filas={filasBalance}
-          tituloVacio="No hay materiales cobrados en el rango seleccionado."
-          formatearPrecio={formatearPrecio}
-        />
+        mostrarReutilizados ? (
+          <TablaMaterialesReutilizados
+            filas={filasReutilizadas}
+            tituloVacio="No hay material reutilizado cobrado en el rango seleccionado."
+            formatearPrecio={formatearPrecio}
+          />
+        ) : (
+          <TablaBalanceMateriales
+            filas={filasBalance}
+            tituloVacio="No hay materiales cobrados en el rango seleccionado."
+            formatearPrecio={formatearPrecio}
+          />
+        )
       )}
+    </div>
+  )
+}
+
+function TablaMaterialesReutilizados({
+  filas,
+  tituloVacio,
+  formatearPrecio,
+}) {
+  if (filas.length === 0) {
+    return <p style={{ color: '#ccc' }}>{tituloVacio}</p>
+  }
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
+        <thead>
+          <tr style={{ background: '#333' }}>
+            <th style={thStyle}>Material</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>$ unitario</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Reutilizado</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Valor total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((fila) => (
+            <tr key={fila.clave}>
+              <td style={{ ...tdStyle, fontWeight: 700 }}>{fila.material}</td>
+              <td style={{ ...tdStyle, textAlign: 'right' }}>{formatearPrecio(fila.valorUnitarioReutilizado || 0)}</td>
+              <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.cantidadReutilizada || '-'}</td>
+              <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>{formatearPrecio(fila.valorTotalReutilizado || 0)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
