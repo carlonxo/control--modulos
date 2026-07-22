@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
-import mammoth from 'mammoth/mammoth.browser'
+﻿import { useEffect, useRef, useState } from 'react'
 import { supabase } from './services/supabase'
 import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
@@ -23,7 +21,7 @@ import BalanceMaterialesModal from './components/BalanceMaterialesModal'
 import ValesBodegaModal from './components/ValesBodegaModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
-import { formatearFecha } from './utils/fechas'
+import { formatearFecha, formatearFechaInput, obtenerRangoFechasProtocolos } from './utils/fechas'
 import { descargarProtocolosDiariosPdf } from './services/protocolosDiariosPdf'
 import { tienePermiso } from './utils/permisos'
 import {
@@ -31,18 +29,78 @@ import {
   marcarRegistroAccionDeshecha,
   registrarRegistroAccionModulo,
 } from './services/registroAccionesService'
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.mjs',
-  import.meta.url,
-).toString()
+import { leerFilasValeBodegaDesdeArchivo } from './services/valesBodegaArchivoService'
+import { compilarBalanceMateriales } from './services/balanceMaterialesService'
+import {
+  cargarConfigBalanceMateriales as cargarConfigBalanceMaterialesSupabase,
+  guardarConfigBalanceMaterial,
+} from './services/balanceMaterialesConfigService'
+import {
+  cargarItemsValesBodegaPorRango,
+  cargarValesBodegaDia as cargarValesBodegaDiaSupabase,
+  guardarValeBodega as guardarValeBodegaSupabase,
+} from './services/valesBodegaService'
+import {
+  cargarPreciosMateriales as cargarPreciosMaterialesSupabase,
+  guardarPreciosMateriales as guardarPreciosMaterialesSupabase,
+} from './services/preciosMaterialesService'
+import {
+  cargarProtocolosDiarios,
+  cargarRegistrosProtocolosPorRango,
+} from './services/protocolosConsultaService'
+import {
+  claveItemCobro,
+  prepararRegistroProtocoloMensual as prepararRegistroProtocoloMensualBase,
+} from './services/protocolosValorizacionService'
+import {
+  eliminarRegistroProtocoloMensual,
+  guardarAjusteValorizacionProtocoloSupabase,
+  guardarIdOtProtocoloMensualSupabase,
+  guardarProtocoloManualMensualSupabase,
+  guardarProtocoloModuloSupabase,
+  limpiarProtocoloModuloActivo,
+} from './services/protocolosMensualesService'
+import {
+  cargarModuloPorId,
+  construirHistorialModulo,
+  eliminarModuloActivo,
+  guardarHistorialModuloFinalizado,
+} from './services/finalizacionModulosService'
+import {
+  crearModuloActivo,
+  prepararLineaParaIngresoModulo,
+} from './services/ingresoModulosService'
+import { moverModuloEnTablero } from './services/movimientoModulosService'
+import {
+  buscarUltimoModuloFinalizadoPorSerie,
+  reintegrarModuloDesdeHistorial,
+} from './services/reintegroModulosService'
+import {
+  aprobarPruebaElectricaModulo,
+  cancelarSolicitudPruebaElectricaModulo,
+  guardarObservacionAlertaModulo,
+  rechazarPruebaElectricaModulo,
+  solicitarPruebaElectricaModulo,
+} from './services/pruebaElectricaService'
+import {
+  actualizarModuloEditado,
+  aplicarDatosPruebaElectricaEnPayload,
+  aplicarGarantiaEnPayload,
+  cargarModuloParaEdicion,
+  construirPayloadEdicionModulo,
+} from './services/edicionModulosService'
+import {
+  cargarDatosTablero,
+  cargarPerfilUsuario,
+  cargarSolicitantesPruebaPendiente,
+} from './services/tableroService'
 
 function esSolicitudPruebaActiva(valor) {
   return valor === true || valor === 'true' || valor === 1
 }
 
 function esEstadoPruebaElectrica(estado) {
-  return ['prueba eléctrica', 'prueba electrica'].includes(
+  return ['prueba elÃ©ctrica', 'prueba electrica'].includes(
     String(estado || '').trim().toLowerCase()
   )
 }
@@ -108,16 +166,16 @@ function estaDentroDeGarantia(valor) {
 
 const seccionesFormularioElectrico = [
   {
-    nombre: 'Canalización',
-    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metálica 100x100x65', 'Caja tabique LH', 'Tapa ciega - Pasac.'],
+    nombre: 'CanalizaciÃ³n',
+    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metÃ¡lica 100x100x65', 'Caja tabique LH', 'Tapa ciega - Pasac.'],
   },
   {
     nombre: 'Cableado',
     items: ['Cable RZ1 2,5mm', 'Cable RZ1 4mm', 'Cable RZ1 6mm', 'Cordon 3x1.5mm', 'Cordon 3x4mm', 'Cordon 3 x 6mm'],
   },
   {
-    nombre: 'Iluminación',
-    items: ['EQ. Herm. LED 40W (tubo/placa)', 'Tubo LED', 'Foco tortuga LED', 'Foco tortuga 60W', 'Ampolleta LED', 'Plafón'],
+    nombre: 'IluminaciÃ³n',
+    items: ['EQ. Herm. LED 40W (tubo/placa)', 'Tubo LED', 'Foco tortuga LED', 'Foco tortuga 60W', 'Ampolleta LED', 'PlafÃ³n'],
   },
   {
     nombre: 'Artefactos',
@@ -125,7 +183,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Tableros',
-    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Aut. bifásico 2x25A', 'Diferencial 2x25A', 'Luz Piloto', 'Porta Fusible', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
+    items: ['Aut. monof. 10-16-20A', 'Aut. bifÃ¡sico 2x10A', 'Aut. bifÃ¡sico 2x16A', 'Aut. bifÃ¡sico 2x20A', 'Aut. bifÃ¡sico 2x25A', 'Diferencial 2x25A', 'Luz Piloto', 'Porta Fusible', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
   },
   {
     nombre: 'Especiales',
@@ -136,25 +194,25 @@ const seccionesFormularioElectrico = [
 const todosLosMateriales = seccionesFormularioElectrico.flatMap((seccion) => seccion.items)
 
 const catalogoPreciosProtocolo = [
-  { seccion: 'Canalización', material: 'Ducto Flex/Rig 20mm LH (Incl Acc)', idArt: 323, precio: 1932 },
-  { seccion: 'Canalización', material: 'Ducto Flex/Rig 25mm LH (Incl Acc)', idArt: 1681, precio: 2782 },
-  { seccion: 'Canalización', material: 'Caja PVC 100x100x65', idArt: 244, precio: 2377 },
-  { seccion: 'Canalización', material: 'Caja Metálica 100x65x65 / Chuqui', idArt: 322, precio: 2378 },
-  { seccion: 'Canalización', material: 'Caja Metálica 100x100x65', idArt: 1704, precio: 3120 },
-  { seccion: 'Canalización', material: 'Caja Tabique 3 Puestos LH', idArt: 1680, precio: 1900 },
-  { seccion: 'Canalización', material: 'Tapa Ciega - Plástica / Metálica', idArt: 1684, precio: 480 },
-  { seccion: 'Canalización', material: 'Prensa Estopa 16-21mm', idArt: 1683, precio: 1458 },
+  { seccion: 'CanalizaciÃ³n', material: 'Ducto Flex/Rig 20mm LH (Incl Acc)', idArt: 323, precio: 1932 },
+  { seccion: 'CanalizaciÃ³n', material: 'Ducto Flex/Rig 25mm LH (Incl Acc)', idArt: 1681, precio: 2782 },
+  { seccion: 'CanalizaciÃ³n', material: 'Caja PVC 100x100x65', idArt: 244, precio: 2377 },
+  { seccion: 'CanalizaciÃ³n', material: 'Caja MetÃ¡lica 100x65x65 / Chuqui', idArt: 322, precio: 2378 },
+  { seccion: 'CanalizaciÃ³n', material: 'Caja MetÃ¡lica 100x100x65', idArt: 1704, precio: 3120 },
+  { seccion: 'CanalizaciÃ³n', material: 'Caja Tabique 3 Puestos LH', idArt: 1680, precio: 1900 },
+  { seccion: 'CanalizaciÃ³n', material: 'Tapa Ciega - PlÃ¡stica / MetÃ¡lica', idArt: 1684, precio: 480 },
+  { seccion: 'CanalizaciÃ³n', material: 'Prensa Estopa 16-21mm', idArt: 1683, precio: 1458 },
   { seccion: 'Cableado', material: 'Cable RZ1 2,5mm (Alum + Ench)', idArt: 248, precio: 353 },
   { seccion: 'Cableado', material: 'Cable RZ1 4mm (Termo)', idArt: 249, precio: 493 },
-  { seccion: 'Cableado', material: 'Cable RZ1 6mm (Alimentación)', idArt: 1687, precio: 710 },
+  { seccion: 'Cableado', material: 'Cable RZ1 6mm (AlimentaciÃ³n)', idArt: 1687, precio: 710 },
   { seccion: 'Cableado', material: 'Cable RZ1 3x2.5 / 4mm (Ilu-Term)', idArt: 252, precio: 2872 },
-  { seccion: 'Cableado', material: 'Cable RZ1 3x6mm (Alimentación)', idArt: 1685, precio: 3460 },
-  { seccion: 'Iluminación básica', material: 'Ampolleta LED', idArt: 254, precio: 3180 },
-  { seccion: 'Iluminación básica', material: 'Foco Led 12W Sob', idArt: 259, precio: 6702 },
-  { seccion: 'Iluminación básica', material: 'Tubo Led', idArt: 255, precio: 3180 },
-  { seccion: 'Iluminación básica', material: 'Eq. Herm. Led 40w (Tubo/Placa)', idArt: 256, precio: 18559 },
-  { seccion: 'Iluminación básica', material: 'Foco Tortuga Led', idArt: 258, precio: 7733 },
-  { seccion: 'Accesorios', material: 'Instalación Extractor', idArt: 273, precio: 3500 },
+  { seccion: 'Cableado', material: 'Cable RZ1 3x6mm (AlimentaciÃ³n)', idArt: 1685, precio: 3460 },
+  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Ampolleta LED', idArt: 254, precio: 3180 },
+  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Foco Led 12W Sob', idArt: 259, precio: 6702 },
+  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Tubo Led', idArt: 255, precio: 3180 },
+  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Eq. Herm. Led 40w (Tubo/Placa)', idArt: 256, precio: 18559 },
+  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Foco Tortuga Led', idArt: 258, precio: 7733 },
+  { seccion: 'Accesorios', material: 'InstalaciÃ³n Extractor', idArt: 273, precio: 3500 },
   { seccion: 'Artefactos tableros', material: 'Artefacto Simple', idArt: 263, precio: 1856 },
   { seccion: 'Artefactos tableros', material: 'Artefacto Doble', idArt: 264, precio: 2578 },
   { seccion: 'Artefactos tableros', material: 'Artefacto Triple', idArt: 265, precio: 3299 },
@@ -166,33 +224,33 @@ const catalogoPreciosProtocolo = [
   { seccion: 'Tableros', material: 'Tablero PVC IP65', idArt: 1701, precio: 56279 },
   { seccion: 'Tableros', material: 'Inst Tab. TOP (Armado)', idArt: 17, precio: 70000 },
   { seccion: 'Tableros', material: 'Aut. Monof 10-16-20A', idArt: 268, precio: 2578 },
-  { seccion: 'Tableros', material: 'Auto. Bifásico 2x10A', idArt: 1705, precio: 6740 },
-  { seccion: 'Tableros', material: 'Auto. Bifásico 2x16A', idArt: 1706, precio: 6950 },
-  { seccion: 'Tableros', material: 'Auto. Bifásico 2x20A', idArt: 1707, precio: 7308 },
-  { seccion: 'Tableros', material: 'Auto. Bifásico 2x25-32A', idArt: 1708, precio: 8450 },
+  { seccion: 'Tableros', material: 'Auto. BifÃ¡sico 2x10A', idArt: 1705, precio: 6740 },
+  { seccion: 'Tableros', material: 'Auto. BifÃ¡sico 2x16A', idArt: 1706, precio: 6950 },
+  { seccion: 'Tableros', material: 'Auto. BifÃ¡sico 2x20A', idArt: 1707, precio: 7308 },
+  { seccion: 'Tableros', material: 'Auto. BifÃ¡sico 2x25-32A', idArt: 1708, precio: 8450 },
   { seccion: 'Tableros', material: 'Diferencial 2x25A', idArt: 269, precio: 8673 },
   { seccion: 'Tableros', material: 'Diferencial 2x40A', idArt: 1709, precio: 13520 },
   { seccion: 'Tableros', material: 'Porta Fusibles', idArt: 1698, precio: 1850 },
   { seccion: 'Tableros', material: 'Luz Piloto', idArt: 1697, precio: 2100 },
-  { seccion: 'Tableros', material: 'Barra Monofásica 4cto', idArt: 271, precio: 1577 },
+  { seccion: 'Tableros', material: 'Barra MonofÃ¡sica 4cto', idArt: 271, precio: 1577 },
   { seccion: 'Tableros', material: 'Repartidor 4x80A', idArt: 1699, precio: 4200 },
   { seccion: 'Tableros', material: 'Falso Polo 1Mts', idArt: 272, precio: 1237 },
-  { seccion: 'Moldura plástica', material: 'Mold Bca C/T 20x10 x 2mt + Acces', idArt: 325, precio: 2000 },
-  { seccion: 'Bandeja plástica', material: 'BPC LH 100x45 + Acces', idArt: 1694, precio: 25200 },
-  { seccion: 'Bandeja plástica', material: 'Tapa Idrobox IP55', idArt: 1692, precio: 11033 },
-  { seccion: 'Eq. iluminación', material: 'Foco Sobrep LED 18W', idArt: 1712, precio: 8940 },
-  { seccion: 'Eq. iluminación', material: 'Panel Led 600x600mm', idArt: 1690, precio: 1690 },
-  { seccion: 'Eq. iluminación', material: 'Accesorio Mtaje Panel Led', idArt: 1688, precio: 15200 },
-  { seccion: 'Eq. iluminación', material: 'Foco Sobrep LED 24W', idArt: 1713, precio: 14320 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Tub Flexible Metálica c/acces', idArt: 1711, precio: 3390 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Tubería EMT c/accesorio', idArt: 1710, precio: 3900 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Ducto Flex/Rig 32mm LH (Incl Acc)', idArt: 1682, precio: 3744 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Caja Chuqui PVC', idArt: 324, precio: 1200 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Int. Difer. Legrand 2x10A 10mA', idArt: 1695, precio: 102500 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Int. Difer. Legrand 2x16A 10mA', idArt: 1696, precio: 24200 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Cordón Flex 3x18 AWG', idArt: 250, precio: 919 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Cable RZ-1 3x1.5mm2', idArt: 251, precio: 1658 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Cable RZ-1 5x4mm2', idArt: 1686, precio: 4620 },
+  { seccion: 'Moldura plÃ¡stica', material: 'Mold Bca C/T 20x10 x 2mt + Acces', idArt: 325, precio: 2000 },
+  { seccion: 'Bandeja plÃ¡stica', material: 'BPC LH 100x45 + Acces', idArt: 1694, precio: 25200 },
+  { seccion: 'Bandeja plÃ¡stica', material: 'Tapa Idrobox IP55', idArt: 1692, precio: 11033 },
+  { seccion: 'Eq. iluminaciÃ³n', material: 'Foco Sobrep LED 18W', idArt: 1712, precio: 8940 },
+  { seccion: 'Eq. iluminaciÃ³n', material: 'Panel Led 600x600mm', idArt: 1690, precio: 1690 },
+  { seccion: 'Eq. iluminaciÃ³n', material: 'Accesorio Mtaje Panel Led', idArt: 1688, precio: 15200 },
+  { seccion: 'Eq. iluminaciÃ³n', material: 'Foco Sobrep LED 24W', idArt: 1713, precio: 14320 },
+  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Tub Flexible MetÃ¡lica c/acces', idArt: 1711, precio: 3390 },
+  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'TuberÃ­a EMT c/accesorio', idArt: 1710, precio: 3900 },
+  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Ducto Flex/Rig 32mm LH (Incl Acc)', idArt: 1682, precio: 3744 },
+  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Caja Chuqui PVC', idArt: 324, precio: 1200 },
+  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Int. Difer. Legrand 2x10A 10mA', idArt: 1695, precio: 102500 },
+  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Int. Difer. Legrand 2x16A 10mA', idArt: 1696, precio: 24200 },
+  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'CordÃ³n Flex 3x18 AWG', idArt: 250, precio: 919 },
+  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Cable RZ-1 3x1.5mm2', idArt: 251, precio: 1658 },
+  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Cable RZ-1 5x4mm2', idArt: 1686, precio: 4620 },
   { seccion: 'SPT', material: 'Barra Coperw 5/8 Inc. Con', idArt: 1702, precio: 12540 },
   { seccion: 'SPT', material: 'Camarilla Registro PVC', idArt: 1703, precio: 5600 },
 ]
@@ -200,7 +258,6 @@ const catalogoPreciosProtocolo = [
 const seccionesCatalogoPrecios = [...new Set(catalogoPreciosProtocolo.map((item) => item.seccion))]
 const opcionesMaterialesBalance = [...new Set(camposMateriales.map(([item]) => item))]
   .sort((a, b) => a.localeCompare(b))
-const valorBaseManoObraMantencion = 18900
 const encabezadosProtocolosMensuales = [
   { clave: 'ver', lineas: ['Ver'], align: 'center' },
   { clave: 'serie', lineas: ['Serie'] },
@@ -280,54 +337,38 @@ function normalizarPrecioMaterial(valor) {
 
 function normalizarTextoComparacion(valor) {
   return String(valor || '')
-    .replace(/Ã¡/gi, 'a')
-    .replace(/Ã©/gi, 'e')
-    .replace(/Ã­/gi, 'i')
-    .replace(/Ã³/gi, 'o')
-    .replace(/Ãº/gi, 'u')
-    .replace(/Ã±/gi, 'n')
-    .replace(/Ã¡/gi, 'a')
-    .replace(/Ã©/gi, 'e')
-    .replace(/Ã­/gi, 'i')
-    .replace(/Ã³/gi, 'o')
-    .replace(/Ãº/gi, 'u')
-    .replace(/Ã±/gi, 'n')
-    .replace(/Â/g, '')
+    .replace(/ÃƒÂ¡/gi, 'a')
+    .replace(/ÃƒÂ©/gi, 'e')
+    .replace(/ÃƒÂ­/gi, 'i')
+    .replace(/ÃƒÂ³/gi, 'o')
+    .replace(/ÃƒÂº/gi, 'u')
+    .replace(/ÃƒÂ±/gi, 'n')
+    .replace(/ÃƒÂ¡/gi, 'a')
+    .replace(/ÃƒÂ©/gi, 'e')
+    .replace(/ÃƒÂ­/gi, 'i')
+    .replace(/ÃƒÂ³/gi, 'o')
+    .replace(/ÃƒÂº/gi, 'u')
+    .replace(/ÃƒÂ±/gi, 'n')
+    .replace(/Ã‚/g, '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '')
 }
 
-function normalizarClaveMaterialBalance(valor) {
-  return normalizarTextoComparacion(valor)
-    .replace(/retenedoresde/g, 'retenedor')
-    .replace(/retenedores/g, 'retenedor')
-    .replace(/retenedorde/g, 'retenedor')
-    .replace(/retenedor20mm/g, 'retenedor20')
-    .replace(/monofasica/g, 'monof')
-    .replace(/monofasico/g, 'monof')
-    .replace(/bifasica/g, 'bif')
-    .replace(/bifasico/g, 'bif')
-    .replace(/repartidora/g, 'repartidor')
-    .replace(/barra/g, '')
-    .replace(/accesorios/g, 'acces')
-    .replace(/accesorio/g, 'acces')
-}
-
 const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Conduit 20mm')]: 'Ducto Flex/Rig 20mm LH (Incl Acc)',
   [normalizarTextoComparacion('Conduit 25mm')]: 'Ducto Flex/Rig 25mm LH (Incl Acc)',
-  [normalizarTextoComparacion('Caja metálica 100x100x65')]: 'Caja Metálica 100x100x65',
+  [normalizarTextoComparacion('Caja metÃ¡lica 100x100x65')]: 'Caja MetÃ¡lica 100x100x65',
   [normalizarTextoComparacion('Caja tabique LH')]: 'Caja Tabique 3 Puestos LH',
-  [normalizarTextoComparacion('Tapa ciega - Pasac.')]: 'Tapa Ciega - Plástica / Metálica',
+  [normalizarTextoComparacion('Tapa ciega - Pasac.')]: 'Tapa Ciega - PlÃ¡stica / MetÃ¡lica',
   [normalizarTextoComparacion('Cable RZ1 2,5mm')]: 'Cable RZ1 2,5mm (Alum + Ench)',
   [normalizarTextoComparacion('Cable RZ1 4mm')]: 'Cable RZ1 4mm (Termo)',
-  [normalizarTextoComparacion('Cable RZ1 6mm')]: 'Cable RZ1 6mm (Alimentación)',
+  [normalizarTextoComparacion('Cable RZ1 6mm')]: 'Cable RZ1 6mm (AlimentaciÃ³n)',
   [normalizarTextoComparacion('Cordon flex 3 x 2.5/4mm')]: 'Cable RZ1 3x2.5 / 4mm (Ilu-Term)',
-  [normalizarTextoComparacion('Cordon flex 3 x 6mm')]: 'Cable RZ1 3x6mm (Alimentación)',
-  [normalizarTextoComparacion('Plafón')]: 'Foco Led 12W Sob',
-  [normalizarTextoComparacion('Extractor')]: 'Instalación Extractor',
+  [normalizarTextoComparacion('Cordon flex 3 x 6mm')]: 'Cable RZ1 3x6mm (AlimentaciÃ³n)',
+  [normalizarTextoComparacion('PlafÃ³n')]: 'Foco Led 12W Sob',
+  [normalizarTextoComparacion('Extractor')]: 'InstalaciÃ³n Extractor',
   [normalizarTextoComparacion('Conduit 32mm')]: 'Ducto Flex/Rig 32mm LH (Incl Acc)',
   [normalizarTextoComparacion('Artefacto simple')]: 'Artefacto Simple',
   [normalizarTextoComparacion('Artefacto doble')]: 'Artefacto Doble',
@@ -338,10 +379,10 @@ const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Tablero IP65')]: 'Tablero PVC IP65',
   [normalizarTextoComparacion('Tablero armado')]: 'Inst Tab. TOP (Armado)',
   [normalizarTextoComparacion('Aut. monof. 10-16-20A')]: 'Aut. Monof 10-16-20A',
-  [normalizarTextoComparacion('Aut. bifásico 2x10A')]: 'Auto. Bifásico 2x10A',
-  [normalizarTextoComparacion('Aut. bifásico 2x16A')]: 'Auto. Bifásico 2x16A',
-  [normalizarTextoComparacion('Aut. bifásico 2x20A')]: 'Auto. Bifásico 2x20A',
-  [normalizarTextoComparacion('Aut. bifásico 2x25A')]: 'Auto. Bifásico 2x25-32A',
+  [normalizarTextoComparacion('Aut. bifÃ¡sico 2x10A')]: 'Auto. BifÃ¡sico 2x10A',
+  [normalizarTextoComparacion('Aut. bifÃ¡sico 2x16A')]: 'Auto. BifÃ¡sico 2x16A',
+  [normalizarTextoComparacion('Aut. bifÃ¡sico 2x20A')]: 'Auto. BifÃ¡sico 2x20A',
+  [normalizarTextoComparacion('Aut. bifÃ¡sico 2x25A')]: 'Auto. BifÃ¡sico 2x25-32A',
   [normalizarTextoComparacion('Porta Fusible')]: 'Porta Fusibles',
   [normalizarTextoComparacion('Repartidor 4x80A')]: 'Repartidor 4x80A',
   [normalizarTextoComparacion('Barra repartidora')]: 'Repartidor 4x80A',
@@ -377,48 +418,16 @@ const equivalenciasValeBodega = {
   [normalizarTextoComparacion('TORNILLO AUTOPERFORANTE 8*3')]: 'TORNILLO AUTOPERFORANTE 8*3',
   [normalizarTextoComparacion('TDA EMBUTIDO 24 MODULOS ARMAI')]: 'Tablero armado',
   [normalizarTextoComparacion('AUTOM. * 10A LEXO / LEGRAND /STECK')]: 'Aut. Monof 10-16-20A',
-  [normalizarTextoComparacion('AUTOM. * 16A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x16A',
-  [normalizarTextoComparacion('AUTOM. * 20A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x20A',
-  [normalizarTextoComparacion('AUTOM. * 25A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x25-32A',
-  [normalizarTextoComparacion('AUTOM. * 32A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x25-32A',
+  [normalizarTextoComparacion('AUTOM. * 16A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. BifÃ¡sico 2x16A',
+  [normalizarTextoComparacion('AUTOM. * 20A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. BifÃ¡sico 2x20A',
+  [normalizarTextoComparacion('AUTOM. * 25A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. BifÃ¡sico 2x25-32A',
+  [normalizarTextoComparacion('AUTOM. * 32A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. BifÃ¡sico 2x25-32A',
   [normalizarTextoComparacion('DIFERENCIAL 2 * 25A 30MA LEXO / LEGRAND / BTICINO')]: 'Diferencial 2x25A',
   [normalizarTextoComparacion('LUZ PILOTO')]: 'Luz Piloto',
   [normalizarTextoComparacion('PORTA FUSIBLE CON FUSIBLE')]: 'Porta Fusibles',
   [normalizarTextoComparacion('FALSO POLO')]: 'Falso Polo 1Mts',
   [normalizarTextoComparacion('RETENEDORES DE 20')]: 'Retenedor 20mm',
   [normalizarTextoComparacion('RETENEDOR 20MM')]: 'Retenedor 20mm',
-}
-
-function obtenerMaterialPrecioParaProtocolo(itemProtocolo) {
-  const clave = normalizarTextoComparacion(itemProtocolo)
-  const directo = catalogoPreciosProtocolo.find((item) => normalizarTextoComparacion(item.material) === clave)
-  if (directo) return directo.material
-  return equivalenciasPrecioProtocolo[clave] || itemProtocolo
-}
-
-function calcularCobroCantidadProtocolo(valor, precioUnitario) {
-  const cantidad = parsearCantidadProtocolo(valor)
-  const nuevo = Number(cantidad?.nuevo || 0)
-  const reutilizado = Number(cantidad?.reutilizado || 0)
-  const subtotalNuevo = nuevo * precioUnitario
-  const subtotalReutilizado = reutilizado * (precioUnitario / 2)
-
-  return {
-    nuevo,
-    reutilizado,
-    precioNuevo: precioUnitario,
-    precioReutilizado: precioUnitario / 2,
-    subtotalNuevo,
-    subtotalReutilizado,
-    subtotal: subtotalNuevo + subtotalReutilizado,
-  }
-}
-
-function formatearFechaInput(fecha) {
-  const ano = fecha.getFullYear()
-  const mes = String(fecha.getMonth() + 1).padStart(2, '0')
-  const dia = String(fecha.getDate()).padStart(2, '0')
-  return `${ano}-${mes}-${dia}`
 }
 
 function formatearFechaRevisionGarantia(valor) {
@@ -485,34 +494,6 @@ function obtenerValorInicialRangoProtocolo(rango) {
     return `${anoSemana}-W${String(semana).padStart(2, '0')}`
   }
   return formatearFechaInput(hoy).slice(0, 7)
-}
-
-function obtenerRangoFechasProtocolos(rango, valor) {
-  if (rango === 'dia') {
-    const inicio = new Date(`${valor}T00:00:00`)
-    const fin = new Date(inicio)
-    fin.setDate(fin.getDate() + 1)
-    return { inicio: `${valor}T00:00:00`, fin: `${formatearFechaInput(fin)}T00:00:00` }
-  }
-
-  if (rango === 'semana') {
-    const [anoTexto, semanaTexto = 'W1'] = String(valor || '').split('-W')
-    const ano = Number(anoTexto)
-    const semana = Number(semanaTexto)
-    const primerDiaAno = new Date(ano, 0, 1)
-    const diaSemana = primerDiaAno.getDay() || 7
-    const lunesSemana1 = new Date(ano, 0, 1 + (diaSemana <= 4 ? 1 - diaSemana : 8 - diaSemana))
-    const inicio = new Date(lunesSemana1)
-    inicio.setDate(lunesSemana1.getDate() + (semana - 1) * 7)
-    const fin = new Date(inicio)
-    fin.setDate(fin.getDate() + 7)
-    return { inicio: `${formatearFechaInput(inicio)}T00:00:00`, fin: `${formatearFechaInput(fin)}T00:00:00` }
-  }
-
-  const inicio = `${valor}-01T00:00:00`
-  const fin = new Date(`${valor}-01T00:00:00`)
-  fin.setMonth(fin.getMonth() + 1)
-  return { inicio, fin: `${formatearFechaInput(fin)}T00:00:00` }
 }
 
 function fechaDentroDeRangoProtocolo(fecha, inicio, fin) {
@@ -633,7 +614,7 @@ function Login() {
         margin: '100px auto',
       }}
     >
-      <h2>Iniciar sesión</h2>
+      <h2>Iniciar sesiÃ³n</h2>
 
       <input
         type="email"
@@ -644,7 +625,7 @@ function Login() {
 
       <input
         type="password"
-        placeholder="Contraseña"
+        placeholder="ContraseÃ±a"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
@@ -791,7 +772,13 @@ const conteoClavesProtocolos = protocolosMensuales.reduce((conteo, registro) => 
   conteo[clave] = (conteo[clave] || 0) + 1
   return conteo
 }, {})
-const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales, valesBalanceMateriales, configBalanceMateriales)
+const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales, valesBalanceMateriales, {
+  configMateriales: configBalanceMateriales,
+  catalogoPreciosProtocolo,
+  equivalenciasPrecioProtocolo,
+  equivalenciasValeBodega,
+  normalizarTextoComparacion,
+})
 const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
 const resumenMateriales = Object.entries(materialesModuloSeleccionado)
   .map(([material, valor]) => {
@@ -824,11 +811,11 @@ function mostrarNotificacion(mensaje) {
 
 function nombreTipoAccion(tipo) {
   if (tipo === 'ingreso') return 'Ingreso'
-  if (tipo === 'finalizacion') return 'Finalización'
+  if (tipo === 'finalizacion') return 'FinalizaciÃ³n'
   if (tipo === 'cambio_estado') return 'Cambio estado'
-  if (tipo === 'aprobacion_prueba_electrica') return 'Aprobación prueba eléctrica'
-  if (tipo === 'rechazo_prueba_electrica') return 'Rechazo prueba eléctrica'
-  return tipo || 'Acción'
+  if (tipo === 'aprobacion_prueba_electrica') return 'AprobaciÃ³n prueba elÃ©ctrica'
+  if (tipo === 'rechazo_prueba_electrica') return 'Rechazo prueba elÃ©ctrica'
+  return tipo || 'AcciÃ³n'
 }
 
 async function cargarAccionesDia() {
@@ -861,7 +848,7 @@ async function registrarAccionModulo({ tipo, modulo = {}, datosAntes = null, dat
   if (error) {
     console.error(error)
     if (!error.message?.includes('registro_acciones_modulos')) {
-      mostrarNotificacion('La acción se realizó, pero no se pudo guardar en el registro: ' + error.message)
+      mostrarNotificacion('La acciÃ³n se realizÃ³, pero no se pudo guardar en el registro: ' + error.message)
     }
   }
 }
@@ -873,7 +860,7 @@ async function marcarAccionDeshecha(accion) {
   )
 
   if (error) {
-    mostrarNotificacion('La acción se deshizo, pero no se pudo marcar en el registro: ' + error.message)
+    mostrarNotificacion('La acciÃ³n se deshizo, pero no se pudo marcar en el registro: ' + error.message)
     return
   }
 
@@ -883,7 +870,7 @@ async function marcarAccionDeshecha(accion) {
 async function deshacerAccionModulo(accion) {
   if (perfil?.rol !== 'admin' || !accion || accion.deshecho) return
 
-  const confirmado = window.confirm(`¿Deshacer ${nombreTipoAccion(accion.tipo).toLowerCase()} de la serie ${accion.serie || ''}?`)
+  const confirmado = window.confirm(`Â¿Deshacer ${nombreTipoAccion(accion.tipo).toLowerCase()} de la serie ${accion.serie || ''}?`)
   if (!confirmado) return
 
   if (accion.tipo === 'ingreso') {
@@ -912,7 +899,7 @@ async function deshacerAccionModulo(accion) {
       .eq('id', anterior.id || accion.modulo_id)
 
     if (error) {
-      mostrarNotificacion('No se pudo deshacer la acción: ' + error.message)
+      mostrarNotificacion('No se pudo deshacer la acciÃ³n: ' + error.message)
       return
     }
   } else if (accion.tipo === 'rechazo_prueba_electrica') {
@@ -943,7 +930,7 @@ async function deshacerAccionModulo(accion) {
       .insert([moduloRestaurado])
 
     if (errorInsert) {
-      mostrarNotificacion('No se pudo restaurar el módulo. Es posible que la posición ya esté ocupada: ' + errorInsert.message)
+      mostrarNotificacion('No se pudo restaurar el mÃ³dulo. Es posible que la posiciÃ³n ya estÃ© ocupada: ' + errorInsert.message)
       return
     }
 
@@ -954,7 +941,7 @@ async function deshacerAccionModulo(accion) {
         .eq('id', historialId)
 
       if (errorDelete) {
-        mostrarNotificacion('Módulo restaurado, pero no se pudo eliminar del historial: ' + errorDelete.message)
+        mostrarNotificacion('MÃ³dulo restaurado, pero no se pudo eliminar del historial: ' + errorDelete.message)
         return
       }
     }
@@ -963,7 +950,7 @@ async function deshacerAccionModulo(accion) {
   await marcarAccionDeshecha(accion)
   await cargarTablero()
   await cargarHistorial()
-  mostrarNotificacion('Acción deshecha correctamente')
+  mostrarNotificacion('AcciÃ³n deshecha correctamente')
 }
 
 function detenerAutoScrollArrastre() {
@@ -1024,7 +1011,7 @@ function hayMaterialesPendientes(moduloId = moduloSeleccionado?.id) {
 
 function cerrarEditorMateriales({ forzar = false } = {}) {
   if (!forzar && hayMaterialesPendientes()) {
-    const confirmar = window.confirm('Hay cambios de materiales sin guardar. ¿Cerrar de todas formas?')
+    const confirmar = window.confirm('Hay cambios de materiales sin guardar. Â¿Cerrar de todas formas?')
     if (!confirmar) return
   }
   if (moduloSeleccionado?.id) {
@@ -1154,47 +1141,17 @@ useEffect(() => {
 
   async function cargarSolicitantesPendientes() {
     const idsModulos = modulosPendientes.map((modulo) => modulo.id)
-    const { data: modulos, error: errorModulos } = await supabase
-      .from('modulos')
-      .select('id, solicitado_por')
-      .in('id', idsModulos)
+    const { data, error } = await cargarSolicitantesPruebaPendiente({
+      supabase,
+      idsModulos,
+    })
 
-    if (errorModulos) {
-      console.error(errorModulos)
+    if (error) {
+      console.error(error)
       return
     }
 
-    const idsPerfiles = [...new Set(
-      (modulos || []).map((modulo) => modulo.solicitado_por).filter(Boolean)
-    )]
-
-    if (idsPerfiles.length === 0) {
-      setSolicitantesPendientes({})
-      return
-    }
-
-    const { data: perfiles, error: errorPerfiles } = await supabase
-      .from('perfiles')
-      .select('id, nombre')
-      .in('id', idsPerfiles)
-
-    if (errorPerfiles) {
-      console.error(errorPerfiles)
-      return
-    }
-
-    const nombresPorPerfil = new Map(
-      (perfiles || []).map((perfilSolicitante) => [perfilSolicitante.id, perfilSolicitante.nombre])
-    )
-
-    setSolicitantesPendientes(
-      Object.fromEntries(
-        (modulos || []).map((modulo) => [
-          modulo.id,
-          nombresPorPerfil.get(modulo.solicitado_por) || 'No disponible',
-        ])
-      )
-    )
+    setSolicitantesPendientes(data || {})
   }
 
   cargarSolicitantesPendientes()
@@ -1209,11 +1166,10 @@ async function cargarPerfil() {
 
   if (!usuario) return
 
-  const { data, error } = await supabase
-  .from('perfiles')
-  .select('*')
-  .eq('id', usuario.id)
-  .maybeSingle()
+  const { data, error } = await cargarPerfilUsuario({
+    supabase,
+    usuarioId: usuario.id,
+  })
 
   console.log('USUARIO:', usuario.id)
   console.log('PERFIL:', data)
@@ -1228,40 +1184,15 @@ async function cargarPerfil() {
 }
   
   async function cargarTablero() {
-    const { data: tableroData, error: tableroError } = await supabase
-      .from('tablero')
-      .select('*')
-      .order('linea')
-      .order('posicion')
+    const { data: mergedData, error } = await cargarDatosTablero({
+      supabase,
+      esSolicitudPruebaActiva,
+    })
 
-    if (tableroError) {
-      console.error(tableroError)
+    if (error) {
+      console.error(error)
       return
     }
-
-    let { data: modulosData, error: modulosError } = await supabase
-      .from('modulos')
-      .select('id, nota, observacion_alerta, fecha_prueba_electrica')
-
-    if (modulosError?.message?.includes('observacion_alerta')) {
-      ;({ data: modulosData, error: modulosError } = await supabase
-        .from('modulos')
-        .select('id, nota, fecha_prueba_electrica'))
-    }
-
-    if (modulosError) {
-      console.error(modulosError)
-      return
-    }
-
-    const modulosMap = new Map((modulosData || []).map((item) => [item.id, item]))
-    const mergedData = (tableroData || []).map((row) => ({
-      ...row,
-      nota: row.nota || modulosMap.get(row.id)?.nota || '',
-      observacion_alerta: row.observacion_alerta || modulosMap.get(row.id)?.observacion_alerta || '',
-      fecha_prueba_electrica: row.fecha_prueba_electrica || modulosMap.get(row.id)?.fecha_prueba_electrica || null,
-      solicitud_prueba: esSolicitudPruebaActiva(row.solicitud_prueba),
-    }))
 
     solicitudesPendientesRef.current = new Set(
       mergedData
@@ -1341,7 +1272,7 @@ async function crearModulo() {
   if (creandoModulo) return
 
   if (!puedeAgregarModulos) {
-    mostrarNotificacion('No tienes permisos para agregar módulos')
+    mostrarNotificacion('No tienes permisos para agregar mÃ³dulos')
     setMostrarNuevoModulo(false)
     return
   }
@@ -1362,10 +1293,11 @@ async function crearModulo() {
 
   if (posicionSeleccionada.extremo) {
     try {
-      posicionIngreso = await prepararLineaParaIngreso(
-        posicionSeleccionada.linea,
-        posicionSeleccionada.extremo
-      )
+      posicionIngreso = await prepararLineaParaIngresoModulo({
+        supabase,
+        linea: posicionSeleccionada.linea,
+        extremo: posicionSeleccionada.extremo,
+      })
     } catch (error) {
       mostrarNotificacion(error.message)
       await cargarTablero()
@@ -1374,22 +1306,15 @@ async function crearModulo() {
     }
   }
 
-  const { data: moduloCreado, error } = await supabase
-    .from('modulos')
-    .insert([
-      {
-        serie: serieNueva,
-        tipo: tipoNuevo,
-        proyecto: proyectoNuevo,
-        responsable: responsableNuevo.trim() || null,
-        linea: lineaIngreso,
-        posicion: posicionIngreso,
-        estado: 'Sin iniciar',
-        fecha_ingreso: new Date(),
-      },
-    ])
-    .select('*')
-    .single()
+  const { data: moduloCreado, error } = await crearModuloActivo({
+    supabase,
+    serie: serieNueva,
+    tipo: tipoNuevo,
+    proyecto: proyectoNuevo,
+    responsable: responsableNuevo,
+    linea: lineaIngreso,
+    posicion: posicionIngreso,
+  })
 
   if (error) {
     alert(error.message)
@@ -1404,13 +1329,13 @@ async function crearModulo() {
     modulo: moduloCreado || { serie: serieNueva, linea: lineaIngreso },
     datosAntes: null,
     datosDespues: moduloCreado,
-    descripcion: `Ingresó módulo en línea ${lineaIngreso}`,
+    descripcion: `IngresÃ³ mÃ³dulo en lÃ­nea ${lineaIngreso}`,
   })
 
   setMostrarNuevoModulo(false)
   setCreandoModulo(false)
 
-  alert('Módulo creado correctamente')
+  alert('MÃ³dulo creado correctamente')
 }
 
 function abrirIngresoModuloEnExtremo(linea, extremo) {
@@ -1419,7 +1344,7 @@ function abrirIngresoModuloEnExtremo(linea, extremo) {
 
   const cantidadModulos = datos.filter((x) => Number(x.linea) === Number(linea) && x.serie).length
   if (cantidadModulos >= 9) {
-    mostrarNotificacion(`La línea ${linea} ya está completa`)
+    mostrarNotificacion(`La lÃ­nea ${linea} ya estÃ¡ completa`)
     return
   }
 
@@ -1429,51 +1354,6 @@ function abrirIngresoModuloEnExtremo(linea, extremo) {
     extremo,
   })
   setMostrarNuevoModulo(true)
-}
-
-async function prepararLineaParaIngreso(linea, extremo) {
-  const { data: registros, error } = await supabase
-    .from('modulos')
-    .select('id, linea, posicion, serie')
-    .eq('linea', linea)
-
-  if (error) {
-    throw new Error('No se pudo preparar la línea: ' + error.message)
-  }
-
-  const modulosLinea = (registros || [])
-    .filter((x) => x?.serie && String(x.serie).trim() !== '')
-    .sort((a, b) => Number(a.posicion) - Number(b.posicion))
-
-  if (modulosLinea.length >= 9) {
-    throw new Error(`La línea ${linea} ya está completa`)
-  }
-
-  const posicionTemporalBase = 1000 + Math.floor(Math.random() * 100000)
-  for (const [index, modulo] of modulosLinea.entries()) {
-    const { error: errorTemporal } = await supabase
-      .from('modulos')
-      .update({ posicion: posicionTemporalBase + index })
-      .eq('id', modulo.id)
-
-    if (errorTemporal) {
-      throw new Error(errorTemporal.message)
-    }
-  }
-
-  for (const [index, modulo] of modulosLinea.entries()) {
-    const nuevaPosicion = extremo === 'inicio' ? index + 2 : index + 1
-    const { error: errorOrden } = await supabase
-      .from('modulos')
-      .update({ posicion: nuevaPosicion })
-      .eq('id', modulo.id)
-
-    if (errorOrden) {
-      throw new Error(errorOrden.message)
-    }
-  }
-
-  return extremo === 'inicio' ? 1 : modulosLinea.length + 1
 }
 
 function abrirReintegrarModulo() {
@@ -1499,29 +1379,20 @@ function descargarProtocolosDiarios() {
 
 async function cargarPreciosMateriales() {
   setCargandoPreciosMateriales(true)
-  const { data, error } = await supabase
-    .from('material_precios')
-    .select('material, precio')
+  const { precios, error } = await cargarPreciosMaterialesSupabase({
+    supabase,
+    catalogo: catalogoPreciosProtocolo,
+  })
   setCargandoPreciosMateriales(false)
 
   if (error) {
     mostrarNotificacion('No se pudieron cargar los precios: ' + error.message)
-    const preciosPorDefecto = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [item.material, item.precio]))
-    setPreciosMateriales(preciosPorDefecto)
-    return preciosPorDefecto
+    setPreciosMateriales(precios)
+    return precios
   }
 
-  const preciosGuardados = Object.fromEntries((data || []).map((item) => [
-    item.material,
-    item.precio ?? '',
-  ]))
-
-  const preciosCompletos = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
-    item.material,
-    preciosGuardados[item.material] ?? item.precio,
-  ]))
-  setPreciosMateriales(preciosCompletos)
-  return preciosCompletos
+  setPreciosMateriales(precios)
+  return precios
 }
 
 async function abrirPreciosMateriales() {
@@ -1532,323 +1403,20 @@ async function abrirPreciosMateriales() {
   await cargarPreciosMateriales()
 }
 
-function claveItemCobro(tipo, item = {}) {
-  return [
-    tipo || '',
-    item.material || '',
-    item.materialPrecio || '',
-    item.tipoCantidad || '',
-  ].map((parte) => String(parte).trim()).join('|')
-}
-
-function aplicarAjustesItemsCobro(valores, ajustesItems = {}) {
-  const aplicar = (tipo, items = []) => items.map((item) => {
-    const clave = claveItemCobro(tipo, item)
-    const ajuste = ajustesItems[clave]
-    if (!ajuste || ajuste.valor === undefined || ajuste.valor === null || ajuste.valor === '') {
-      return { ...item, tipoCobro: tipo, claveAjuste: clave }
-    }
-
-    return {
-      ...item,
-      tipoCobro: tipo,
-      claveAjuste: clave,
-      subtotalOriginal: item.subtotal,
-      subtotal: normalizarPrecioMaterial(ajuste.valor),
-      ajusteValorizacionItem: ajuste,
-    }
-  })
-
-  const detalleMantencion = aplicar('mantencion', valores.detalleMantencion)
-  const detalleModificacion = aplicar('modificacion', valores.detalleModificacion)
-
-  return {
-    mantencion: detalleMantencion.reduce((total, item) => total + Number(item.subtotal || 0), 0),
-    modificacion: detalleModificacion.reduce((total, item) => total + Number(item.subtotal || 0), 0),
-    detalleMantencion,
-    detalleModificacion,
-  }
-}
-
-function calcularValoresProtocoloMensual(registro, precios = preciosMateriales) {
-  if (false && esEstadoGarantia(registro?.estado || registro?.protocolo_entrega?.estado)) {
-    return {
-      mantencion: 0,
-      modificacion: 0,
-      detalleMantencion: [{ material: 'Módulo en garantía', cantidad: 1, precioUnitario: 0, subtotal: 0 }],
-      detalleModificacion: [],
-    }
-  }
-
-  const detalleMateriales = registro?.protocolo_entrega?.detalleMateriales || {}
-  const preciosBase = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
-    item.material,
-    normalizarPrecioMaterial(precios[item.material] ?? item.precio),
-  ]))
-  const preciosBaseNormalizados = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
-    normalizarTextoComparacion(item.material),
-    normalizarPrecioMaterial(precios[item.material] ?? item.precio),
-  ]))
-  Object.entries(precios || {}).forEach(([material, precio]) => {
-    preciosBaseNormalizados[normalizarTextoComparacion(material)] = normalizarPrecioMaterial(precio)
-  })
-
-  const valores = camposMateriales.reduce((totales, [itemProtocolo]) => {
-    const detalle = detalleMateriales[itemProtocolo] || {}
-    const materialPrecio = obtenerMaterialPrecioParaProtocolo(itemProtocolo)
-    const precioUnitario = preciosBase[materialPrecio] ?? preciosBaseNormalizados[normalizarTextoComparacion(materialPrecio)] ?? 0
-    const cobroMantencion = calcularCobroCantidadProtocolo(detalle.mantencion, precioUnitario)
-    const cobroModificacion = calcularCobroCantidadProtocolo(detalle.modificacion, precioUnitario)
-    const detalleMantencionItem = [
-      cobroMantencion.subtotalNuevo > 0 ? { material: itemProtocolo, materialPrecio, cantidad: cobroMantencion.nuevo, precioUnitario: cobroMantencion.precioNuevo, subtotal: cobroMantencion.subtotalNuevo, tipoCantidad: 'Nuevo' } : null,
-      cobroMantencion.subtotalReutilizado > 0 ? { material: `${itemProtocolo} reutilizado`, materialPrecio, cantidad: cobroMantencion.reutilizado, precioUnitario: cobroMantencion.precioReutilizado, subtotal: cobroMantencion.subtotalReutilizado, tipoCantidad: 'Reutilizado 50%' } : null,
-    ].filter(Boolean)
-    const detalleModificacionItem = [
-      cobroModificacion.subtotalNuevo > 0 ? { material: itemProtocolo, materialPrecio, cantidad: cobroModificacion.nuevo, precioUnitario: cobroModificacion.precioNuevo, subtotal: cobroModificacion.subtotalNuevo, tipoCantidad: 'Nuevo' } : null,
-      cobroModificacion.subtotalReutilizado > 0 ? { material: `${itemProtocolo} reutilizado`, materialPrecio, cantidad: cobroModificacion.reutilizado, precioUnitario: cobroModificacion.precioReutilizado, subtotal: cobroModificacion.subtotalReutilizado, tipoCantidad: 'Reutilizado 50%' } : null,
-    ].filter(Boolean)
-
-    return {
-      mantencion: totales.mantencion + cobroMantencion.subtotal,
-      modificacion: totales.modificacion + cobroModificacion.subtotal,
-      detalleMantencion: detalleMantencionItem.length > 0
-        ? [...totales.detalleMantencion, ...detalleMantencionItem]
-        : totales.detalleMantencion,
-      detalleModificacion: detalleModificacionItem.length > 0
-        ? [...totales.detalleModificacion, ...detalleModificacionItem]
-        : totales.detalleModificacion,
-    }
-  }, {
-    mantencion: valorBaseManoObraMantencion,
-    modificacion: 0,
-    detalleMantencion: [{ material: 'Mano de obra base', cantidad: 1, precioUnitario: valorBaseManoObraMantencion, subtotal: valorBaseManoObraMantencion }],
-    detalleModificacion: [],
-  })
-
-  const subtotalMaterialesMantencion = valores.detalleMantencion
-    .filter((item) => item.material !== 'Mano de obra base')
-    .reduce((total, item) => total + Number(item.subtotal || 0), 0)
-  const subtotalMaterialesModificacion = valores.detalleModificacion
-    .reduce((total, item) => total + Number(item.subtotal || 0), 0)
-  const tieneCobroMaterial = (subtotalMaterialesMantencion + subtotalMaterialesModificacion) > 0
-
-  let valoresFinales = valores
-
-  if (esEstadoGarantia(registro?.estado || registro?.protocolo_entrega?.estado) && !tieneCobroMaterial) {
-    valoresFinales = {
-      mantencion: 0,
-      modificacion: 0,
-      detalleMantencion: [{ material: 'Módulo en garantía sin cobro de material', cantidad: 1, precioUnitario: 0, subtotal: 0 }],
-      detalleModificacion: [],
-    }
-  }
-
-  return aplicarAjustesItemsCobro(valoresFinales, registro?.protocolo_entrega?.ajustes_valorizacion_items || {})
-}
-
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
-  const valores = calcularValoresProtocoloMensual(registro, precios)
-  const datosProtocolo = registro?.protocolo_entrega || {}
-  const fechaProtocolo = fechaDocumentoProtocolo(registro)
-  const ajusteValorizacion = datosProtocolo.ajuste_valorizacion || {}
-  const ajustesItems = datosProtocolo.ajustes_valorizacion_items || {}
-  const tieneAjustesItems = Object.keys(ajustesItems).length > 0
-  const tieneAjusteMantencion = !tieneAjustesItems && ajusteValorizacion.mantencion !== undefined && ajusteValorizacion.mantencion !== null && ajusteValorizacion.mantencion !== ''
-  const tieneAjusteModificacion = !tieneAjustesItems && ajusteValorizacion.modificacion !== undefined && ajusteValorizacion.modificacion !== null && ajusteValorizacion.modificacion !== ''
-  const valorMantencion = tieneAjusteMantencion ? normalizarPrecioMaterial(ajusteValorizacion.mantencion) : valores.mantencion
-  const valorModificacion = tieneAjusteModificacion ? normalizarPrecioMaterial(ajusteValorizacion.modificacion) : valores.modificacion
-  return {
-    ...registro,
-    tipo: datosProtocolo.tipo || registro?.tipo || '',
-    proyecto: datosProtocolo.proyecto || registro?.proyecto || '',
-    linea: datosProtocolo.linea || registro?.linea || '',
-    fecha_prueba_electrica: fechaProtocolo,
+  return prepararRegistroProtocoloMensualBase({
+    registro,
     origen,
-    esActual: origen === 'actual',
-    valorMantencion,
-    valorModificacion,
-    valorTotal: valorMantencion + valorModificacion,
-    ajusteValorizacion,
-    ajustesValorizacionItems: ajustesItems,
-    tieneAjusteValorizacion: Boolean(ajusteValorizacion.motivo) || tieneAjustesItems,
-    detalleCobro: {
-      mantencion: valores.detalleMantencion,
-      modificacion: valores.detalleModificacion,
-    },
-    idOt: registro?.id_ot || datosProtocolo.id_ot || datosProtocolo.idOt || '',
-  }
-}
-
-function compilarBalanceMateriales(registros = [], vales = [], configMateriales = {}) {
-  const catalogoPorNombre = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
-    normalizarClaveMaterialBalance(item.material),
-    item,
-  ]))
-
-  const acumulado = new Map()
-  const materialesExcluidos = new Set([
-    normalizarTextoComparacion('Mano de obra base'),
-    normalizarTextoComparacion('M?dulo en garant?a'),
-    normalizarTextoComparacion('M?dulo en garant?a sin cobro de material'),
-  ])
-
-  function resolverMaterialBalance(nombre, materialPrecio = '') {
-    const nombreLimpio = String(nombre || '').trim()
-    const candidatos = [
-      nombreLimpio,
-      materialPrecio,
-      equivalenciasPrecioProtocolo[normalizarTextoComparacion(nombreLimpio)],
-      equivalenciasPrecioProtocolo[normalizarTextoComparacion(materialPrecio)],
-      equivalenciasValeBodega[normalizarTextoComparacion(nombreLimpio)],
-    ].filter(Boolean)
-
-    for (const candidato of candidatos) {
-      const catalogo = catalogoPorNombre[normalizarClaveMaterialBalance(candidato)]
-      if (catalogo) {
-        return {
-          clave: normalizarClaveMaterialBalance(catalogo.material),
-          idArt: catalogo.idArt || '',
-          material: catalogo.material,
-          noCatalogado: false,
-        }
-      }
-    }
-
-    const nombreEquivalente = equivalenciasValeBodega[normalizarTextoComparacion(nombreLimpio)]
-      || equivalenciasPrecioProtocolo[normalizarTextoComparacion(nombreLimpio)]
-      || nombreLimpio
-    const claveNormalizada = normalizarClaveMaterialBalance(nombreEquivalente)
-    const claveExistente = [...acumulado.keys()].find((claveActual) => claveActual === claveNormalizada)
-    const filaExistente = claveExistente ? acumulado.get(claveExistente) : null
-
-    return {
-      clave: claveExistente || claveNormalizada,
-      idArt: '',
-      material: filaExistente?.material || nombreEquivalente,
-      noCatalogado: true,
-    }
-  }
-
-  function crearFila(materialBalance) {
-    return {
-      clave: materialBalance.clave,
-      idArt: materialBalance.idArt || '',
-      material: materialBalance.material,
-      nuevo: 0,
-      reutilizado: 0,
-      retirado: 0,
-      noCatalogado: materialBalance.noCatalogado,
-      totalCantidad: 0,
-      valorNuevo: 0,
-      valorReutilizado: 0,
-      precioUnitarioNuevo: 0,
-      precioUnitarioReutilizado: 0,
-      valorMantencion: 0,
-      valorModificacion: 0,
-      valorTotal: 0,
-    }
-  }
-
-  function agregarItem(item, tipoCobro) {
-    const materialBase = String(item.material || '').replace(/\s+reutilizado$/i, '').trim()
-    const claveMaterial = normalizarTextoComparacion(materialBase)
-    if (!materialBase || materialesExcluidos.has(claveMaterial)) return
-
-    const materialPrecio = item.materialPrecio || materialBase
-    const materialBalance = resolverMaterialBalance(materialBase, materialPrecio)
-    const esReutilizado = normalizarTextoComparacion(item.tipoCantidad || item.material).includes('reutilizado')
-    const cantidad = Number(item.cantidad || 0)
-    const subtotal = Number(item.subtotal || 0)
-    const fila = acumulado.get(materialBalance.clave) || crearFila(materialBalance)
-
-    fila.noCatalogado = fila.noCatalogado && materialBalance.noCatalogado
-    if (!fila.idArt && materialBalance.idArt) fila.idArt = materialBalance.idArt
-
-    if (esReutilizado) {
-      fila.reutilizado += cantidad
-      fila.valorReutilizado += subtotal
-      fila.precioUnitarioReutilizado = Number(item.precioUnitario || 0)
-    } else {
-      fila.nuevo += cantidad
-      fila.valorNuevo += subtotal
-      fila.precioUnitarioNuevo = Number(item.precioUnitario || 0)
-    }
-
-    fila.totalCantidad += cantidad
-    if (tipoCobro === 'modificacion') {
-      fila.valorModificacion += subtotal
-    } else {
-      fila.valorMantencion += subtotal
-    }
-    fila.valorTotal += subtotal
-
-    acumulado.set(materialBalance.clave, fila)
-  }
-
-  registros.forEach((registro) => {
-    ;(registro.detalleCobro?.mantencion || []).forEach((item) => agregarItem(item, 'mantencion'))
-    ;(registro.detalleCobro?.modificacion || []).forEach((item) => agregarItem(item, 'modificacion'))
+    precios,
+    catalogoPreciosProtocolo,
+    camposMateriales,
+    equivalenciasPrecioProtocolo,
+    normalizarTextoComparacion,
+    normalizarPrecioMaterial,
+    parsearCantidadProtocolo,
+    esEstadoGarantia,
+    fechaDocumentoProtocolo,
   })
-
-  vales.forEach((itemVale) => {
-    const material = itemVale.material_balance || itemVale.material || itemVale.material_vale || ''
-    if (!normalizarTextoComparacion(material)) return
-
-    const materialBalance = resolverMaterialBalance(material)
-    const fila = acumulado.get(materialBalance.clave) || crearFila(materialBalance)
-    fila.retirado += Number(itemVale.cantidad || 0)
-    fila.noCatalogado = fila.noCatalogado && materialBalance.noCatalogado
-    if (!fila.idArt && materialBalance.idArt) fila.idArt = materialBalance.idArt
-    acumulado.set(materialBalance.clave, fila)
-  })
-
-  return consolidarFilasBalanceMateriales([...acumulado.values()], configMateriales, catalogoPorNombre)
-    .sort((a, b) => a.material.localeCompare(b.material))
-}
-
-function consolidarFilasBalanceMateriales(filas, configMateriales = {}, catalogoPorNombre = {}) {
-  const consolidadas = new Map()
-
-  filas.forEach((fila) => {
-    const nombreVisible = configMateriales[fila.clave]?.nombreVisible || fila.material
-    const claveVisible = normalizarClaveMaterialBalance(nombreVisible)
-    const catalogo = catalogoPorNombre[claveVisible]
-    const claveFinal = catalogo ? normalizarClaveMaterialBalance(catalogo.material) : claveVisible
-    const materialFinal = catalogo?.material || nombreVisible || fila.material
-    const existente = consolidadas.get(claveFinal)
-
-    if (!existente) {
-      consolidadas.set(claveFinal, {
-        ...fila,
-        clave: claveFinal,
-        idArt: catalogo?.idArt || fila.idArt || '',
-        material: materialFinal,
-        noCatalogado: catalogo ? false : fila.noCatalogado,
-        precioUnitarioNuevo: catalogo?.precio || fila.precioUnitarioNuevo || 0,
-      })
-      return
-    }
-
-    existente.nuevo += Number(fila.nuevo || 0)
-    existente.reutilizado += Number(fila.reutilizado || 0)
-    existente.retirado += Number(fila.retirado || 0)
-    existente.totalCantidad += Number(fila.totalCantidad || 0)
-    existente.valorNuevo += Number(fila.valorNuevo || 0)
-    existente.valorReutilizado += Number(fila.valorReutilizado || 0)
-    existente.valorMantencion += Number(fila.valorMantencion || 0)
-    existente.valorModificacion += Number(fila.valorModificacion || 0)
-    existente.valorTotal += Number(fila.valorTotal || 0)
-    existente.noCatalogado = existente.noCatalogado && fila.noCatalogado && !catalogo
-    if (!existente.idArt && (catalogo?.idArt || fila.idArt)) existente.idArt = catalogo?.idArt || fila.idArt
-    if (!existente.precioUnitarioNuevo && (catalogo?.precio || fila.precioUnitarioNuevo)) {
-      existente.precioUnitarioNuevo = catalogo?.precio || fila.precioUnitarioNuevo
-    }
-    if (!existente.precioUnitarioReutilizado && fila.precioUnitarioReutilizado) {
-      existente.precioUnitarioReutilizado = fila.precioUnitarioReutilizado
-    }
-  })
-
-  return [...consolidadas.values()]
 }
 
 function abrirDetalleCobro(registro, tipo) {
@@ -1912,58 +1480,28 @@ async function guardarAjusteValorizacionProtocolo() {
 
   const motivo = ajusteCobroMensual.motivo.trim()
   if (!motivo) {
-    mostrarNotificacion('Debe ingresar el motivo de la modificación')
+    mostrarNotificacion('Debe ingresar el motivo de la modificaciÃ³n')
     return
   }
 
-  const tablaDestino = registro.origen === 'manual'
-    ? 'protocolos_manuales'
-    : registro.origen === 'historial'
-      ? 'historial_modulos'
-      : 'modulos'
-
-  const { data: registroActual, error: errorCarga } = await supabase
-    .from(tablaDestino)
-    .select('id, protocolo_entrega, materiales')
-    .eq('id', registro.id)
-    .maybeSingle()
-
-  if (errorCarga) {
-    mostrarNotificacion('No se pudo cargar el protocolo para ajustar valores: ' + errorCarga.message)
-    return
-  }
-
-  if (!registroActual) {
-    mostrarNotificacion('No se encontró el protocolo para ajustar valores')
-    return
-  }
-
-  const ajustesItemsActuales = registroActual.protocolo_entrega?.ajustes_valorizacion_items || {}
-  const protocoloActualizado = {
-    ...(registroActual.protocolo_entrega || {}),
-    ajustes_valorizacion_items: {
-      ...ajustesItemsActuales,
-      [ajusteCobroMensual.itemKey]: {
-        valor: normalizarPrecioMaterial(ajusteCobroMensual.valor),
-        motivo,
-        item: ajusteCobroMensual.itemLabel,
-        tipo: ajusteCobroMensual.tipoCobro,
-        usuario: perfil?.nombre || perfil?.email || perfil?.rol || '',
-        fecha: new Date().toISOString(),
-      },
+  const {
+    data: registroGuardado,
+    error,
+    mensaje,
+    protocoloActualizado,
+  } = await guardarAjusteValorizacionProtocoloSupabase({
+    supabase,
+    registro,
+    ajuste: {
+      ...ajusteCobroMensual,
+      motivo,
     },
-  }
-  delete protocoloActualizado.ajuste_valorizacion
-
-  const { data: registroGuardado, error } = await supabase
-    .from(tablaDestino)
-    .update({ protocolo_entrega: protocoloActualizado })
-    .eq('id', registro.id)
-    .select('*')
-    .maybeSingle()
+    perfil,
+    normalizarPrecioMaterial,
+  })
 
   if (error) {
-    mostrarNotificacion('No se pudo guardar el ajuste de valorización: ' + error.message)
+    mostrarNotificacion(mensaje || ('No se pudo guardar el ajuste de valorizaciÃ³n: ' + error.message))
     return
   }
 
@@ -1992,7 +1530,7 @@ async function guardarAjusteValorizacionProtocolo() {
         : actualizado.valorTotal,
   } : actual)
   setAjusteCobroMensual({ itemKey: '', itemLabel: '', tipoCobro: '', valor: '', motivo: '' })
-  mostrarNotificacion('Ajuste de valorización guardado')
+  mostrarNotificacion('Ajuste de valorizaciÃ³n guardado')
 }
 
 async function obtenerRegistrosProtocolosPorRango(valor, rango) {
@@ -2002,78 +1540,19 @@ async function obtenerRegistrosProtocolosPorRango(valor, rango) {
 
   const { inicio, fin: finTexto } = obtenerRangoFechasProtocolos(rango, valor)
 
-  async function cargarTablaProtocolos(tabla, columnasConIdOt, columnasSinIdOt) {
-    const quitarColumnaEstado = (columnas) => columnas
-      .split(',')
-      .map((columna) => columna.trim())
-      .filter((columna) => columna !== 'estado')
-      .join(', ')
+  const {
+    registrosActivos,
+    registrosHistorial,
+    registrosManuales,
+    error,
+  } = await cargarRegistrosProtocolosPorRango({
+    supabase,
+    inicio,
+    fin: finTexto,
+    fechaDocumentoProtocolo,
+    fechaDentroDeRangoProtocolo,
+  })
 
-    const traerPorRango = async (columnas) => supabase
-      .from(tabla)
-      .select(columnas)
-      .gte('fecha_prueba_electrica', inicio)
-      .lt('fecha_prueba_electrica', finTexto)
-
-    const traerRecientes = async (columnas) => supabase
-      .from(tabla)
-      .select(columnas)
-      .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
-      .limit(250)
-
-    let respuesta = await traerPorRango(columnasConIdOt)
-
-    if (respuesta.error?.message?.includes('id_ot')) {
-      respuesta = await traerPorRango(columnasSinIdOt)
-    }
-
-    if (respuesta.error?.message?.includes('estado')) {
-      respuesta = await traerPorRango(quitarColumnaEstado(columnasSinIdOt))
-    }
-
-    if (respuesta.error) return respuesta
-
-    let recientes = await traerRecientes(columnasConIdOt)
-    if (recientes.error?.message?.includes('id_ot')) {
-      recientes = await traerRecientes(columnasSinIdOt)
-    }
-    if (recientes.error?.message?.includes('estado')) {
-      recientes = await traerRecientes(quitarColumnaEstado(columnasSinIdOt))
-    }
-
-    const porId = new Map()
-    ;[...(respuesta.data || []), ...(!recientes.error ? recientes.data || [] : [])].forEach((item) => {
-      const fechaRegistro = fechaDocumentoProtocolo(item)
-      if (!fechaDentroDeRangoProtocolo(fechaRegistro, inicio, finTexto)) return
-      porId.set(String(item.id), item)
-    })
-
-    return {
-      ...respuesta,
-      data: [...porId.values()],
-    }
-  }
-
-  const [respuestaActivos, respuestaHistorial, respuestaManuales] = await Promise.all([
-    cargarTablaProtocolos(
-      'modulos',
-      'id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
-      'id, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
-    ),
-    cargarTablaProtocolos(
-      'historial_modulos',
-      'id, modulo_id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
-      'id, modulo_id, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
-    ),
-    cargarTablaProtocolos(
-      'protocolos_manuales',
-      'id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
-      'id, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
-    ),
-  ])
-
-  const tablaManualNoExiste = respuestaManuales.error?.message?.includes('protocolos_manuales')
-  const error = respuestaActivos.error || respuestaHistorial.error || (tablaManualNoExiste ? null : respuestaManuales.error)
   if (error) {
     return { error, registros: [] }
   }
@@ -2083,9 +1562,9 @@ async function obtenerRegistrosProtocolosPorRango(valor, rango) {
     : Object.fromEntries(catalogoPreciosProtocolo.map((item) => [item.material, item.precio]))
 
   const registros = [
-    ...(respuestaActivos.data || []).map((item) => prepararRegistroProtocoloMensual(item, 'actual', preciosActuales)),
-    ...(respuestaHistorial.data || []).map((item) => prepararRegistroProtocoloMensual(item, 'historial', preciosActuales)),
-    ...((tablaManualNoExiste ? [] : respuestaManuales.data) || []).map((item) => prepararRegistroProtocoloMensual(item, 'manual', preciosActuales)),
+    ...registrosActivos.map((item) => prepararRegistroProtocoloMensual(item, 'actual', preciosActuales)),
+    ...registrosHistorial.map((item) => prepararRegistroProtocoloMensual(item, 'historial', preciosActuales)),
+    ...registrosManuales.map((item) => prepararRegistroProtocoloMensual(item, 'manual', preciosActuales)),
   ].sort((a, b) => new Date(b.fecha_prueba_electrica || 0) - new Date(a.fecha_prueba_electrica || 0))
 
   return { registros, error: null }
@@ -2117,9 +1596,10 @@ async function abrirProtocolosMensuales() {
 async function cargarConfigBalanceMateriales() {
   if (!puedeVerBalanceMateriales) return {}
 
-  const { data, error } = await supabase
-    .from('balance_materiales_config')
-    .select('material_key, nombre_visible, valor_compra')
+  const { config, error } = await cargarConfigBalanceMaterialesSupabase({
+    supabase,
+    normalizarPrecioMaterial,
+  })
 
   if (error) {
     if (!error.message?.includes('balance_materiales_config')) {
@@ -2128,66 +1608,20 @@ async function cargarConfigBalanceMateriales() {
     return {}
   }
 
-  const config = Object.fromEntries((data || []).map((item) => [
-    item.material_key,
-    {
-      nombreVisible: item.nombre_visible || '',
-      valorCompra: item.valor_compra ?? '',
-    },
-  ]))
-
-  let configFinal = config
-  try {
-    const comprasLocales = JSON.parse(localStorage.getItem('balance_materiales_valores_compra') || '{}')
-    const nombresLocales = JSON.parse(localStorage.getItem('balance_materiales_nombres') || '{}')
-    const clavesLocales = [...new Set([...Object.keys(comprasLocales), ...Object.keys(nombresLocales)])]
-    const filasMigrar = clavesLocales
-      .filter((clave) => !config[clave] && (comprasLocales[clave] !== undefined || nombresLocales[clave]))
-      .map((clave) => ({
-        material_key: clave,
-        nombre_visible: nombresLocales[clave] || null,
-        valor_compra: normalizarPrecioMaterial(comprasLocales[clave]),
-        updated_at: new Date().toISOString(),
-      }))
-
-    if (filasMigrar.length > 0) {
-      const { error: errorMigracion } = await supabase
-        .from('balance_materiales_config')
-        .upsert(filasMigrar, { onConflict: 'material_key' })
-
-      if (!errorMigracion) {
-        configFinal = {
-          ...config,
-          ...Object.fromEntries(filasMigrar.map((fila) => [
-            fila.material_key,
-            {
-              nombreVisible: fila.nombre_visible || '',
-              valorCompra: fila.valor_compra ?? '',
-            },
-          ])),
-        }
-      }
-    }
-  } catch {
-    // Si no existe información local o no se puede leer, seguimos con Supabase.
-  }
-
-  setConfigBalanceMateriales(configFinal)
-  return configFinal
+  setConfigBalanceMateriales(config)
+  return config
 }
 
 function guardarConfigBalanceMaterialesDebounced(clave, config) {
   if (!clave) return
   clearTimeout(guardadoBalanceMaterialesRef.current[clave])
   guardadoBalanceMaterialesRef.current[clave] = setTimeout(async () => {
-    const { error } = await supabase
-      .from('balance_materiales_config')
-      .upsert({
-        material_key: clave,
-        nombre_visible: config.nombreVisible || null,
-        valor_compra: normalizarPrecioMaterial(config.valorCompra),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'material_key' })
+    const { error } = await guardarConfigBalanceMaterial({
+      supabase,
+      clave,
+      config,
+      normalizarPrecioMaterial,
+    })
 
     if (error) {
       mostrarNotificacion('No se pudo guardar el valor compra en Supabase: ' + error.message)
@@ -2246,11 +1680,11 @@ async function cargarValesBodegaPorRango(valor = fechaBalanceMateriales, rango =
   const fechaInicio = inicio.slice(0, 10)
   const fechaFin = fin.slice(0, 10)
 
-  const { data, error } = await supabase
-    .from('vales_bodega_items')
-    .select('id, fecha, material_vale, material_balance, cantidad')
-    .gte('fecha', fechaInicio)
-    .lt('fecha', fechaFin)
+  const { items, error } = await cargarItemsValesBodegaPorRango({
+    supabase,
+    fechaInicio,
+    fechaFin,
+  })
 
   if (error) {
     if (error.message?.includes('vales_bodega_items')) return []
@@ -2258,7 +1692,7 @@ async function cargarValesBodegaPorRango(valor = fechaBalanceMateriales, rango =
     return []
   }
 
-  return data || []
+  return items
 }
 
 async function cargarValesBodegaDia(fecha = fechaValeBodega) {
@@ -2266,50 +1700,22 @@ async function cargarValesBodegaDia(fecha = fechaValeBodega) {
 
   setCargandoValesBodegaDia(true)
 
-  const { data: vales, error: errorVales } = await supabase
-    .from('vales_bodega')
-    .select('id, fecha, archivo_nombre, usuario_nombre, created_at')
-    .eq('fecha', fecha)
-    .order('created_at', { ascending: false })
-
-  if (errorVales) {
-    setCargandoValesBodegaDia(false)
-    if (!errorVales.message?.includes('vales_bodega')) {
-      mostrarNotificacion('No se pudieron cargar los vales del día: ' + errorVales.message)
-    }
-    setValesBodegaDia([])
-    return
-  }
-
-  const ids = (vales || []).map((vale) => vale.id)
-  if (ids.length === 0) {
-    setValesBodegaDia([])
-    setCargandoValesBodegaDia(false)
-    return
-  }
-
-  const { data: items, error: errorItems } = await supabase
-    .from('vales_bodega_items')
-    .select('id, vale_id, material_vale, material_balance, cantidad')
-    .in('vale_id', ids)
+  const { vales, error } = await cargarValesBodegaDiaSupabase({
+    supabase,
+    fecha,
+  })
 
   setCargandoValesBodegaDia(false)
 
-  if (errorItems) {
-    mostrarNotificacion('No se pudieron cargar los materiales de los vales: ' + errorItems.message)
-    setValesBodegaDia((vales || []).map((vale) => ({ ...vale, items: [] })))
+  if (error) {
+    if (!error.message?.includes('vales_bodega')) {
+      mostrarNotificacion('No se pudieron cargar los vales del dÃ­a: ' + error.message)
+    }
+    setValesBodegaDia(vales)
     return
   }
 
-  const itemsPorVale = (items || []).reduce((mapa, item) => {
-    mapa[item.vale_id] = [...(mapa[item.vale_id] || []), item]
-    return mapa
-  }, {})
-
-  setValesBodegaDia((vales || []).map((vale) => ({
-    ...vale,
-    items: itemsPorVale[vale.id] || [],
-  })))
+  setValesBodegaDia(vales)
 }
 
 function cambiarFechaValeBodega(fecha) {
@@ -2339,379 +1745,19 @@ function eliminarFilaValeBodega(index) {
   setFilasValeBodega((actuales) => actuales.filter((_, filaIndex) => filaIndex !== index))
 }
 
-function materialBalanceDesdeVale(descripcion) {
-  const clave = normalizarTextoComparacion(descripcion)
-  if (equivalenciasValeBodega[clave]) return equivalenciasValeBodega[clave]
-
-  const encontrada = Object.entries(equivalenciasValeBodega).find(([patron]) => (
-    clave.includes(patron) || patron.includes(clave)
-  ))
-  if (encontrada?.[1]) return encontrada[1]
-
-  const porPalabras = Object.entries(equivalenciasValeBodega).find(([patron]) => {
-    const palabras = patron.split(' ').filter((palabra) => palabra.length > 2)
-    if (palabras.length === 0) return false
-    return palabras.every((palabra) => clave.includes(palabra))
-  })
-
-  return porPalabras?.[1] || descripcion
-}
-
-async function leerTextoArchivoVale(archivo) {
-  const buffer = await archivo.arrayBuffer()
-  const nombreArchivo = archivo.name?.toLowerCase() || ''
-  const esPdf = archivo.type === 'application/pdf' || nombreArchivo.endsWith('.pdf')
-  const esDocx = archivo.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    || nombreArchivo.endsWith('.docx')
-  const esDoc = archivo.type === 'application/msword' || nombreArchivo.endsWith('.doc')
-
-  if (esPdf) {
-    const documento = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
-    const lineas = []
-
-    for (let numeroPagina = 1; numeroPagina <= documento.numPages; numeroPagina += 1) {
-      const pagina = await documento.getPage(numeroPagina)
-      const contenido = await pagina.getTextContent()
-      const grupos = []
-
-      contenido.items.forEach((item) => {
-        const y = item.transform?.[5] || 0
-        const x = item.transform?.[4] || 0
-        const texto = String(item.str || '').trim()
-        if (!texto) return
-
-        const grupoExistente = grupos.find((grupo) => Math.abs(grupo.y - y) <= 2)
-        if (grupoExistente) {
-          grupoExistente.items.push({ x, texto })
-          grupoExistente.y = (grupoExistente.y + y) / 2
-        } else {
-          grupos.push({ y, items: [{ x, texto }] })
-        }
-      })
-
-      grupos
-        .sort((a, b) => b.y - a.y)
-        .forEach((grupo) => {
-          lineas.push(
-            grupo.items
-              .sort((a, b) => a.x - b.x)
-              .map((parte) => parte.texto)
-              .join(' ')
-          )
-        })
-    }
-
-    return lineas.join('\n')
-  }
-
-  if (esDocx) {
-    const html = await mammoth.convertToHtml({ arrayBuffer: buffer })
-    const documento = new DOMParser().parseFromString(html.value || '', 'text/html')
-    return extraerLineasValeDesdeTablasWord(documento)
-  }
-
-  if (esDoc) {
-    throw new Error('Los archivos .doc antiguos no se pueden leer de forma confiable. Guarda el vale como .docx y vuelve a adjuntarlo.')
-  }
-
-  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer)
-  const latin1 = new TextDecoder('latin1', { fatal: false }).decode(buffer)
-  return `${utf8}\n${latin1}`
-}
-
-function extraerLineasValeDesdeTablasWord(documento) {
-  const lineas = []
-
-  documento.querySelectorAll('table').forEach((tabla) => {
-    const filas = [...tabla.querySelectorAll('tr')]
-      .map((fila) => [...fila.querySelectorAll('th, td')]
-        .map((celda) => celda.textContent.replace(/\s+/g, ' ').trim())
-        .filter(Boolean))
-      .filter((celdas) => celdas.length > 0)
-
-    if (filas.length === 0) return
-
-    const configuracion = detectarColumnasValeWord(filas)
-    if (!configuracion) return
-
-    filas.slice(configuracion.indiceInicioDatos).forEach((celdas) => {
-      const indiceTotalFila = configuracion.inferido
-        ? encontrarIndiceCantidadTotalVale(celdas)
-        : configuracion.indiceTotal
-      const material = limpiarDescripcionVale(celdas[configuracion.indiceMaterial] || '')
-      const cantidad = normalizarCantidadVale(celdas[indiceTotalFila] || '')
-
-      if (!cantidad || !esDescripcionMaterialVale(material)) return
-      lineas.push([material, cantidad].join('\t'))
-    })
-  })
-
-  return lineas.join('\n')
-}
-
-function detectarColumnasValeWord(filas) {
-  for (let indiceFila = 0; indiceFila < filas.length; indiceFila += 1) {
-    const encabezado = filas[indiceFila].map(normalizarTextoComparacion)
-    const indiceMaterial = encabezado.findIndex(esEncabezadoMaterialVale)
-    const indiceTotal = encontrarIndiceTotalEncabezadoVale(encabezado)
-
-    if (indiceMaterial >= 0 && indiceTotal >= 0 && indiceMaterial !== indiceTotal) {
-      return {
-        indiceMaterial,
-        indiceTotal,
-        indiceInicioDatos: indiceFila + 1,
-      }
-    }
-  }
-
-  return inferirColumnasValeWord(filas)
-}
-
-function inferirColumnasValeWord(filas) {
-  const filasConTotal = filas
-    .map((celdas, indice) => {
-      const indiceTotal = encontrarIndiceCantidadTotalVale(celdas)
-      return { celdas, indice, indiceTotal }
-    })
-    .filter(({ celdas, indiceTotal }) => indiceTotal > 0 && celdas.length >= 2)
-
-  if (filasConTotal.length < 2) return null
-
-  const puntajesPorColumna = new Map()
-  filasConTotal.forEach(({ celdas, indiceTotal }) => {
-    celdas.slice(0, indiceTotal).forEach((celda, indiceColumna) => {
-      const puntaje = puntuarCeldaMaterialVale(celda)
-      if (puntaje <= 0) return
-      puntajesPorColumna.set(
-        indiceColumna,
-        (puntajesPorColumna.get(indiceColumna) || 0) + puntaje
-      )
-    })
-  })
-
-  const columnasOrdenadas = [...puntajesPorColumna.entries()]
-    .sort((a, b) => b[1] - a[1])
-  const mejorColumna = columnasOrdenadas[0]
-  if (!mejorColumna || mejorColumna[1] < 8) return null
-
-  return {
-    indiceMaterial: mejorColumna[0],
-    indiceTotal: Math.max(...filasConTotal.map(({ indiceTotal }) => indiceTotal)),
-    indiceInicioDatos: Math.min(...filasConTotal.map(({ indice }) => indice)),
-    inferido: true,
-  }
-}
-
-function puntuarCeldaMaterialVale(valor) {
-  const texto = limpiarDescripcionVale(valor)
-  if (!esDescripcionMaterialVale(texto)) return 0
-
-  const textoNormalizado = normalizarTextoComparacion(texto)
-  let puntaje = 1
-
-  if (texto.length >= 10) puntaje += 2
-  if (texto.split(' ').length >= 2) puntaje += 2
-  if (equivalenciasValeBodega[textoNormalizado]) puntaje += 5
-  if (Object.keys(equivalenciasValeBodega).some((patron) => (
-    textoNormalizado.includes(patron) || patron.includes(textoNormalizado)
-  ))) puntaje += 3
-  if (camposMateriales.some(([item]) => normalizarTextoComparacion(item) === textoNormalizado)) puntaje += 4
-
-  return puntaje
-}
-
-function esEncabezadoMaterialVale(texto) {
-  return [
-    'material',
-    'descripcion',
-    'descripcion material',
-    'detalle',
-    'articulo',
-    'producto',
-    'nombre material',
-  ].some((patron) => texto === patron || texto.includes(patron))
-}
-
-function encontrarIndiceTotalEncabezadoVale(encabezado) {
-  for (let index = encabezado.length - 1; index >= 0; index -= 1) {
-    const texto = encabezado[index]
-    if (
-      texto === 'total' ||
-      texto.includes('total') ||
-      texto.includes('cantidad total') ||
-      texto.includes('cant total')
-    ) {
-      return index
-    }
-  }
-
-  return -1
-}
-
-function detectarFilasValeDesdeTexto(texto) {
-  const lineas = texto
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .map((linea) => linea.includes('\t')
-      ? linea.split('\t').map((celda) => celda.replace(/\s+/g, ' ').trim()).join('\t')
-      : linea.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-
-  return lineas.flatMap((linea) => {
-    const filaTabla = detectarFilaValeDesdeCeldas(linea)
-    if (filaTabla) return [filaTabla]
-
-    const match = linea.match(/^(\d{1,3})\s+\S+\s+(.+?)\s+c\/u\s+(.+)$/i)
-    if (!match) {
-      const filaSimple = detectarFilaValeSimple(linea)
-      return filaSimple ? [filaSimple] : []
-    }
-
-    const descripcion = match[2].trim()
-    const numeros = [...match[3].matchAll(/\b\d{1,4}\b/g)].map((item) => item[0])
-    if (numeros.length === 0) return []
-
-    const cantidad = Number(numeros[numeros.length - 1])
-    if (!cantidad) return []
-
-    return [{
-      id: `detectado-${match[1]}-${descripcion}`,
-      materialVale: descripcion,
-      materialBalance: materialBalanceDesdeVale(descripcion),
-      cantidad: String(cantidad),
-    }]
-  })
-}
-
-function detectarFilaValeDesdeCeldas(linea) {
-  if (!linea.includes('\t')) return null
-
-  const celdas = linea.split('\t').map((celda) => celda.trim()).filter(Boolean)
-  if (celdas.some(esCeldaEncabezadoVale)) return null
-  if (celdas.length < 2) return null
-
-  const indiceCantidad = encontrarIndiceCantidadTotalVale(celdas)
-  if (indiceCantidad < 0) return null
-
-  const cantidad = normalizarCantidadVale(celdas[indiceCantidad])
-  if (!cantidad) return null
-
-  const descripcion = obtenerDescripcionValeDesdeCeldas(celdas, indiceCantidad)
-  if (!descripcion) return null
-
-  return {
-    id: `detectado-tabla-${descripcion}-${cantidad}`,
-    materialVale: descripcion,
-    materialBalance: materialBalanceDesdeVale(descripcion),
-    cantidad: String(cantidad),
-  }
-}
-
-function detectarFilaValeSimple(linea) {
-  if (esCeldaEncabezadoVale(linea)) return null
-
-  const matchFinal = linea.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)$/)
-  if (!matchFinal) return null
-
-  const cantidad = normalizarCantidadVale(matchFinal[2])
-  const descripcion = limpiarDescripcionVale(matchFinal[1])
-  if (!cantidad || !esDescripcionMaterialVale(descripcion)) return null
-
-  return {
-    id: `detectado-linea-${descripcion}-${cantidad}`,
-    materialVale: descripcion,
-    materialBalance: materialBalanceDesdeVale(descripcion),
-    cantidad: String(cantidad),
-  }
-}
-
-function encontrarIndiceCantidadVale(celdas) {
-  for (let index = celdas.length - 1; index >= 0; index -= 1) {
-    const cantidad = normalizarCantidadVale(celdas[index])
-    if (cantidad > 0) return index
-  }
-  return -1
-}
-
-function encontrarIndiceCantidadTotalVale(celdas) {
-  const indiceUltimaCelda = celdas.length - 1
-  const cantidadUltimaCelda = normalizarCantidadVale(celdas[indiceUltimaCelda])
-  if (cantidadUltimaCelda > 0) return indiceUltimaCelda
-
-  return -1
-}
-
-function obtenerDescripcionValeDesdeCeldas(celdas, indiceCantidad) {
-  const celdasAntesTotal = celdas.slice(0, indiceCantidad)
-  const candidatas = celdasAntesTotal
-    .map(limpiarDescripcionVale)
-    .filter(esDescripcionMaterialVale)
-
-  if (candidatas.length === 0) return ''
-  return candidatas.sort((a, b) => b.length - a.length)[0]
-}
-
-function limpiarDescripcionVale(valor) {
-  return String(valor || '')
-    .replace(/^\d{1,4}\s+/, '')
-    .replace(/\bc\/u\b/gi, '')
-    .replace(/\bun(?:idad)?\.?\b/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function normalizarCantidadVale(valor) {
-  const texto = String(valor || '').trim()
-  if (!/^\d+(?:[.,]\d+)?$/.test(texto)) return 0
-  const numero = Number(texto.replace(',', '.'))
-  return Number.isFinite(numero) ? numero : 0
-}
-
-function esUnidadVale(valor) {
-  return /^(un|und|unidad|u|c\/u|mt|m|ml|gl|cj|caja)$/i.test(String(valor || '').trim())
-}
-
-function esDescripcionMaterialVale(valor) {
-  const textoOriginal = String(valor || '').trim()
-  const texto = normalizarTextoComparacion(textoOriginal)
-  if (!texto || texto.length < 4) return false
-  if (normalizarCantidadVale(textoOriginal)) return false
-  if (esUnidadVale(textoOriginal) || esCeldaEncabezadoVale(textoOriginal)) return false
-  if (!/[a-záéíóúñ]/i.test(textoOriginal)) return false
-  if (/^\d+[\w.-]*$/.test(textoOriginal)) return false
-  if (/^(fecha|solicitante|responsable|bodega|obra|ot|vale|numero|nro|rut|firma|subtotal|neto|iva|total)\b/i.test(textoOriginal)) return false
-  if (/\$/.test(textoOriginal)) return false
-  if (texto.split(' ').length === 1 && texto.length <= 5) return false
-  return true
-}
-
-function esCeldaEncabezadoVale(valor) {
-  const texto = normalizarTextoComparacion(valor)
-  if (!texto) return true
-  return [
-    'item',
-    'codigo',
-    'descripcion',
-    'material',
-    'unidad',
-    'cantidad',
-    'total',
-    'precio',
-    'observacion',
-  ].some((palabra) => texto === palabra || texto.includes(` ${palabra} `))
-}
-
 async function leerValeBodega() {
   if (!archivoValeBodega) return
 
   setLeyendoValeBodega(true)
   let filas = []
   try {
-    const texto = await leerTextoArchivoVale(archivoValeBodega)
-    filas = detectarFilasValeDesdeTexto(texto)
+    filas = await leerFilasValeBodegaDesdeArchivo(archivoValeBodega, {
+      equivalenciasValeBodega,
+      normalizarTextoComparacion,
+    })
   } catch (error) {
     console.error(error)
-    mostrarNotificacion(error.message || 'No se pudo leer el archivo automáticamente. Puedes ingresar los materiales manualmente.')
+    mostrarNotificacion(error.message || 'No se pudo leer el archivo automÃ¡ticamente. Puedes ingresar los materiales manualmente.')
   } finally {
     setLeyendoValeBodega(false)
   }
@@ -2737,40 +1783,29 @@ async function guardarValeBodega() {
     .filter((fila) => fila.material_balance && fila.cantidad > 0)
 
   if (items.length === 0) {
-    mostrarNotificacion('No hay materiales válidos para guardar')
+    mostrarNotificacion('No hay materiales vÃ¡lidos para guardar')
     return
   }
 
   setGuardandoValeBodega(true)
 
-  const { data: vale, error: errorVale } = await supabase
-    .from('vales_bodega')
-    .insert([{
-      fecha: fechaValeBodega,
-      archivo_nombre: archivoValeBodega?.name || '',
-      usuario_nombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
-    }])
-    .select('id')
-    .single()
+  const { error, etapa } = await guardarValeBodegaSupabase({
+    supabase,
+    fecha: fechaValeBodega,
+    archivoNombre: archivoValeBodega?.name || '',
+    usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    items,
+  })
 
-  if (errorVale) {
-    setGuardandoValeBodega(false)
+  setGuardandoValeBodega(false)
+
+  if (error && etapa === 'vale') {
     mostrarNotificacion('No se pudo guardar el vale. Revisa si existen las tablas vales_bodega y vales_bodega_items.')
     return
   }
 
-  const { error: errorItems } = await supabase
-    .from('vales_bodega_items')
-    .insert(items.map((item) => ({
-      vale_id: vale.id,
-      fecha: fechaValeBodega,
-      ...item,
-    })))
-
-  setGuardandoValeBodega(false)
-
-  if (errorItems) {
-    mostrarNotificacion('No se pudieron guardar los materiales del vale: ' + errorItems.message)
+  if (error) {
+    mostrarNotificacion('No se pudieron guardar los materiales del vale: ' + error.message)
     return
   }
 
@@ -2849,85 +1884,21 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
 
   const valorIdOt = String(valor ?? '').trim()
 
-  const tablaDestino = registro.origen === 'manual'
-    ? 'protocolos_manuales'
-    : registro.origen === 'historial'
-      ? 'historial_modulos'
-      : 'modulos'
-
-  const columnasIdOt = registro.origen === 'historial'
-    ? 'id, modulo_id, id_ot, protocolo_entrega, materiales'
-    : 'id, id_ot, protocolo_entrega, materiales'
-
-  let { data: registroActual, error: errorCarga } = await supabase
-    .from(tablaDestino)
-    .select(columnasIdOt)
-    .eq('id', registro.id)
-    .maybeSingle()
-
-  if (!errorCarga && !registroActual && registro.origen === 'historial' && registro.modulo_id) {
-    registroActual = null
-  }
-
-  if (errorCarga?.message?.includes('id_ot')) {
-    const columnasCompatibles = registro.origen === 'historial'
-      ? 'id, modulo_id, protocolo_entrega, materiales'
-      : 'id, protocolo_entrega, materiales'
-
-    ;({ data: registroActual, error: errorCarga } = await supabase
-      .from(tablaDestino)
-      .select(columnasCompatibles)
-      .eq('id', registro.id)
-      .maybeSingle())
-
-    if (!errorCarga && !registroActual && registro.origen === 'historial' && registro.modulo_id) {
-      registroActual = null
-    }
-  }
-
-  if (errorCarga) {
-    mostrarNotificacion('No se pudo cargar el protocolo para guardar ID OT: ' + errorCarga.message)
-    return
-  }
-
-  if (!registroActual) {
-    mostrarNotificacion('No se encontró el protocolo para guardar ID OT')
-    return
-  }
-
-  const protocoloActualizado = {
-    ...(registroActual.protocolo_entrega || {}),
-    id_ot: valorIdOt,
-    idOt: valorIdOt,
-  }
-
-  const payloadIdOt = {
-    id_ot: valorIdOt,
-    protocolo_entrega: protocoloActualizado,
-  }
-
-  let { data: registroGuardado, error } = await supabase
-    .from(tablaDestino)
-    .update(payloadIdOt)
-    .eq('id', registroActual.id)
-    .select(columnasIdOt)
-    .maybeSingle()
-
-  if (error?.message?.includes('id_ot')) {
-    const columnasCompatibles = registro.origen === 'historial'
-      ? 'id, modulo_id, protocolo_entrega, materiales'
-      : 'id, protocolo_entrega, materiales'
-
-    ;({ data: registroGuardado, error } = await supabase
-      .from(tablaDestino)
-      .update({ protocolo_entrega: protocoloActualizado })
-      .eq('id', registroActual.id)
-      .select(columnasCompatibles)
-      .maybeSingle())
-  }
+  const {
+    data: registroGuardado,
+    error,
+    mensaje,
+    registroActual,
+    protocoloActualizado,
+    tablaDestino,
+  } = await guardarIdOtProtocoloMensualSupabase({
+    supabase,
+    registro,
+    valorIdOt,
+  })
 
   if (error) {
-    mostrarNotificacion('No se pudo guardar el ID OT: ' + error.message)
+    mostrarNotificacion(mensaje || ('No se pudo guardar el ID OT: ' + error.message))
     return
   }
 
@@ -2939,7 +1910,7 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
   const idOtConfirmado = String(registroGuardado.id_ot ?? registroGuardado.protocolo_entrega?.id_ot ?? registroGuardado.protocolo_entrega?.idOt ?? '').trim()
 
   if (idOtConfirmado !== valorIdOt) {
-    mostrarNotificacion(`Supabase no confirmó el ID OT en ${tablaDestino}. Valor recibido: ${idOtConfirmado || 'vacío'}`)
+    mostrarNotificacion(`Supabase no confirmÃ³ el ID OT en ${tablaDestino}. Valor recibido: ${idOtConfirmado || 'vacÃ­o'}`)
     return
   }
 
@@ -3028,19 +1999,15 @@ async function eliminarProtocoloMensual(registro) {
 
   if (registro.origen === 'actual') {
     const confirmadoActual = window.confirm(
-      `¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}? El módulo seguirá activo en el tablero.`
+      `Â¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}? El mÃ³dulo seguirÃ¡ activo en el tablero.`
     )
 
     if (!confirmadoActual) return
 
-    const { error } = await supabase
-      .from('modulos')
-      .update({
-        fecha_prueba_electrica: null,
-        id_ot: null,
-        protocolo_entrega: {},
-      })
-      .eq('id', registro.id)
+    const { error } = await limpiarProtocoloModuloActivo({
+      supabase,
+      id: registro.id,
+    })
 
     if (error) {
       mostrarNotificacion('No se pudo eliminar el protocolo: ' + error.message)
@@ -3050,28 +2017,21 @@ async function eliminarProtocoloMensual(registro) {
     setProtocolosMensuales((actuales) => actuales.filter((item) => !(
       item.origen === registro.origen && item.id === registro.id
     )))
-    mostrarNotificacion('Protocolo eliminado. El módulo sigue activo.')
+    mostrarNotificacion('Protocolo eliminado. El mÃ³dulo sigue activo.')
     return
   }
 
   const confirmado = window.confirm(
-    `¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}?`
+    `Â¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}?`
   )
 
   if (!confirmado) return
 
-  const tablaDestino = registro.origen === 'manual'
-    ? 'protocolos_manuales'
-    : registro.origen === 'historial'
-      ? 'historial_modulos'
-      : ''
-
-  if (!tablaDestino) return
-
-  const { error } = await supabase
-    .from(tablaDestino)
-    .delete()
-    .eq('id', registro.id)
+  const { error } = await eliminarRegistroProtocoloMensual({
+    supabase,
+    origen: registro.origen,
+    id: registro.id,
+  })
 
   if (error) {
     mostrarNotificacion('No se pudo eliminar el protocolo: ' + error.message)
@@ -3095,17 +2055,12 @@ async function guardarPreciosMateriales() {
   if (!puedeEditarPreciosMateriales || guardandoPreciosMateriales) return
 
   setGuardandoPreciosMateriales(true)
-  const filas = catalogoPreciosProtocolo.map((item) => ({
-    material: item.material,
-    id_art: item.idArt,
-    seccion: item.seccion,
-    precio: normalizarPrecioMaterial(preciosMateriales[item.material]),
-    updated_at: new Date().toISOString(),
-  }))
-
-  const { error } = await supabase
-    .from('material_precios')
-    .upsert(filas, { onConflict: 'material' })
+  const { error } = await guardarPreciosMaterialesSupabase({
+    supabase,
+    catalogo: catalogoPreciosProtocolo,
+    precios: preciosMateriales,
+    normalizarPrecioMaterial,
+  })
 
   setGuardandoPreciosMateriales(false)
 
@@ -3123,32 +2078,14 @@ async function generarDescargaProtocolosDiarios() {
 
   setDescargandoProtocolos(true)
   try {
-    const inicio = `${fechaProtocolosDiarios}T00:00:00`
-    const fin = new Date(`${fechaProtocolosDiarios}T00:00:00`)
-    fin.setDate(fin.getDate() + 1)
-    const finTexto = fin.toISOString().slice(0, 19)
-
-    const [respuestaActivos, respuestaHistorial] = await Promise.all([
-      supabase
-        .from('modulos')
-        .select('*')
-        .gte('fecha_prueba_electrica', inicio)
-        .lt('fecha_prueba_electrica', finTexto),
-      supabase
-        .from('historial_modulos')
-        .select('*')
-        .gte('fecha_prueba_electrica', inicio)
-        .lt('fecha_prueba_electrica', finTexto),
-    ])
-
-    const error = respuestaActivos.error || respuestaHistorial.error
+    const { registros, error } = await cargarProtocolosDiarios({
+      supabase,
+      fecha: fechaProtocolosDiarios,
+    })
     if (error) {
       mostrarNotificacion('No se pudieron cargar los protocolos: ' + error.message)
       return
     }
-
-    const registros = [...(respuestaActivos.data || []), ...(respuestaHistorial.data || [])]
-      .sort((a, b) => String(a.serie || '').localeCompare(String(b.serie || '')))
 
     if (registros.length === 0) {
       mostrarNotificacion('No hay protocolos con fecha de prueba eléctrica para ese día')
@@ -3177,16 +2114,13 @@ async function reintegrarModuloFinalizado() {
         return
       }
 
-      const { data, error } = await supabase
-        .from('historial_modulos')
-        .select('*')
-        .eq('serie', serie)
-        .order('fecha_salida', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const { data, error } = await buscarUltimoModuloFinalizadoPorSerie({
+        supabase,
+        serie,
+      })
 
       if (error) {
-        mostrarNotificacion('No se pudo buscar el módulo: ' + error.message)
+        mostrarNotificacion('No se pudo buscar el mÃ³dulo: ' + error.message)
         return
       }
 
@@ -3194,61 +2128,43 @@ async function reintegrarModuloFinalizado() {
     }
 
     if (!moduloHistorial) {
-      mostrarNotificacion('No se encontró un módulo finalizado con esa serie')
+      mostrarNotificacion('No se encontrÃ³ un mÃ³dulo finalizado con esa serie')
       return
     }
 
-    const { data: activoExistente, error: errorActivo } = await supabase
-      .from('modulos')
-      .select('id')
-      .eq('serie', moduloHistorial.serie)
-      .maybeSingle()
+    const resultado = await reintegrarModuloDesdeHistorial({
+      supabase,
+      moduloHistorial,
+      linea: lineaReintegrar,
+      extremo: extremoReintegrar,
+    })
 
-    if (errorActivo) {
-      mostrarNotificacion('No se pudo verificar el módulo activo: ' + errorActivo.message)
-      return
-    }
+    if (!resultado.ok) {
+      if (resultado.tipo === 'error_verificacion_activo') {
+        mostrarNotificacion('No se pudo verificar el mÃ³dulo activo: ' + resultado.error.message)
+        return
+      }
 
-    if (activoExistente) {
-      mostrarNotificacion('Ese módulo ya se encuentra activo en una línea')
-      return
-    }
+      if (resultado.tipo === 'ya_activo') {
+        mostrarNotificacion('Ese mÃ³dulo ya se encuentra activo en una lÃ­nea')
+        return
+      }
 
-    const posicionDestino = await prepararLineaParaIngreso(lineaReintegrar, extremoReintegrar)
-    const { error: errorInsert } = await supabase
-      .from('modulos')
-      .insert([
-        {
-          serie: moduloHistorial.serie,
-          tipo: moduloHistorial.tipo,
-          proyecto: moduloHistorial.proyecto,
-          responsable: moduloHistorial.responsable,
-          fecha_ingreso: moduloHistorial.fecha_ingreso,
-          fecha_prueba_electrica: moduloHistorial.fecha_prueba_electrica,
-          protocolo_entrega: moduloHistorial.protocolo_entrega || {},
-          nota: moduloHistorial.nota || '',
-          observacion_alerta: moduloHistorial.observacion_alerta || '',
-          estado: moduloHistorial.estado || 'Sin iniciar',
-          linea: lineaReintegrar,
-          posicion: posicionDestino,
-        },
-      ])
+      if (resultado.tipo === 'error_insert') {
+        mostrarNotificacion('No se pudo reintegrar el mÃ³dulo: ' + resultado.error.message)
+        await cargarTablero()
+        return
+      }
 
-    if (errorInsert) {
-      mostrarNotificacion('No se pudo reintegrar el módulo: ' + errorInsert.message)
+      mostrarNotificacion('No se pudo reintegrar el mÃ³dulo')
       await cargarTablero()
       return
     }
 
-    const { error: errorDelete } = await supabase
-      .from('historial_modulos')
-      .delete()
-      .eq('id', moduloHistorial.id)
-
-    if (errorDelete) {
-      mostrarNotificacion('Módulo reintegrado, pero no se pudo retirar del historial: ' + errorDelete.message)
+    if (resultado.tipo === 'reintegrado_sin_borrar_historial') {
+      mostrarNotificacion('MÃ³dulo reintegrado, pero no se pudo retirar del historial: ' + resultado.error.message)
     } else {
-      mostrarNotificacion('Módulo reintegrado correctamente')
+      mostrarNotificacion('MÃ³dulo reintegrado correctamente')
     }
 
     setMostrarReintegrar(false)
@@ -3281,44 +2197,40 @@ function limpiarEstadosModal() {
 }
 
   async function guardarCambios() {
-  const isPruebaElectrica = estadoEditado === 'Prueba eléctrica'
-  const isEnGarantia = estadoEditado === 'En garantía'
+  const isPruebaElectrica = estadoEditado === 'Prueba elÃ©ctrica'
+  const isEnGarantia = estadoEditado === 'En garantÃ­a'
   const shouldSetFechaPrueba =
-    isPruebaElectrica && moduloSeleccionado?.estado !== 'Prueba eléctrica'
+    isPruebaElectrica && moduloSeleccionado?.estado !== 'Prueba elÃ©ctrica'
 
   if (isEnGarantia && !fechaPruebaEditada) {
-    mostrarNotificacion('Debe ingresar la fecha de la prueba eléctrica')
+    mostrarNotificacion('Debe ingresar la fecha de la prueba elÃ©ctrica')
     return
   }
 
   const puedeEditarDatosModulo = puedeEditarDatosProtocolo
 
-  const updatePayload = !puedeEditarDatosModulo
-    ? {
-        nota: notaEditada,
-        ...(perfil?.rol === 'electrico'
-          ? { materiales: formulariosElectricos[moduloSeleccionado?.id] || {} }
-          : {}),
-      }
-    : {
-        serie: serieEditada,
-        tipo: tipoEditado,
-        proyecto: proyectoEditado,
-        responsable: responsableEditado,
-        estado: estadoEditado,
-        linea: lineaEditada,
-        posicion: posicionEditada,
-        nota: notaEditada,
-      }
+  let updatePayload = construirPayloadEdicionModulo({
+    puedeEditarDatosModulo,
+    perfil,
+    formulariosElectricos,
+    moduloSeleccionado,
+    serieEditada,
+    tipoEditado,
+    proyectoEditado,
+    responsableEditado,
+    estadoEditado,
+    lineaEditada,
+    posicionEditada,
+    notaEditada,
+  })
 
   let moduloAntesCambio = null
 
   if (puedeEditarDatosModulo) {
-    const { data: moduloActual, error: errorCargaModulo } = await supabase
-      .from('modulos')
-      .select('*')
-      .eq('id', moduloSeleccionado.id)
-      .single()
+    const { data: moduloActual, error: errorCargaModulo } = await cargarModuloParaEdicion({
+      supabase,
+      id: moduloSeleccionado.id,
+    })
 
     if (errorCargaModulo) {
       mostrarNotificacion('No se pudo cargar el protocolo actual: ' + errorCargaModulo.message)
@@ -3352,54 +2264,37 @@ console.log({
   shouldSetFechaPrueba
 })
   if (shouldSetFechaPrueba) {
-    console.log("Guardando fecha de prueba eléctrica")
+    console.log("Guardando fecha de prueba elÃ©ctrica")
 
-    const { data: moduloActual, error: errorCargaModulo } = await supabase
-      .from('modulos')
-      .select('*')
-      .eq('id', moduloSeleccionado.id)
-      .single()
-
-    if (errorCargaModulo) {
-      mostrarNotificacion('No se pudo cargar el mÃ³dulo para guardar la prueba: ' + errorCargaModulo.message)
-      return
-    }
-
-    const fechaPruebaInput = formatearFechaInput(new Date())
-    const moduloBase = {
-      ...moduloSeleccionado,
-      ...(moduloAntesCambio || {}),
-    }
-    const moduloParaProtocolo = {
-      ...moduloBase,
-      serie: serieEditada,
-      tipo: tipoEditado,
-      proyecto: proyectoEditado,
-      responsable: responsableEditado,
-      linea: lineaEditada,
-    }
-
-    updatePayload.fecha_prueba_electrica = `${fechaPruebaInput}T00:00:00`
-    updatePayload.protocolo_entrega = completarDatosPruebaEnProtocolo(
-      moduloBase?.protocolo_entrega || {},
-      moduloParaProtocolo,
-      updatePayload.fecha_prueba_electrica,
-      responsableEditado || perfil?.nombre || ''
-    )
+    updatePayload = aplicarDatosPruebaElectricaEnPayload({
+      payload: updatePayload,
+      moduloSeleccionado,
+      moduloAntesCambio,
+      serieEditada,
+      tipoEditado,
+      proyectoEditado,
+      responsableEditado,
+      lineaEditada,
+      perfil,
+      formatearFechaInput,
+      completarDatosPruebaEnProtocolo,
+    })
   }
 
   if (isEnGarantia) {
-    updatePayload.fecha_prueba_electrica = new Date(`${fechaPruebaEditada}T12:00:00`).toISOString()
-    updatePayload.protocolo_entrega = agregarNotaGarantiaProtocolo(
-      updatePayload.protocolo_entrega || moduloSeleccionado?.protocolo_entrega || {},
-      updatePayload.fecha_prueba_electrica
-    )
+    updatePayload = aplicarGarantiaEnPayload({
+      payload: updatePayload,
+      moduloSeleccionado,
+      fechaPruebaEditada,
+      agregarNotaGarantiaProtocolo,
+    })
   }
 
-  let { error } = await supabase
-    .from('modulos')
-    .update(updatePayload)
-    .eq('id', moduloSeleccionado.id)
+  let { error } = await actualizarModuloEditado({
+    supabase,
+    id: moduloSeleccionado.id,
+    payload: updatePayload,
+  })
 
   console.log('RESULTADO UPDATE - NOTA:', notaEditada)
   console.log('RESULTADO UPDATE - PAYLOAD:')
@@ -3428,26 +2323,23 @@ async function solicitarPruebaElectrica() {
   const usuario = session?.user
 
   if (esEstadoPruebaElectrica(moduloSeleccionado?.estado)) {
-    mostrarNotificacion('Este módulo ya tiene la prueba eléctrica aprobada')
+    mostrarNotificacion('Este mÃ³dulo ya tiene la prueba elÃ©ctrica aprobada')
     return
   }
 
   if (!usuario || !moduloSeleccionado?.id) {
-    mostrarNotificacion('No se pudo identificar al usuario o al módulo')
+    mostrarNotificacion('No se pudo identificar al usuario o al mÃ³dulo')
     return
   }
 
-  const { error } = await supabase
-    .from('modulos')
-    .update({
-      solicitud_prueba: true,
-      solicitado_por: usuario.id,
-      fecha_solicitud: new Date().toISOString(),
-      ...(perfil?.rol === 'electrico'
-        ? { materiales: formulariosElectricos[moduloSeleccionado.id] || {} }
-        : {}),
-    })
-    .eq('id', moduloSeleccionado.id)
+  const { error } = await solicitarPruebaElectricaModulo({
+    supabase,
+    moduloId: moduloSeleccionado.id,
+    usuarioId: usuario.id,
+    materiales: perfil?.rol === 'electrico'
+      ? formulariosElectricos[moduloSeleccionado.id] || {}
+      : null,
+  })
 
   if (error) {
     mostrarNotificacion(error.message)
@@ -3458,26 +2350,27 @@ async function solicitarPruebaElectrica() {
 
   setModuloSeleccionado(null)
 
-  mostrarNotificacion('Solicitud de prueba eléctrica enviada')
+  mostrarNotificacion('Solicitud de prueba elÃ©ctrica enviada')
 }
 
 async function dejarObservacionAlerta() {
   if (!moduloSeleccionado?.id || !puedeDejarObservacionAlerta) return
 
   const textoActual = moduloSeleccionado.observacion_alerta || ''
-  const observacion = window.prompt('Ingrese la observación del módulo:', textoActual)
+  const observacion = window.prompt('Ingrese la observaciÃ³n del mÃ³dulo:', textoActual)
 
   if (observacion === null) return
 
   const observacionLimpia = observacion.trim()
 
-  const { error } = await supabase
-    .from('modulos')
-    .update({ observacion_alerta: observacionLimpia })
-    .eq('id', moduloSeleccionado.id)
+  const { error } = await guardarObservacionAlertaModulo({
+    supabase,
+    moduloId: moduloSeleccionado.id,
+    observacion: observacionLimpia,
+  })
 
   if (error) {
-    mostrarNotificacion('No se pudo guardar la observación: ' + error.message)
+    mostrarNotificacion('No se pudo guardar la observaciÃ³n: ' + error.message)
     return
   }
 
@@ -3489,8 +2382,8 @@ async function dejarObservacionAlerta() {
   setMostrarMenuModulo(false)
   mostrarNotificacion(
     observacionLimpia
-      ? 'Observación guardada'
-      : 'Observación eliminada'
+      ? 'ObservaciÃ³n guardada'
+      : 'ObservaciÃ³n eliminada'
   )
 }
 
@@ -3502,41 +2395,19 @@ function mostrarObservacionAlerta(modulo) {
 async function cancelarSolicitudPruebaElectrica() {
   if (!moduloSeleccionado?.id) return
 
-  const { error } = await supabase
-    .from('modulos')
-    .update({ solicitud_prueba: false })
-    .eq('id', moduloSeleccionado.id)
+  const { error } = await cancelarSolicitudPruebaElectricaModulo({
+    supabase,
+    moduloId: moduloSeleccionado.id,
+  })
 
   if (error) {
     mostrarNotificacion(error.message)
     return
   }
 
-  if (
-    puedeEditarDatosModulo &&
-    moduloAntesCambio &&
-    normalizarTexto(moduloAntesCambio.estado) !== normalizarTexto(estadoEditado)
-  ) {
-    await registrarAccionModulo({
-      tipo: 'cambio_estado',
-      modulo: {
-        ...moduloAntesCambio,
-        estado: estadoEditado,
-        linea: lineaEditada,
-        serie: serieEditada,
-      },
-      datosAntes: moduloAntesCambio,
-      datosDespues: {
-        ...moduloAntesCambio,
-        ...updatePayload,
-      },
-      descripcion: `${moduloAntesCambio.estado || 'Sin estado'} → ${estadoEditado}`,
-    })
-  }
-
   await cargarTablero()
   limpiarEstadosModal()
-  mostrarNotificacion('Solicitud de prueba eléctrica cancelada')
+  mostrarNotificacion('Solicitud de prueba elÃ©ctrica cancelada')
 }
 
 async function aprobarPruebaElectrica() {
@@ -3549,7 +2420,7 @@ async function aprobarPruebaElectrica() {
     .single()
 
   if (errorCargaModulo) {
-    mostrarNotificacion('No se pudo cargar el mÃ³dulo para aprobar la prueba: ' + errorCargaModulo.message)
+    mostrarNotificacion('No se pudo cargar el mÃƒÂ³dulo para aprobar la prueba: ' + errorCargaModulo.message)
     return
   }
 
@@ -3567,15 +2438,12 @@ async function aprobarPruebaElectrica() {
     perfil?.nombre || ''
   )
 
-  const { error } = await supabase
-    .from('modulos')
-    .update({
-      solicitud_prueba: false,
-      estado: 'Prueba eléctrica',
-      fecha_prueba_electrica: fechaPruebaDb,
-      protocolo_entrega: protocoloActualizado,
-    })
-    .eq('id', moduloSeleccionado.id)
+  const { error } = await aprobarPruebaElectricaModulo({
+    supabase,
+    moduloId: moduloSeleccionado.id,
+    fechaPruebaDb,
+    protocoloActualizado,
+  })
 
   if (error) {
     mostrarNotificacion(error.message)
@@ -3586,14 +2454,14 @@ async function aprobarPruebaElectrica() {
     tipo: 'aprobacion_prueba_electrica',
     modulo: {
       ...moduloParaAprobar,
-      estado: 'Prueba elÃ©ctrica',
+      estado: 'Prueba elÃƒÂ©ctrica',
       fecha_prueba_electrica: fechaPruebaDb,
     },
     datosAntes: moduloParaAprobar,
     datosDespues: {
       ...moduloParaAprobar,
       solicitud_prueba: false,
-      estado: 'Prueba elÃ©ctrica',
+      estado: 'Prueba elÃƒÂ©ctrica',
       fecha_prueba_electrica: fechaPruebaDb,
       protocolo_entrega: protocoloActualizado,
     },
@@ -3602,7 +2470,7 @@ async function aprobarPruebaElectrica() {
 
   await cargarTablero()
   limpiarEstadosModal()
-  mostrarNotificacion('Prueba eléctrica aprobada')
+  mostrarNotificacion('Prueba elÃ©ctrica aprobada')
 }
 
 async function rechazarPruebaElectrica() {
@@ -3615,14 +2483,14 @@ async function rechazarPruebaElectrica() {
     .single()
 
   if (errorCargaModulo) {
-    mostrarNotificacion('No se pudo cargar el mÃ³dulo para rechazar la prueba: ' + errorCargaModulo.message)
+    mostrarNotificacion('No se pudo cargar el mÃƒÂ³dulo para rechazar la prueba: ' + errorCargaModulo.message)
     return
   }
 
-  const { error } = await supabase
-    .from('modulos')
-    .update({ solicitud_prueba: false })
-    .eq('id', moduloSeleccionado.id)
+  const { error } = await rechazarPruebaElectricaModulo({
+    supabase,
+    moduloId: moduloSeleccionado.id,
+  })
 
   if (error) {
     mostrarNotificacion(error.message)
@@ -3642,7 +2510,7 @@ async function rechazarPruebaElectrica() {
 
   await cargarTablero()
   limpiarEstadosModal()
-  mostrarNotificacion('Solicitud de prueba eléctrica rechazada')
+  mostrarNotificacion('Solicitud de prueba elÃ©ctrica rechazada')
 }
 
 
@@ -3983,45 +2851,23 @@ async function guardarProtocoloEntrega(protocolo) {
       return
     }
 
-    const payloadManual = {
-      serie: protocoloNormalizado.serie,
-      tipo: protocoloNormalizado.tipo,
-      proyecto: protocoloNormalizado.proyecto,
-      responsable: protocoloNormalizado.responsable,
-      fecha_prueba_electrica: `${fechaProtocolo}T00:00:00`,
-      protocolo_entrega: protocoloNormalizado,
-      materiales: protocoloNormalizado.materiales || {},
-    }
-
-    const consulta = esManualExistente
-      ? supabase.from('protocolos_manuales').update(payloadManual).eq('id', moduloSeleccionado.id).select().single()
-      : supabase.from('protocolos_manuales').insert([payloadManual]).select().single()
-
-    const { data, error } = await consulta
+    const {
+      data: registroGuardado,
+      error,
+      mensaje,
+    } = await guardarProtocoloManualMensualSupabase({
+      supabase,
+      moduloSeleccionado,
+      protocoloNormalizado,
+      fechaProtocolo,
+      esManualExistente,
+    })
 
     if (error) {
-      mostrarNotificacion('No se pudo guardar el protocolo manual: ' + error.message)
+      mostrarNotificacion(mensaje || ('No se pudo guardar el protocolo manual: ' + error.message))
       return
     }
 
-    let registroGuardado = data || { ...payloadManual, id: moduloSeleccionado.id, origen: 'manual' }
-    const { data: manualVerificado, error: errorVerificacionManual } = await supabase
-      .from('protocolos_manuales')
-      .select('*')
-      .eq('id', registroGuardado.id)
-      .maybeSingle()
-
-    if (errorVerificacionManual) {
-      mostrarNotificacion('El protocolo manual se guardó, pero no se pudo verificar: ' + errorVerificacionManual.message)
-      return
-    }
-
-    if (!manualVerificado?.protocolo_entrega) {
-      mostrarNotificacion('No se pudo verificar que el protocolo manual quedara guardado')
-      return
-    }
-
-    registroGuardado = manualVerificado
     setModuloSeleccionado({
       ...registroGuardado,
       origen: 'manual',
@@ -4052,53 +2898,24 @@ async function guardarProtocoloEntrega(protocolo) {
   if (protocoloDesdeHistorial && perfil?.rol !== 'admin') return
   if (!protocoloDesdeHistorial && !puedeEditarDatosProtocolo) return
 
-  const tablaDestino = protocoloDesdeHistorial ? 'historial_modulos' : 'modulos'
   const protocoloParaGuardar = esEstadoGarantia(moduloSeleccionado?.estado || protocolo?.estado)
     ? agregarNotaGarantiaProtocolo(protocolo, protocolo?.fecha || moduloSeleccionado?.fecha_prueba_electrica)
     : protocolo
-  const fechaPruebaProtocolo = protocoloParaGuardar.fecha
-    ? `${protocoloParaGuardar.fecha}T00:00:00`
-    : moduloSeleccionado?.fecha_prueba_electrica || null
-  const payloadProtocolo = {
-    protocolo_entrega: protocoloParaGuardar,
-    materiales: protocoloParaGuardar.materiales || {},
-    fecha_prueba_electrica: fechaPruebaProtocolo,
-    serie: protocoloParaGuardar.serie || moduloSeleccionado?.serie || '',
-    tipo: protocoloParaGuardar.tipo || moduloSeleccionado?.tipo || '',
-    proyecto: protocoloParaGuardar.proyecto || moduloSeleccionado?.proyecto || '',
-    responsable: protocoloParaGuardar.responsable || moduloSeleccionado?.responsable || '',
-    linea: protocoloParaGuardar.linea || moduloSeleccionado?.linea || '',
-  }
 
-  let { count: filasActualizadas, error } = await supabase
-    .from(tablaDestino)
-    .update(payloadProtocolo, { count: 'exact' })
-    .eq('id', moduloSeleccionado.id)
-  let registroGuardado = null
+  const {
+    data: registroGuardado,
+    error,
+    mensaje,
+  } = await guardarProtocoloModuloSupabase({
+    supabase,
+    moduloSeleccionado,
+    protocoloParaGuardar,
+    protocoloDesdeHistorial,
+  })
 
   if (error) {
-    mostrarNotificacion('No se pudo guardar el protocolo: ' + error.message)
+    mostrarNotificacion(mensaje || ('No se pudo guardar el protocolo: ' + error.message))
     return
-  }
-
-  if (filasActualizadas === 0) {
-    mostrarNotificacion('No se encontrÃ³ el registro del protocolo para guardar')
-    return
-  }
-
-  const { data: registroVerificado, error: errorVerificacion } = await supabase
-    .from(tablaDestino)
-    .select('*')
-    .eq('id', moduloSeleccionado.id)
-    .maybeSingle()
-
-  if (!errorVerificacion && registroVerificado) {
-    registroGuardado = registroVerificado
-  }
-
-  registroGuardado = registroGuardado || {
-    ...moduloSeleccionado,
-    ...payloadProtocolo,
   }
 
   const protocoloGuardado = registroGuardado.protocolo_entrega || protocoloParaGuardar
@@ -4151,11 +2968,10 @@ async function guardarProtocoloEntrega(protocolo) {
 async function finalizarModulo() {
   if (!puedeFinalizarModulos || !moduloSeleccionado?.id) return
 
-  const { data: modulo, error: errorModulo } = await supabase
-    .from('modulos')
-    .select('*')
-    .eq('id', moduloSeleccionado.id)
-    .single()
+  const { data: modulo, error: errorModulo } = await cargarModuloPorId({
+    supabase,
+    id: moduloSeleccionado.id,
+  })
 
   if (errorModulo) {
     mostrarNotificacion(errorModulo.message)
@@ -4163,10 +2979,10 @@ async function finalizarModulo() {
   }
 
   if (normalizarTexto(modulo.estado) === 'sin instalacion') {
-    const { error: errorDeleteSinInstalacion } = await supabase
-      .from('modulos')
-      .delete()
-      .eq('id', modulo.id)
+    const { error: errorDeleteSinInstalacion } = await eliminarModuloActivo({
+      supabase,
+      id: modulo.id,
+    })
 
     if (errorDeleteSinInstalacion) {
       mostrarNotificacion(errorDeleteSinInstalacion.message)
@@ -4185,10 +3001,10 @@ async function finalizarModulo() {
       modulo,
       datosAntes: modulo,
       datosDespues: null,
-      descripcion: 'Retirado sin instalación',
+      descripcion: 'Retirado sin instalaciÃ³n',
     })
     limpiarEstadosModal()
-    mostrarNotificacion('Módulo sin instalacion retirado sin registro')
+    mostrarNotificacion('MÃ³dulo sin instalacion retirado sin registro')
     return
   }
 
@@ -4196,71 +3012,29 @@ async function finalizarModulo() {
     ? agregarNotaGarantiaProtocolo(modulo.protocolo_entrega || {}, modulo.fecha_prueba_electrica)
     : modulo.protocolo_entrega || {}
 
-  const historialPayload = {
-    modulo_id: modulo.id,
-    serie: modulo.serie,
-    tipo: modulo.tipo,
-    proyecto: modulo.proyecto,
-    responsable: modulo.responsable,
-    fecha_ingreso: modulo.fecha_ingreso,
-    fecha_prueba_electrica: modulo.fecha_prueba_electrica,
-    id_ot: modulo.id_ot || modulo.protocolo_entrega?.id_ot || modulo.protocolo_entrega?.idOt || null,
-    protocolo_entrega: protocoloHistorial,
-    nota: modulo.nota || '',
-    observacion_alerta: modulo.observacion_alerta || '',
-    fecha_salida: new Date().toISOString(),
-    estado: modulo.estado,
-    linea: modulo.linea,
-    posicion: modulo.posicion,
-  }
+  const historialPayload = construirHistorialModulo({
+    modulo,
+    protocoloHistorial,
+  })
 
-  let { error: errorHistorial } = await supabase
-    .from('historial_modulos')
-    .insert([historialPayload])
-
-  if (errorHistorial?.message?.includes("'nota' column")) {
-    const payloadSinNota = { ...historialPayload }
-    delete payloadSinNota.nota
-    ;({ error: errorHistorial } = await supabase
-      .from('historial_modulos')
-      .insert([payloadSinNota]))
-  }
-
-  if (errorHistorial?.message?.includes('historial_ciclo_unico')) {
-    let { error: errorUpdateHistorial } = await supabase
-      .from('historial_modulos')
-      .update(historialPayload)
-      .eq('modulo_id', modulo.id)
-
-    if (errorUpdateHistorial?.message?.includes("'nota' column")) {
-      const payloadSinNota = { ...historialPayload }
-      delete payloadSinNota.nota
-      ;({ error: errorUpdateHistorial } = await supabase
-        .from('historial_modulos')
-        .update(payloadSinNota)
-        .eq('modulo_id', modulo.id))
-    }
-
-    errorHistorial = errorUpdateHistorial
-  }
+  const {
+    data: historialCreado,
+    error: errorHistorial,
+    historialPayload: historialGuardadoPayload,
+  } = await guardarHistorialModuloFinalizado({
+    supabase,
+    historialPayload,
+  })
 
   if (errorHistorial) {
     mostrarNotificacion(errorHistorial.message)
     return
   }
 
-  const { data: historialCreado } = await supabase
-    .from('historial_modulos')
-    .select('*')
-    .eq('modulo_id', modulo.id)
-    .order('fecha_salida', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const { error: errorDelete } = await supabase
-    .from('modulos')
-    .delete()
-    .eq('id', modulo.id)
+  const { error: errorDelete } = await eliminarModuloActivo({
+    supabase,
+    id: modulo.id,
+  })
 
   if (errorDelete) {
     mostrarNotificacion(errorDelete.message)
@@ -4274,31 +3048,31 @@ async function finalizarModulo() {
     tipo: 'finalizacion',
     modulo,
     datosAntes: modulo,
-    datosDespues: historialCreado || historialPayload,
-    descripcion: `Finalizó módulo desde línea ${modulo.linea}`,
+    datosDespues: historialCreado || historialGuardadoPayload,
+    descripcion: `FinalizÃ³ mÃ³dulo desde lÃ­nea ${modulo.linea}`,
   })
 
   limpiarEstadosModal()
 
-  mostrarNotificacion('Módulo finalizado correctamente')
+  mostrarNotificacion('MÃ³dulo finalizado correctamente')
 }
 
 async function eliminarModuloSinRegistro() {
   if (perfil?.rol !== 'admin' || !moduloSeleccionado?.id) return
 
   const confirmado = window.confirm(
-    `¿Eliminar el módulo ${moduloSeleccionado.serie || ''} sin dejar registro? Esta acción no se puede deshacer.`
+    `Â¿Eliminar el mÃ³dulo ${moduloSeleccionado.serie || ''} sin dejar registro? Esta acciÃ³n no se puede deshacer.`
   )
 
   if (!confirmado) return
 
-  const { error } = await supabase
-    .from('modulos')
-    .delete()
-    .eq('id', moduloSeleccionado.id)
+  const { error } = await eliminarModuloActivo({
+    supabase,
+    id: moduloSeleccionado.id,
+  })
 
   if (error) {
-    mostrarNotificacion('No se pudo eliminar el módulo: ' + error.message)
+    mostrarNotificacion('No se pudo eliminar el mÃ³dulo: ' + error.message)
     return
   }
 
@@ -4309,154 +3083,59 @@ async function eliminarModuloSinRegistro() {
   })
   await cargarTablero()
   limpiarEstadosModal()
-  mostrarNotificacion('Módulo eliminado sin dejar registro')
+  mostrarNotificacion('MÃ³dulo eliminado sin dejar registro')
 }
 
 async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   if (!puedeMoverModulos) {
-    mostrarNotificacion('No tienes permisos para mover módulos')
+    mostrarNotificacion('No tienes permisos para mover mÃ³dulos')
     return
   }
-
-  if (!moduloId) {
-    mostrarNotificacion('Error: Módulo inválido')
-    return
-  }
-
-  const lineaDestinoParsed = Number(lineaDestino)
-  const posicionDestinoParsed = Number(posicionDestino)
-
-  const { data: registros, error: errorCarga } = await supabase
-    .from('modulos')
-    .select('*')
-
-  if (errorCarga) {
-    mostrarNotificacion('Error al cargar módulos: ' + errorCarga.message)
-    return
-  }
-
-  const modulosActivos = (registros || []).filter(
-    (x) => x?.serie && String(x.serie).trim() !== ''
-  )
-  const moduloActual = modulosActivos.find(
-    (x) => String(x.id) === String(moduloId)
-  )
-
-  if (!moduloActual) {
-    mostrarNotificacion('Error: No se encontró el módulo')
-    return
-  }
-
-  const lineaOrigen = Number(moduloActual.linea)
-  const posicionOrigen = Number(moduloActual.posicion)
-
-  if (lineaOrigen === lineaDestinoParsed && posicionOrigen === posicionDestinoParsed) {
-    mostrarNotificacion('El módulo ya está en esa posición')
-    return
-  }
-
-  const moduloDestino = modulosActivos.find(
-    (x) =>
-      Number(x.linea) === lineaDestinoParsed &&
-      Number(x.posicion) === posicionDestinoParsed &&
-      String(x.id) !== String(moduloId)
-  )
 
   try {
-    const posicionTemporal = 1000 + Math.floor(Math.random() * 100000)
-    const moverRegistro = async (id, linea, posicion) => {
-      const { error } = await supabase
-        .from('modulos')
-        .update({ linea, posicion })
-        .eq('id', id)
+    const resultado = await moverModuloEnTablero({
+      supabase,
+      moduloId,
+      lineaDestino,
+      posicionDestino,
+    })
 
-      if (error) {
-        throw new Error(error.message)
-      }
-    }
-
-    if (moduloDestino && lineaOrigen === lineaDestinoParsed) {
-      const modulosLinea = modulosActivos.filter(
-        (x) => Number(x.linea) === lineaOrigen && String(x.id) !== String(moduloId)
-      )
-      let movimientos = []
-
-      if (posicionOrigen > posicionDestinoParsed) {
-        movimientos = modulosLinea
-          .filter((x) => Number(x.posicion) >= posicionDestinoParsed && Number(x.posicion) < posicionOrigen)
-          .map((x) => ({ id: x.id, linea: lineaOrigen, posicion: Number(x.posicion) + 1, posicionActual: Number(x.posicion) }))
-          .sort((a, b) => b.posicionActual - a.posicionActual)
-      } else {
-        movimientos = modulosLinea
-          .filter((x) => Number(x.posicion) <= posicionDestinoParsed && Number(x.posicion) > posicionOrigen)
-          .map((x) => ({ id: x.id, linea: lineaOrigen, posicion: Number(x.posicion) - 1, posicionActual: Number(x.posicion) }))
-          .sort((a, b) => a.posicionActual - b.posicionActual)
-      }
-
-      await moverRegistro(moduloActual.id, lineaOrigen, posicionTemporal)
-
-      for (const movimiento of movimientos) {
-        await moverRegistro(movimiento.id, movimiento.linea, movimiento.posicion)
-      }
-
-      await moverRegistro(moduloActual.id, lineaDestinoParsed, posicionDestinoParsed)
-      await cargarTablero()
-      mostrarNotificacion('Módulo insertado correctamente')
-      return
-    }
-
-    if (lineaOrigen !== lineaDestinoParsed) {
-      const modulosLineaDestino = modulosActivos
-        .filter((x) => Number(x.linea) === lineaDestinoParsed && String(x.id) !== String(moduloId))
-        .sort((a, b) => Number(a.posicion) - Number(b.posicion))
-
-      if (modulosLineaDestino.length >= 9) {
-        mostrarNotificacion(`La línea ${lineaDestinoParsed} ya está completa`)
+    if (!resultado.ok) {
+      if (resultado.tipo === 'modulo_invalido') {
+        mostrarNotificacion('Error: MÃ³dulo invÃ¡lido')
         return
       }
 
-      const posicionInsercion = Math.max(1, Math.min(posicionDestinoParsed, modulosLineaDestino.length + 1))
-
-      await moverRegistro(moduloActual.id, lineaOrigen, posicionTemporal)
-
-      const movimientosOrigen = modulosActivos
-        .filter((x) =>
-          Number(x.linea) === lineaOrigen &&
-          String(x.id) !== String(moduloId) &&
-          Number(x.posicion) > posicionOrigen
-        )
-        .map((x) => ({ id: x.id, linea: lineaOrigen, posicion: Number(x.posicion) - 1, posicionActual: Number(x.posicion) }))
-        .sort((a, b) => a.posicionActual - b.posicionActual)
-
-      const movimientosDestino = modulosLineaDestino
-        .filter((x) => Number(x.posicion) >= posicionInsercion)
-        .map((x) => ({ id: x.id, linea: lineaDestinoParsed, posicion: Number(x.posicion) + 1, posicionActual: Number(x.posicion) }))
-        .sort((a, b) => b.posicionActual - a.posicionActual)
-
-      for (const movimiento of movimientosOrigen) {
-        await moverRegistro(movimiento.id, movimiento.linea, movimiento.posicion)
+      if (resultado.tipo === 'error_carga') {
+        mostrarNotificacion('Error al cargar mÃ³dulos: ' + resultado.error.message)
+        return
       }
 
-      for (const movimiento of movimientosDestino) {
-        await moverRegistro(movimiento.id, movimiento.linea, movimiento.posicion)
+      if (resultado.tipo === 'no_encontrado') {
+        mostrarNotificacion('Error: No se encontrÃ³ el mÃ³dulo')
+        return
       }
 
-      await moverRegistro(moduloActual.id, lineaDestinoParsed, posicionInsercion)
-      await cargarTablero()
-      mostrarNotificacion('Módulo agregado a la línea correctamente')
+      if (resultado.tipo === 'linea_llena') {
+        mostrarNotificacion(`La lÃ­nea ${resultado.lineaDestino} ya estÃ¡ completa`)
+        return
+      }
+
+      mostrarNotificacion('Error desconocido al mover el mÃ³dulo')
       return
     }
 
-    await moverRegistro(moduloActual.id, lineaOrigen, posicionTemporal)
-
-    if (moduloDestino) {
-      await moverRegistro(moduloDestino.id, lineaOrigen, posicionOrigen)
-    }
-
-    await moverRegistro(moduloActual.id, lineaDestinoParsed, posicionDestinoParsed)
-
     await cargarTablero()
-    mostrarNotificacion(moduloDestino ? 'Módulos intercambiados correctamente' : 'Módulo movido correctamente')
+
+    if (resultado.tipo === 'misma_posicion') {
+      mostrarNotificacion('El mÃ³dulo ya estÃ¡ en esa posiciÃ³n')
+    } else if (resultado.tipo === 'insertado_misma_linea') {
+      mostrarNotificacion('MÃ³dulo insertado correctamente')
+    } else if (resultado.tipo === 'agregado_otra_linea') {
+      mostrarNotificacion('MÃ³dulo agregado a la lÃ­nea correctamente')
+    } else {
+      mostrarNotificacion(resultado.tipo === 'intercambiado' ? 'MÃ³dulos intercambiados correctamente' : 'MÃ³dulo movido correctamente')
+    }
   } catch (err) {
     console.error(err)
     mostrarNotificacion('Error: ' + (err?.message || 'Error desconocido'))
@@ -4508,7 +3187,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
   const pruebas = modulosActivos.filter(
     (x) =>
-      x.estado?.toLowerCase() === 'prueba eléctrica' ||
+      x.estado?.toLowerCase() === 'prueba elÃ©ctrica' ||
       x.estado?.toLowerCase() === 'prueba electrica'
   ).length
 
@@ -4569,7 +3248,7 @@ const ultimosFinalizados = [...historial]
           margin: '0 auto',
         }}
       >
-        <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Control de Módulos</h1>
+        <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Control de MÃ³dulos</h1>
 
         <Notificacion mensaje={notificacion} />
 
@@ -4597,7 +3276,7 @@ const ultimosFinalizados = [...historial]
               cursor: 'pointer',
             }}
           >
-            Prueba eléctrica línea {avisoPruebaElectrica.linea}
+            Prueba elÃ©ctrica lÃ­nea {avisoPruebaElectrica.linea}
           </button>
         )}
 
@@ -4625,7 +3304,7 @@ const ultimosFinalizados = [...historial]
         {recibeAvisosPrueba && (
           <>
             <button
-              aria-label="Ver llamados a prueba eléctrica pendientes"
+              aria-label="Ver llamados a prueba elÃ©ctrica pendientes"
               onClick={(e) => {
                 e.stopPropagation()
                 const abrir = !mostrarLlamadosPendientes
@@ -4648,7 +3327,7 @@ const ultimosFinalizados = [...historial]
                 boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
               }}
             >
-              🔔
+              ðŸ””
               {llamadosPendientes.length > 0 && (
                 <span
                   style={{
@@ -4705,7 +3384,7 @@ const ultimosFinalizados = [...historial]
                       style={{ padding: '9px 0', borderBottom: '1px solid #444' }}
                     >
                       <strong style={{ display: 'block' }}>
-                        LÍNEA {modulo.linea}
+                        LÃNEA {modulo.linea}
                       </strong>
                       <span style={{ display: 'block', marginTop: '2px', fontSize: '13px', color: '#ccc' }}>
                         {solicitantesPendientes[modulo.id] || 'Cargando...'} - {modulo.serie}
@@ -4721,7 +3400,7 @@ const ultimosFinalizados = [...historial]
         {puedeVerMenuAcciones && (
           <>
             <button
-              aria-label="Abrir menú de acciones"
+              aria-label="Abrir menÃº de acciones"
               onClick={(e) => {
                 e.stopPropagation()
                 const abrir = !mostrarMenuAcciones
@@ -4833,7 +3512,7 @@ const ultimosFinalizados = [...historial]
     marginBottom: '20px',
   }}
 >
-  Cerrar sesión
+  Cerrar sesiÃ³n
 </button>
 
         
@@ -4867,7 +3546,7 @@ const ultimosFinalizados = [...historial]
       cursor: 'pointer',
     }}
   >
-    {mostrarVistaGeneral ? 'Ver por línea' : 'Vista general'}
+    {mostrarVistaGeneral ? 'Ver por lÃ­nea' : 'Vista general'}
   </button>
   {puedeVerProtocolosMensuales && (
     <button
@@ -4988,7 +3667,7 @@ const ultimosFinalizados = [...historial]
         minWidth: '120px',
       }}
     >
-      <h3>Prueba eléctrica OK</h3>
+      <h3>Prueba elÃ©ctrica OK</h3>
       <h2>{pruebas}/{ocupacion}</h2>
     </div>
 
@@ -5000,7 +3679,7 @@ const ultimosFinalizados = [...historial]
         minWidth: '120px',
       }}
     >
-      <h3 style={{ color: 'white' }}>Pruebas eléctricas hoy</h3>
+      <h3 style={{ color: 'white' }}>Pruebas elÃ©ctricas hoy</h3>
       <h2 style={{ color: 'white' }}>{pruebasElectricasHoy}</h2>
     </div>
 
@@ -5024,7 +3703,7 @@ const ultimosFinalizados = [...historial]
         minWidth: '120px',
       }}
     >
-      <h3>Pruebas eléctricas este mes</h3>
+      <h3>Pruebas elÃ©ctricas este mes</h3>
       <h2>{pruebasElectricasMes}</h2>
     </div>
 
@@ -5065,7 +3744,7 @@ const ultimosFinalizados = [...historial]
     <button
       type="button"
       onClick={limpiarBusquedaSerie}
-      title="Limpiar búsqueda"
+      title="Limpiar bÃºsqueda"
       style={{
         width: '28px',
         height: '28px',
@@ -5077,7 +3756,7 @@ const ultimosFinalizados = [...historial]
         fontWeight: 900,
       }}
     >
-      ×
+      Ã—
     </button>
   )}
 </div>
@@ -5126,7 +3805,7 @@ const ultimosFinalizados = [...historial]
     >
       <div style={{ flex: '1 1 260px', textAlign: 'center' }}>
         <div style={{ color: item.esActual ? '#81c784' : '#ffcc80', fontWeight: 800, marginBottom: '4px' }}>
-          {item.esActual ? 'Registro actual' : 'Registro histórico'}
+          {item.esActual ? 'Registro actual' : 'Registro histÃ³rico'}
         </div>
 
         <div>
@@ -5142,7 +3821,7 @@ const ultimosFinalizados = [...historial]
 
         {item.esActual && (
           <div style={{ marginTop: '4px', color: '#81c784', fontWeight: 700 }}>
-            (Actualmente en línea {item.linea})
+            (Actualmente en lÃ­nea {item.linea})
           </div>
         )}
 
@@ -5178,7 +3857,7 @@ const ultimosFinalizados = [...historial]
           }}
         >
           <span style={{ display: 'block' }}>Ver protocolo</span>
-          <span style={{ display: 'block', fontSize: '24px', marginTop: '4px' }}>📜</span>
+          <span style={{ display: 'block', fontSize: '24px', marginTop: '4px' }}>ðŸ“œ</span>
         </button>
       )}
     </div>
@@ -5189,16 +3868,16 @@ const ultimosFinalizados = [...historial]
 
 {mostrarVistaGeneral ? (
   <div onClick={cerrarPanelesYModulo} style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 1.2 }}>
-    <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Vista general de todas las líneas</h2>
+    <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Vista general de todas las lÃ­neas</h2>
 
     {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
       <div key={linea} style={{ marginBottom: '14px' }}>
         <h3 style={{ marginBottom: '8px', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
           <span style={{ fontSize: '26px', fontWeight: '800', textTransform: 'uppercase' }}>
-            Línea {linea}
+            LÃ­nea {linea}
           </span>
           <span style={{ fontSize: '16px', fontWeight: '500', color: '#ccc' }}>
-            ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
+            ({datos.filter((x) => x.linea === linea && x.serie).length} mÃ³dulos)
           </span>
         </h3>
 
@@ -5238,7 +3917,7 @@ const ultimosFinalizados = [...historial]
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo por calle acopio"
+              title="Ingresar mÃ³dulo por calle acopio"
             >
               +
             </button>
@@ -5338,7 +4017,7 @@ const ultimosFinalizados = [...historial]
                       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                         {pos.observacion_alerta && (
                           <span
-                            title="Ver observación"
+                            title="Ver observaciÃ³n"
                             onClick={(e) => {
                               e.stopPropagation()
                               mostrarObservacionAlerta(pos)
@@ -5349,19 +4028,19 @@ const ultimosFinalizados = [...historial]
                               lineHeight: 1,
                             }}
                           >
-                            🚨
+                            ðŸš¨
                           </span>
                         )}
 
                         {pos.nota && (
                           <span
-                            title="Este módulo tiene una nota"
+                            title="Este mÃ³dulo tiene una nota"
                             style={{
                               fontSize: '18px',
                               lineHeight: 1,
                             }}
                           >
-                            💬
+                            ðŸ’¬
                           </span>
                         )}
                       </span>
@@ -5369,7 +4048,7 @@ const ultimosFinalizados = [...historial]
                     <div>{pos.tipo}</div>
                   </>
                 ) : (
-                  <div>Vacío</div>
+                  <div>VacÃ­o</div>
                 )}
               </div>
             ))}
@@ -5391,7 +4070,7 @@ const ultimosFinalizados = [...historial]
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo por calle agua"
+              title="Ingresar mÃ³dulo por calle agua"
             >
               +
             </button>
@@ -5406,10 +4085,10 @@ const ultimosFinalizados = [...historial]
       <div key={linea} style={{ marginBottom: '30px' }}>
         <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontSize: '22px' }}>
           <span style={{ fontWeight: '800', textTransform: 'uppercase' }}>
-            Línea {linea}
+            LÃ­nea {linea}
           </span>
           <span style={{ fontWeight: '500', fontSize: '18px', color: '#ccc' }}>
-            ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
+            ({datos.filter((x) => x.linea === linea && x.serie).length} mÃ³dulos)
           </span>
         </h2>
 
@@ -5449,7 +4128,7 @@ const ultimosFinalizados = [...historial]
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo por calle acopio"
+              title="Ingresar mÃ³dulo por calle acopio"
             >
               +
             </button>
@@ -5556,7 +4235,7 @@ const ultimosFinalizados = [...historial]
                       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                         {pos.observacion_alerta && (
                           <span
-                            title="Ver observación"
+                            title="Ver observaciÃ³n"
                             onClick={(e) => {
                               e.stopPropagation()
                               mostrarObservacionAlerta(pos)
@@ -5567,19 +4246,19 @@ const ultimosFinalizados = [...historial]
                               lineHeight: 1,
                             }}
                           >
-                            🚨
+                            ðŸš¨
                           </span>
                         )}
 
                         {pos.nota && (
                           <span
-                            title="Este módulo tiene una nota"
+                            title="Este mÃ³dulo tiene una nota"
                             style={{
                               fontSize: '18px',
                               lineHeight: 1,
                             }}
                           >
-                            💬
+                            ðŸ’¬
                           </span>
                         )}
                       </span>
@@ -5589,7 +4268,7 @@ const ultimosFinalizados = [...historial]
                     <div>{pos.estado}</div>
                   </>
                 ) : (
-                  <div>Vacío</div>
+                  <div>VacÃ­o</div>
                 )}
               </div>
             ))}
@@ -5611,7 +4290,7 @@ const ultimosFinalizados = [...historial]
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo por calle agua"
+              title="Ingresar mÃ³dulo por calle agua"
             >
               +
             </button>
@@ -5644,9 +4323,9 @@ const ultimosFinalizados = [...historial]
             color: 'white',
           }}
         >
-          <h2 style={{ marginTop: 0 }}>⚠ PRUEBA ELÉCTRICA SOLICITADA</h2>
+          <h2 style={{ marginTop: 0 }}>âš  PRUEBA ELÃ‰CTRICA SOLICITADA</h2>
           <p style={{ marginBottom: '8px' }}>
-            <strong>Módulo:</strong> {moduloSeleccionado.serie}
+            <strong>MÃ³dulo:</strong> {moduloSeleccionado.serie}
           </p>
           <p style={{ marginBottom: '20px' }}>
             <strong>Solicitado por:</strong>{' '}
@@ -5684,7 +4363,7 @@ const ultimosFinalizados = [...historial]
               cursor: 'pointer',
             }}
           >
-            ✔ Aprobar prueba
+            âœ” Aprobar prueba
           </button>
 
           <button
@@ -5700,7 +4379,7 @@ const ultimosFinalizados = [...historial]
               cursor: 'pointer',
             }}
           >
-            ✖ Rechazar solicitud
+            âœ– Rechazar solicitud
           </button>
 
           <button
@@ -5984,7 +4663,7 @@ const ultimosFinalizados = [...historial]
 
 {mostrarKPI && (
   <div className="kpi-grid">
-    <div style={{ color: '#ccc' }}>KPIs próximos a implementarse</div>
+    <div style={{ color: '#ccc' }}>KPIs prÃ³ximos a implementarse</div>
   </div>
 )}
 
@@ -6018,10 +4697,10 @@ const ultimosFinalizados = [...historial]
       color: 'white',
     }}
   >
-    <h2>Nuevo módulo</h2>
+    <h2>Nuevo mÃ³dulo</h2>
 
     <p>
-      <strong>Línea:</strong> {posicionSeleccionada?.linea}
+      <strong>LÃ­nea:</strong> {posicionSeleccionada?.linea}
     </p>
 
     <input
@@ -6078,7 +4757,7 @@ const ultimosFinalizados = [...historial]
 
     {creandoModulo && (
       <div style={{ marginBottom: '10px', color: '#90caf9', fontWeight: 700 }}>
-        Guardando módulo...
+        Guardando mÃ³dulo...
       </div>
     )}
 
@@ -6123,3 +4802,4 @@ const ultimosFinalizados = [...historial]
 }
 
 export default App
+
