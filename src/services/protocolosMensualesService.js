@@ -349,3 +349,19 @@ export async function guardarProtocoloModuloSupabase({
     tablaDestino,
   }
 }
+
+export async function cargarDatosProtocoloModuloActivo({ supabase, moduloId }) {
+  return supabase
+    .from('modulos')
+    .select('materiales, protocolo_entrega, responsable, fecha_prueba_electrica')
+    .eq('id', moduloId)
+    .single()
+}
+
+export async function cargarModuloActualParaProtocolo({ supabase, moduloId }) {
+  return supabase
+    .from('modulos')
+    .select('*')
+    .eq('id', moduloId)
+    .single()
+}

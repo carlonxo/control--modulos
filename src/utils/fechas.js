@@ -46,3 +46,53 @@ export function obtenerRangoFechasProtocolos(rango, valor) {
   fin.setMonth(fin.getMonth() + 1)
   return { inicio, fin: `${formatearFechaInput(fin)}T00:00:00` }
 }
+
+function fechaParaComparar(valor) {
+  if (!valor) return ''
+  const fechaComoTexto = String(valor)
+  const coincidenciaFecha = fechaComoTexto.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (coincidenciaFecha) return coincidenciaFecha[1]
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return ''
+  return fecha.toISOString().slice(0, 10)
+}
+
+export function obtenerValorInicialRangoProtocolo(rango) {
+  const hoy = new Date()
+  if (rango === 'dia') return formatearFechaInput(hoy)
+  if (rango === 'semana') {
+    const fecha = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+    const diaSemana = fecha.getDay() || 7
+    fecha.setDate(fecha.getDate() + 4 - diaSemana)
+    const anoSemana = fecha.getFullYear()
+    const inicioAnoSemana = new Date(anoSemana, 0, 1)
+    const semana = Math.ceil((((fecha - inicioAnoSemana) / 86400000) + 1) / 7)
+    return `${anoSemana}-W${String(semana).padStart(2, '0')}`
+  }
+  return formatearFechaInput(hoy).slice(0, 7)
+}
+
+export function fechaDentroDeRangoProtocolo(fecha, inicio, fin) {
+  const fechaNormalizada = fechaParaComparar(fecha)
+  const inicioNormalizado = fechaParaComparar(inicio)
+  const finNormalizado = fechaParaComparar(fin)
+  return Boolean(
+    fechaNormalizada &&
+    inicioNormalizado &&
+    finNormalizado &&
+    fechaNormalizada >= inicioNormalizado &&
+    fechaNormalizada < finNormalizado
+  )
+}
+
+export function esFechaDeHoy(valor) {
+  if (!valor) return false
+  const fecha = new Date(valor)
+  const hoyLocal = new Date()
+
+  return (
+    fecha.getFullYear() === hoyLocal.getFullYear() &&
+    fecha.getMonth() === hoyLocal.getMonth() &&
+    fecha.getDate() === hoyLocal.getDate()
+  )
+}

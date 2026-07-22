@@ -2,11 +2,13 @@
 import { supabase } from './services/supabase'
 import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
+import Login from './components/Login'
 import RegistroAcciones from './components/RegistroAcciones'
 import ModalModulo from './components/ModalModulo'
 import EncabezadoModalModulo from './components/EncabezadoModalModulo'
 import FormularioDatosModulo from './components/FormularioDatosModulo'
 import VistaElectricoModulo from './components/VistaElectricoModulo'
+import FormularioElectrico from './components/FormularioElectrico'
 import BotonesModalModulo from './components/BotonesModalModulo'
 import ResumenMaterialesModal from './components/ResumenMaterialesModal'
 import EditorMaterialesModal from './components/EditorMaterialesModal'
@@ -15,13 +17,21 @@ import ProtocolosMensualesTabla from './components/ProtocolosMensualesTabla'
 import ProtocolosMensualesModal from './components/ProtocolosMensualesModal'
 import PreciosMaterialesModal from './components/PreciosMaterialesModal'
 import DetalleCobroModal from './components/DetalleCobroModal'
+import BotonValorCobro from './components/BotonValorCobro'
 import ReintegrarModuloModal from './components/ReintegrarModuloModal'
 import DescargaProtocolosDiariosModal from './components/DescargaProtocolosDiariosModal'
 import BalanceMaterialesModal from './components/BalanceMaterialesModal'
 import ValesBodegaModal from './components/ValesBodegaModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
-import { formatearFecha, formatearFechaInput, obtenerRangoFechasProtocolos } from './utils/fechas'
+import {
+  fechaDentroDeRangoProtocolo,
+  formatearFecha,
+  formatearFechaInput,
+  obtenerRangoFechasProtocolos,
+  obtenerValorInicialRangoProtocolo,
+} from './utils/fechas'
+import { colorEstado } from './utils/colores'
 import { descargarProtocolosDiariosPdf } from './services/protocolosDiariosPdf'
 import { tienePermiso } from './utils/permisos'
 import {
@@ -58,6 +68,8 @@ import {
   guardarIdOtProtocoloMensualSupabase,
   guardarProtocoloManualMensualSupabase,
   guardarProtocoloModuloSupabase,
+  cargarDatosProtocoloModuloActivo,
+  cargarModuloActualParaProtocolo,
   limpiarProtocoloModuloActivo,
 } from './services/protocolosMensualesService'
 import {
@@ -94,75 +106,64 @@ import {
   cargarPerfilUsuario,
   cargarSolicitantesPruebaPendiente,
 } from './services/tableroService'
-
-function esSolicitudPruebaActiva(valor) {
-  return valor === true || valor === 'true' || valor === 1
-}
-
-function esEstadoPruebaElectrica(estado) {
-  return ['prueba elÃ©ctrica', 'prueba electrica'].includes(
-    String(estado || '').trim().toLowerCase()
-  )
-}
-
-function normalizarTexto(valor) {
-  return String(valor || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
-}
-
-function esTipoBodega(tipo) {
-  return normalizarTexto(tipo).includes('bodega')
-}
-
-function esEstadoConObservacionAlerta(estado) {
-  return ['prueba electrica', 'en garantia', 'sin instalacion'].includes(
-    normalizarTexto(estado)
-  )
-}
-
-function esEstadoGarantia(estado) {
-  return normalizarTexto(estado) === 'en garantia'
-}
-
-function fechaParaInput(valor) {
-  if (!valor) return ''
-  const fechaComoTexto = String(valor)
-  const coincidenciaFecha = fechaComoTexto.match(/^(\d{4}-\d{2}-\d{2})/)
-  if (coincidenciaFecha) return coincidenciaFecha[1]
-  const fecha = new Date(valor)
-  if (Number.isNaN(fecha.getTime())) return ''
-  return fecha.toISOString().slice(0, 10)
-}
-
-function fechaDocumentoProtocolo(registro = {}) {
-  const fechaInterna = registro?.protocolo_entrega?.fecha
-  if (fechaInterna) return `${fechaInterna}T00:00:00`
-  return registro?.fecha_prueba_electrica || null
-}
-
-function claveProtocoloUnico(serie, fecha) {
-  const serieNormalizada = normalizarTexto(serie)
-  const fechaNormalizada = fechaParaInput(fecha || '')
-  return serieNormalizada && fechaNormalizada ? `${serieNormalizada}|${fechaNormalizada}` : ''
-}
-
-function diasDesdeFecha(valor) {
-  if (!valor) return null
-  const fecha = new Date(valor)
-  if (Number.isNaN(fecha.getTime())) return null
-  const hoy = new Date()
-  const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
-  const inicioFecha = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate())
-  return Math.floor((inicioHoy - inicioFecha) / 86400000)
-}
-
-function estaDentroDeGarantia(valor) {
-  const dias = diasDesdeFecha(valor)
-  return dias !== null && dias >= 0 && dias <= 90
-}
+import { buscarRegistrosPorSerie } from './services/busquedaSeriesService'
+import {
+  deshacerAccionModuloSupabase,
+  nombreTipoAccionModulo,
+} from './services/accionesModuloService'
+import {
+  cargarMaterialesModuloSupabase,
+  fusionarMaterialesEditados,
+  guardarMaterialesModuloSupabase,
+} from './services/materialesModuloService'
+import {
+  cargarSolicitantePrueba,
+  obtenerNombrePerfilPorId,
+} from './services/perfilesService'
+import {
+  claveProtocoloUnico,
+  esEstadoConObservacionAlerta,
+  esEstadoGarantia,
+  esEstadoPruebaElectrica,
+  esSolicitudPruebaActiva,
+  esTipoBodega,
+  estaDentroDeGarantia,
+  fechaDocumentoProtocolo,
+  fechaParaInput,
+  normalizarTexto,
+} from './utils/modulos'
+import {
+  formatearPrecioMaterial,
+  limpiarPrecioMaterial,
+  normalizarPrecioMaterial,
+  separarIdsOt,
+  unirIdsOt,
+} from './utils/formatoValores'
+import {
+  agregarNotaGarantiaProtocolo,
+  completarDatosPruebaEnProtocolo,
+  sincronizarDatosModuloEnProtocolo,
+} from './utils/protocolo'
+import {
+  actualizarFilaValeBodegaLista,
+  agregarFilaValeBodegaLista,
+  eliminarFilaValeBodegaLista,
+  prepararItemsValeBodega,
+} from './utils/valesBodega'
+import {
+  actualizarConfigBalanceMaterialLista,
+  programarGuardadoConfigBalance,
+} from './utils/balanceMaterialesConfig'
+import {
+  crearModuloManualProtocolo,
+  obtenerFechaInicialProtocoloManual,
+} from './utils/protocolosMensuales'
+import { calcularIndicadoresTablero } from './utils/indicadores'
+import {
+  ejecutarSetters,
+  eliminarEntradaPorId,
+  hayCambiosPendientesPorId,
+} from './utils/ventanas'
 
 const seccionesFormularioElectrico = [
   {
@@ -269,72 +270,6 @@ const encabezadosProtocolosMensuales = [
   { clave: 'idOt', lineas: ['ID.', 'OT'] },
 ]
 
-function separarIdsOt(valor) {
-  const valores = String(valor ?? '')
-    .split(/[\/,;\n]+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 3)
-
-  while (valores.length < 3) valores.push('')
-  return valores
-}
-
-function unirIdsOt(valores = []) {
-  return valores
-    .map((item) => String(item ?? '').trim())
-    .filter(Boolean)
-    .slice(0, 3)
-    .join(' / ')
-}
-
-function formatearPrecioMaterial(valor) {
-  const numero = normalizarPrecioMaterial(valor)
-  if (!numero) return '$ 0'
-  return `$ ${numero.toLocaleString('es-CL')}`
-}
-
-function limpiarPrecioMaterial(valor) {
-  return String(valor ?? '').replace(/[^\d]/g, '')
-}
-
-function normalizarPrecioMaterial(valor) {
-  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0
-
-  const texto = String(valor ?? '').trim().replace(/[^\d,.-]/g, '')
-  if (!texto) return 0
-
-  const tienePunto = texto.includes('.')
-  const tieneComa = texto.includes(',')
-
-  if (tienePunto && tieneComa) {
-    const ultimoPunto = texto.lastIndexOf('.')
-    const ultimaComa = texto.lastIndexOf(',')
-    if (ultimaComa > ultimoPunto) {
-      return Number(texto.replace(/\./g, '').replace(',', '.')) || 0
-    }
-    return Number(texto.replace(/,/g, '')) || 0
-  }
-
-  if (tienePunto) {
-    const partes = texto.split('.')
-    const ultimaParte = partes[partes.length - 1]
-    const pareceDecimal = partes.length === 2 && ultimaParte.length <= 2
-    if (pareceDecimal) return Number(texto) || 0
-    return Number(texto.replace(/\./g, '')) || 0
-  }
-
-  if (tieneComa) {
-    const partes = texto.split(',')
-    const ultimaParte = partes[partes.length - 1]
-    const pareceDecimal = partes.length === 2 && ultimaParte.length <= 2
-    if (pareceDecimal) return Number(texto.replace(',', '.')) || 0
-    return Number(texto.replace(/,/g, '')) || 0
-  }
-
-  return Number(texto) || 0
-}
-
 function normalizarTextoComparacion(valor) {
   return String(valor || '')
     .replace(/ÃƒÂ¡/gi, 'a')
@@ -430,212 +365,6 @@ const equivalenciasValeBodega = {
   [normalizarTextoComparacion('RETENEDOR 20MM')]: 'Retenedor 20mm',
 }
 
-function formatearFechaRevisionGarantia(valor) {
-  const fechaInput = fechaParaInput(valor)
-  if (!fechaInput) return ''
-  const [ano, mes, dia] = fechaInput.split('-')
-  return `${dia}-${mes}-${ano}`
-}
-
-function agregarNotaGarantiaProtocolo(protocolo = {}, fechaRevision) {
-  const fechaTexto = formatearFechaRevisionGarantia(fechaRevision)
-  if (!fechaTexto) return protocolo
-
-  const notaGarantia = `en garantia, ultima revision:${fechaTexto}`
-  const observacionesActuales = String(protocolo.observaciones || '').trim()
-  const observacionesSinNota = observacionesActuales
-    .split('\n')
-    .filter((linea) => !normalizarTexto(linea).startsWith('en garantia, ultima revision:'))
-    .join('\n')
-    .trim()
-
-  return {
-    ...protocolo,
-    observaciones: [observacionesSinNota, notaGarantia].filter(Boolean).join('\n'),
-  }
-}
-
-function completarDatosPruebaEnProtocolo(protocolo = {}, modulo = {}, fechaPrueba, responsablePrueba = '') {
-  const fechaProtocolo = fechaParaInput(fechaPrueba)
-
-  return {
-    ...protocolo,
-    fecha: fechaProtocolo || protocolo.fecha || '',
-    responsable: modulo.responsable || protocolo.responsable || responsablePrueba || '',
-    serie: protocolo.serie || modulo.serie || '',
-    tipo: protocolo.tipo || modulo.tipo || '',
-    proyecto: protocolo.proyecto || modulo.proyecto || '',
-    linea: protocolo.linea || modulo.linea || '',
-  }
-}
-
-function sincronizarDatosModuloEnProtocolo(protocolo = {}, modulo = {}) {
-  return {
-    ...protocolo,
-    serie: modulo.serie ?? protocolo.serie ?? '',
-    tipo: modulo.tipo ?? protocolo.tipo ?? '',
-    proyecto: modulo.proyecto ?? protocolo.proyecto ?? '',
-    linea: modulo.linea ?? protocolo.linea ?? '',
-    responsable: modulo.responsable ?? protocolo.responsable ?? '',
-    estado: modulo.estado ?? protocolo.estado ?? '',
-  }
-}
-
-function obtenerValorInicialRangoProtocolo(rango) {
-  const hoy = new Date()
-  if (rango === 'dia') return formatearFechaInput(hoy)
-  if (rango === 'semana') {
-    const fecha = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
-    const diaSemana = fecha.getDay() || 7
-    fecha.setDate(fecha.getDate() + 4 - diaSemana)
-    const anoSemana = fecha.getFullYear()
-    const inicioAnoSemana = new Date(anoSemana, 0, 1)
-    const semana = Math.ceil((((fecha - inicioAnoSemana) / 86400000) + 1) / 7)
-    return `${anoSemana}-W${String(semana).padStart(2, '0')}`
-  }
-  return formatearFechaInput(hoy).slice(0, 7)
-}
-
-function fechaDentroDeRangoProtocolo(fecha, inicio, fin) {
-  const fechaNormalizada = fechaParaInput(fecha)
-  const inicioNormalizado = fechaParaInput(inicio)
-  const finNormalizado = fechaParaInput(fin)
-  return Boolean(
-    fechaNormalizada &&
-    inicioNormalizado &&
-    finNormalizado &&
-    fechaNormalizada >= inicioNormalizado &&
-    fechaNormalizada < finNormalizado
-  )
-}
-
-function FormularioElectrico({ valores, onChange }) {
-  return (
-    <div style={{ display: 'grid', gap: '8px', marginBottom: '14px', textAlign: 'left' }}>
-      {seccionesFormularioElectrico.map((seccion, index) => (
-        <details
-          key={seccion.nombre}
-          defaultOpen={index === 0}
-          style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}
-        >
-          <summary
-            style={{
-              padding: '10px 12px',
-              background: '#333',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            {seccion.nombre}
-          </summary>
-
-          <div style={{ padding: '6px 10px' }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) 64px 76px',
-                gap: '7px',
-                padding: '4px 0',
-                fontSize: '12px',
-                fontWeight: 700,
-                textAlign: 'center',
-              }}
-            >
-              <span />
-              <span>Nuevo</span>
-              <span>Reutilizado</span>
-            </div>
-
-            {seccion.items.map((item) => {
-              const valorGuardado = valores[item]
-              const cantidades =
-                valorGuardado && typeof valorGuardado === 'object'
-                  ? valorGuardado
-                  : { nuevo: valorGuardado ?? '', reutilizado: '' }
-
-              return (
-                <div
-                  key={item}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr) 64px 76px',
-                    gap: '7px',
-                    alignItems: 'center',
-                    padding: '7px 0',
-                    borderBottom: '1px solid #444',
-                  }}
-                >
-                  <span style={{ lineHeight: 1.2 }}>{item}</span>
-                  {['nuevo', 'reutilizado'].map((tipo) => (
-                    <input
-                      key={tipo}
-                      type="number"
-                      min="0"
-                      inputMode="numeric"
-                      aria-label={`${tipo} de ${item}`}
-                      value={cantidades[tipo] ?? ''}
-                      onChange={(e) => onChange(item, tipo, e.target.value)}
-                      style={{ width: '100%', padding: '8px 5px', boxSizing: 'border-box' }}
-                    />
-                  ))}
-                </div>
-              )
-            })}
-          </div>
-        </details>
-      ))}
-    </div>
-  )
-}
-
-
-function Login() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-
-  async function iniciarSesion() {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      alert(error.message)
-    }
-  }
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-        width: '300px',
-        margin: '100px auto',
-      }}
-    >
-      <h2>Iniciar sesiÃ³n</h2>
-
-      <input
-        type="email"
-        placeholder="Correo"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-
-      <input
-        type="password"
-        placeholder="ContraseÃ±a"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-
-      <button onClick={iniciarSesion}>
-        Ingresar
-      </button>
-    </div>
-  )
-}
 function App() {
   const [datos, setDatos] = useState([])
 const [moduloSeleccionado, setModuloSeleccionado] = useState(null)
@@ -810,12 +539,7 @@ function mostrarNotificacion(mensaje) {
 }
 
 function nombreTipoAccion(tipo) {
-  if (tipo === 'ingreso') return 'Ingreso'
-  if (tipo === 'finalizacion') return 'FinalizaciÃ³n'
-  if (tipo === 'cambio_estado') return 'Cambio estado'
-  if (tipo === 'aprobacion_prueba_electrica') return 'AprobaciÃ³n prueba elÃ©ctrica'
-  if (tipo === 'rechazo_prueba_electrica') return 'Rechazo prueba elÃ©ctrica'
-  return tipo || 'AcciÃ³n'
+  return nombreTipoAccionModulo(tipo)
 }
 
 async function cargarAccionesDia() {
@@ -873,78 +597,14 @@ async function deshacerAccionModulo(accion) {
   const confirmado = window.confirm(`Â¿Deshacer ${nombreTipoAccion(accion.tipo).toLowerCase()} de la serie ${accion.serie || ''}?`)
   if (!confirmado) return
 
-  if (accion.tipo === 'ingreso') {
-    const idModulo = accion.datos_despues?.id || accion.modulo_id
-    const { error } = await supabase
-      .from('modulos')
-      .delete()
-      .eq('id', idModulo)
+  const resultado = await deshacerAccionModuloSupabase({
+    supabase,
+    accion,
+  })
 
-    if (error) {
-      mostrarNotificacion('No se pudo deshacer el ingreso: ' + error.message)
-      return
-    }
-  } else if (accion.tipo === 'cambio_estado' || accion.tipo === 'aprobacion_prueba_electrica') {
-    const anterior = accion.datos_antes || {}
-    const { error } = await supabase
-      .from('modulos')
-      .update({
-        estado: anterior.estado,
-        solicitud_prueba: accion.tipo === 'aprobacion_prueba_electrica'
-          ? true
-          : anterior.solicitud_prueba,
-        fecha_prueba_electrica: anterior.fecha_prueba_electrica || null,
-        protocolo_entrega: anterior.protocolo_entrega || {},
-      })
-      .eq('id', anterior.id || accion.modulo_id)
-
-    if (error) {
-      mostrarNotificacion('No se pudo deshacer la acciÃ³n: ' + error.message)
-      return
-    }
-  } else if (accion.tipo === 'rechazo_prueba_electrica') {
-    const anterior = accion.datos_antes || {}
-    const { error } = await supabase
-      .from('modulos')
-      .update({
-        solicitud_prueba: true,
-        solicitado_por: anterior.solicitado_por || null,
-        fecha_solicitud: anterior.fecha_solicitud || null,
-      })
-      .eq('id', anterior.id || accion.modulo_id)
-
-    if (error) {
-      mostrarNotificacion('No se pudo deshacer el rechazo: ' + error.message)
-      return
-    }
-  } else if (accion.tipo === 'finalizacion') {
-    const moduloAnterior = accion.datos_antes || {}
-    const historialId = accion.datos_despues?.id
-
-    const moduloRestaurado = { ...moduloAnterior }
-    delete moduloRestaurado.modulo_id
-    delete moduloRestaurado.fecha_salida
-
-    const { error: errorInsert } = await supabase
-      .from('modulos')
-      .insert([moduloRestaurado])
-
-    if (errorInsert) {
-      mostrarNotificacion('No se pudo restaurar el mÃ³dulo. Es posible que la posiciÃ³n ya estÃ© ocupada: ' + errorInsert.message)
-      return
-    }
-
-    if (historialId) {
-      const { error: errorDelete } = await supabase
-        .from('historial_modulos')
-        .delete()
-        .eq('id', historialId)
-
-      if (errorDelete) {
-        mostrarNotificacion('MÃ³dulo restaurado, pero no se pudo eliminar del historial: ' + errorDelete.message)
-        return
-      }
-    }
+  if (!resultado.ok) {
+    mostrarNotificacion(resultado.mensaje || 'No se pudo deshacer la acciÃ³n')
+    return
   }
 
   await marcarAccionDeshecha(accion)
@@ -993,11 +653,13 @@ useEffect(() => {
 }, [])
 
 function cerrarPanelesFlotantes() {
-  setMostrarLlamadosPendientes(false)
-  setMostrarRegistroAcciones(false)
-  setMostrarTodasAccionesDia(false)
-  setMostrarMenuAcciones(false)
-  setMostrarMenuModulo(false)
+  ejecutarSetters([
+    setMostrarLlamadosPendientes,
+    setMostrarRegistroAcciones,
+    setMostrarTodasAccionesDia,
+    setMostrarMenuAcciones,
+    setMostrarMenuModulo,
+  ])
 }
 
 function cerrarPanelesYModulo() {
@@ -1006,7 +668,7 @@ function cerrarPanelesYModulo() {
 }
 
 function hayMaterialesPendientes(moduloId = moduloSeleccionado?.id) {
-  return Boolean(moduloId && Object.keys(materialesEditados[moduloId] || {}).length > 0)
+  return hayCambiosPendientesPorId(materialesEditados, moduloId)
 }
 
 function cerrarEditorMateriales({ forzar = false } = {}) {
@@ -1015,11 +677,7 @@ function cerrarEditorMateriales({ forzar = false } = {}) {
     if (!confirmar) return
   }
   if (moduloSeleccionado?.id) {
-    setMaterialesEditados((actuales) => {
-      const copia = { ...actuales }
-      delete copia[moduloSeleccionado.id]
-      return copia
-    })
+    setMaterialesEditados((actuales) => eliminarEntradaPorId(actuales, moduloSeleccionado.id))
   }
   setMostrarEditorMateriales(false)
 }
@@ -1039,17 +697,19 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
   } else {
     setMostrarEditorMateriales(false)
   }
-  setMostrarProtocoloEntrega(false)
-  setProtocoloSoloLecturaBusqueda(false)
-  setProtocoloDesdeHistorial(false)
-  setProtocoloManualMensual(false)
-  setMostrarNuevoModulo(false)
-  setCreandoModulo(false)
-  setMostrarReintegrar(false)
-  setMostrarDescargaProtocolos(false)
-  setMostrarPreciosMateriales(false)
-  setMostrarBalanceMateriales(false)
-  setMostrarValesBodega(false)
+  ejecutarSetters([
+    setMostrarProtocoloEntrega,
+    setProtocoloSoloLecturaBusqueda,
+    setProtocoloDesdeHistorial,
+    setProtocoloManualMensual,
+    setMostrarNuevoModulo,
+    setCreandoModulo,
+    setMostrarReintegrar,
+    setMostrarDescargaProtocolos,
+    setMostrarPreciosMateriales,
+    setMostrarBalanceMateriales,
+    setMostrarValesBodega,
+  ])
   setPrecioMaterialEnEdicion(null)
   setDetalleCobroSeleccionado(null)
 
@@ -1158,7 +818,7 @@ useEffect(() => {
 }, [datos, recibeAvisosPrueba])
 
 if (!session) {
-  return <Login />
+  return <Login supabase={supabase} />
 }
 
 async function cargarPerfil() {
@@ -1170,10 +830,6 @@ async function cargarPerfil() {
     supabase,
     usuarioId: usuario.id,
   })
-
-  console.log('USUARIO:', usuario.id)
-  console.log('PERFIL:', data)
-  console.log('ERROR PERFIL:', error)
 
   if (error) {
     console.error(error)
@@ -1221,46 +877,17 @@ async function buscarSerie() {
     return
   }
 
-  const [respuestaHistorial, respuestaActivos, respuestaManuales] = await Promise.all([
-    supabase
-      .from('historial_modulos')
-      .select('*')
-      .eq('serie', serie)
-      .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
-      .order('fecha_salida', { ascending: false })
-      .limit(5),
-    supabase
-      .from('modulos')
-      .select('*')
-      .eq('serie', serie),
-    supabase
-      .from('protocolos_manuales')
-      .select('*')
-      .eq('serie', serie)
-      .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
-      .limit(5),
-  ])
+  const { data, error } = await buscarRegistrosPorSerie({
+    supabase,
+    serie,
+  })
 
-  const errorBusqueda = respuestaHistorial.error || respuestaActivos.error || (
-    respuestaManuales.error?.message?.includes('protocolos_manuales') ? null : respuestaManuales.error
-  )
-
-  if (errorBusqueda) {
-    alert(errorBusqueda.message)
+  if (error) {
+    alert(error.message)
     return
   }
 
-  const activos = (respuestaActivos.data || []).map((modulo) => ({
-    ...modulo,
-    esActual: true,
-  }))
-
-  const manuales = (respuestaManuales.error?.message?.includes('protocolos_manuales') ? [] : respuestaManuales.data || []).map((protocolo) => ({
-    ...protocolo,
-    origen: 'manual',
-  }))
-
-  setResultadoBusqueda([...activos, ...(respuestaHistorial.data || []), ...manuales])
+  setResultadoBusqueda(data || [])
   setBusquedaRealizada(true)
 }
 
@@ -1445,30 +1072,6 @@ function abrirDetalleCobro(registro, tipo) {
   })
 }
 
-function BotonValorCobro({ registro, tipo, children, destacado = false }) {
-  return (
-    <button
-      type="button"
-      onClick={() => abrirDetalleCobro(registro, tipo)}
-      style={{
-        width: '100%',
-        padding: '4px 6px',
-        border: 'none',
-        background: 'transparent',
-        color: 'white',
-        cursor: 'pointer',
-        textAlign: 'right',
-        fontWeight: destacado ? 800 : 600,
-        textDecoration: 'underline',
-        textUnderlineOffset: '3px',
-      }}
-      title="Ver detalle del cobro"
-    >
-      {children}
-    </button>
-  )
-}
-
 async function guardarAjusteValorizacionProtocolo() {
   const registro = detalleCobroSeleccionado?.registro
   if (!puedeAjustarValoresProtocolos || !registro?.id) return
@@ -1613,35 +1216,31 @@ async function cargarConfigBalanceMateriales() {
 }
 
 function guardarConfigBalanceMaterialesDebounced(clave, config) {
-  if (!clave) return
-  clearTimeout(guardadoBalanceMaterialesRef.current[clave])
-  guardadoBalanceMaterialesRef.current[clave] = setTimeout(async () => {
-    const { error } = await guardarConfigBalanceMaterial({
+  programarGuardadoConfigBalance({
+    refGuardado: guardadoBalanceMaterialesRef,
+    clave,
+    config,
+    guardar: (claveGuardar, configGuardar) => guardarConfigBalanceMaterial({
       supabase,
-      clave,
-      config,
+      clave: claveGuardar,
+      config: configGuardar,
       normalizarPrecioMaterial,
-    })
-
-    if (error) {
-      mostrarNotificacion('No se pudo guardar el valor compra en Supabase: ' + error.message)
-    }
-  }, 600)
+    }),
+    onError: (error) => mostrarNotificacion('No se pudo guardar el valor compra en Supabase: ' + error.message),
+  })
 }
 
 function actualizarConfigBalanceMaterial(clave, cambios) {
   setConfigBalanceMateriales((actual) => {
-    const configActualizada = {
-      ...(actual[clave] || {}),
-      ...cambios,
-    }
+    const { configActualizada, configCompleta } = actualizarConfigBalanceMaterialLista({
+      configActual: actual,
+      clave,
+      cambios,
+    })
 
     guardarConfigBalanceMaterialesDebounced(clave, configActualizada)
 
-    return {
-      ...actual,
-      [clave]: configActualizada,
-    }
+    return configCompleta
   })
 }
 
@@ -1724,25 +1323,15 @@ function cambiarFechaValeBodega(fecha) {
 }
 
 function agregarFilaValeBodega(fila = {}) {
-  setFilasValeBodega((actuales) => [
-    ...actuales,
-    {
-      id: `vale-${Date.now()}-${actuales.length}`,
-      materialVale: fila.materialVale || '',
-      materialBalance: fila.materialBalance || '',
-      cantidad: fila.cantidad || '',
-    },
-  ])
+  setFilasValeBodega((actuales) => agregarFilaValeBodegaLista(actuales, fila))
 }
 
 function actualizarFilaValeBodega(index, cambios) {
-  setFilasValeBodega((actuales) => actuales.map((fila, filaIndex) => (
-    filaIndex === index ? { ...fila, ...cambios } : fila
-  )))
+  setFilasValeBodega((actuales) => actualizarFilaValeBodegaLista(actuales, index, cambios))
 }
 
 function eliminarFilaValeBodega(index) {
-  setFilasValeBodega((actuales) => actuales.filter((_, filaIndex) => filaIndex !== index))
+  setFilasValeBodega((actuales) => eliminarFilaValeBodegaLista(actuales, index))
 }
 
 async function leerValeBodega() {
@@ -1774,13 +1363,7 @@ async function leerValeBodega() {
 async function guardarValeBodega() {
   if (!fechaValeBodega || filasValeBodega.length === 0) return
 
-  const items = filasValeBodega
-    .map((fila) => ({
-      material_vale: String(fila.materialVale || '').trim(),
-      material_balance: String(fila.materialBalance || '').trim(),
-      cantidad: Number(fila.cantidad || 0),
-    }))
-    .filter((fila) => fila.material_balance && fila.cantidad > 0)
+  const items = prepararItemsValeBodega(filasValeBodega)
 
   if (items.length === 0) {
     mostrarNotificacion('No hay materiales vÃ¡lidos para guardar')
@@ -1832,39 +1415,21 @@ async function abrirValesBodega() {
 }
 
 function fechaInicialProtocoloManual() {
-  const hoy = new Date().toISOString().slice(0, 10)
-  if (!fechaProtocolosMensuales) return hoy
-  if (rangoProtocolosMensuales === 'dia') return fechaProtocolosMensuales
-  const { inicio, fin } = obtenerRangoFechasProtocolos(rangoProtocolosMensuales, fechaProtocolosMensuales)
-  const inicioFecha = inicio.slice(0, 10)
-  const finFecha = fin.slice(0, 10)
-  return hoy >= inicioFecha && hoy < finFecha ? hoy : inicioFecha
+  return obtenerFechaInicialProtocoloManual({
+    fechaProtocolosMensuales,
+    rangoProtocolosMensuales,
+    obtenerRangoFechasProtocolos,
+  })
 }
 
 function abrirIngresoManualProtocolo() {
   if (!puedeVerProtocolosMensuales) return
 
   const fecha = fechaInicialProtocoloManual()
-  const moduloManual = {
-    id: `manual-nuevo-${Date.now()}`,
-    origen: 'manual',
-    serie: '',
-    tipo: '',
-    proyecto: '',
+  const moduloManual = crearModuloManualProtocolo({
+    fecha,
     responsable: perfil?.nombre || '',
-    linea: '',
-    materiales: {},
-    protocolo_entrega: {
-      fecha,
-      responsable: perfil?.nombre || '',
-      serie: '',
-      tipo: '',
-      proyecto: '',
-      linea: '',
-      detalleMateriales: {},
-      materiales: {},
-    },
-  }
+  })
 
   setModuloSeleccionado(moduloManual)
   setFormulariosElectricos((actuales) => ({
@@ -2252,20 +1817,7 @@ function limpiarEstadosModal() {
     )
   }
 
-  console.log('GUARDANDO CAMBIOS:', {
-    moduloId: moduloSeleccionado?.id,
-    notaEditada,
-    moduloSeleccionado,
-  })
-
-console.log({
-  estadoOriginal: moduloSeleccionado.estado,
-  estadoNuevo: estadoEditado,
-  shouldSetFechaPrueba
-})
   if (shouldSetFechaPrueba) {
-    console.log("Guardando fecha de prueba elÃ©ctrica")
-
     updatePayload = aplicarDatosPruebaElectricaEnPayload({
       payload: updatePayload,
       moduloSeleccionado,
@@ -2295,17 +1847,6 @@ console.log({
     id: moduloSeleccionado.id,
     payload: updatePayload,
   })
-
-  console.log('RESULTADO UPDATE - NOTA:', notaEditada)
-  console.log('RESULTADO UPDATE - PAYLOAD:')
-  console.log('  serie:', updatePayload.serie)
-  console.log('  tipo:', updatePayload.tipo)
-  console.log('  proyecto:', updatePayload.proyecto)
-  console.log('  estado:', updatePayload.estado)
-  console.log('  linea:', updatePayload.linea)
-  console.log('  posicion:', updatePayload.posicion)
-  console.log('  nota:', updatePayload.nota)
-  console.log('  error:', error)
 
   if (error) {
     mostrarNotificacion(error.message)
@@ -2515,36 +2056,11 @@ async function rechazarPruebaElectrica() {
 
 
 async function cargarNombreSolicitante(idSolicitante, moduloId) {
-  let solicitanteId = idSolicitante
-
-  if (!solicitanteId && moduloId) {
-    const { data: modulo, error: errorModulo } = await supabase
-      .from('modulos')
-      .select('solicitado_por')
-      .eq('id', moduloId)
-      .single()
-
-    if (errorModulo) {
-      console.error(errorModulo)
-      setNombreSolicitante('No disponible')
-      setRolSolicitante('')
-      return
-    }
-
-    solicitanteId = modulo?.solicitado_por
-  }
-
-  if (!solicitanteId) {
-    setNombreSolicitante('No disponible')
-    setRolSolicitante('')
-    return
-  }
-
-  const { data, error } = await supabase
-    .from('perfiles')
-    .select('nombre, rol')
-    .eq('id', solicitanteId)
-    .single()
+  const { data, error } = await cargarSolicitantePrueba({
+    supabase,
+    idSolicitante,
+    moduloId,
+  })
 
   if (error) {
     console.error(error)
@@ -2560,11 +2076,10 @@ async function cargarNombreSolicitante(idSolicitante, moduloId) {
 async function obtenerNombrePerfil(idPerfil) {
   if (!idPerfil) return ''
 
-  const { data, error } = await supabase
-    .from('perfiles')
-    .select('nombre')
-    .eq('id', idPerfil)
-    .maybeSingle()
+  const { data, error } = await obtenerNombrePerfilPorId({
+    supabase,
+    idPerfil,
+  })
 
   if (error) {
     console.error(error)
@@ -2578,11 +2093,10 @@ async function cargarMaterialesModulo(moduloId) {
   if (!moduloId) return
 
   setCargandoMateriales(true)
-  const { data, error } = await supabase
-    .from('modulos')
-    .select('materiales')
-    .eq('id', moduloId)
-    .single()
+  const { data, error } = await cargarMaterialesModuloSupabase({
+    supabase,
+    moduloId,
+  })
   setCargandoMateriales(false)
 
   if (error) {
@@ -2653,39 +2167,27 @@ async function guardarMaterialesModulo() {
   const materialesLocales = formulariosElectricos[moduloId] || {}
   const camposEditados = materialesEditados[moduloId] || {}
 
-  const { data: registroActual, error: errorCarga } = await supabase
-    .from('modulos')
-    .select('materiales')
-    .eq('id', moduloId)
-    .single()
+  const { data: registroActual, error: errorCarga } = await cargarMaterialesModuloSupabase({
+    supabase,
+    moduloId,
+  })
 
   if (errorCarga) {
     mostrarNotificacion('No se pudieron cargar los materiales actuales: ' + errorCarga.message)
     return
   }
 
-  const materialesFusionados = { ...(registroActual?.materiales || {}) }
-  Object.entries(camposEditados).forEach(([item, tiposEditados]) => {
-    const valorActual = materialesFusionados[item]
-    const valorLocal = materialesLocales[item]
-    const baseItem = typeof valorActual === 'object' && valorActual !== null
-      ? { ...valorActual }
-      : { nuevo: valorActual || '', reutilizado: '' }
-    const localItem = typeof valorLocal === 'object' && valorLocal !== null
-      ? valorLocal
-      : { nuevo: valorLocal || '', reutilizado: '' }
-
-    Object.keys(tiposEditados || {}).forEach((tipo) => {
-      baseItem[tipo] = localItem[tipo] ?? ''
-    })
-
-    materialesFusionados[item] = baseItem
+  const materialesFusionados = fusionarMaterialesEditados({
+    materialesActuales: registroActual?.materiales || {},
+    materialesLocales,
+    camposEditados,
   })
 
-  const { error } = await supabase
-    .from('modulos')
-    .update({ materiales: materialesFusionados })
-    .eq('id', moduloId)
+  const { error } = await guardarMaterialesModuloSupabase({
+    supabase,
+    moduloId,
+    materiales: materialesFusionados,
+  })
 
   if (error) {
     mostrarNotificacion('No se pudieron guardar los materiales: ' + error.message)
@@ -2713,11 +2215,10 @@ async function abrirProtocoloEntrega() {
   setProtocoloSoloLecturaBusqueda(false)
   setProtocoloDesdeHistorial(false)
 
-  const { data: modulo, error } = await supabase
-    .from('modulos')
-    .select('materiales, protocolo_entrega, responsable')
-    .eq('id', moduloSeleccionado.id)
-    .single()
+  const { data: modulo, error } = await cargarDatosProtocoloModuloActivo({
+    supabase,
+    moduloId: moduloSeleccionado.id,
+  })
 
   if (error) {
     mostrarNotificacion('No se pudo cargar el protocolo: ' + error.message)
@@ -2770,11 +2271,10 @@ async function abrirProtocoloDesdeBusqueda(item) {
   }
 
   if (item.esActual) {
-    const { data: modulo, error } = await supabase
-      .from('modulos')
-      .select('*')
-      .eq('id', item.id)
-      .single()
+    const { data: modulo, error } = await cargarModuloActualParaProtocolo({
+      supabase,
+      moduloId: item.id,
+    })
 
     if (error) {
       mostrarNotificacion('No se pudo cargar el protocolo: ' + error.message)
@@ -3143,96 +2643,18 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   }
 }
 
-  function colorEstado(estado, modulo = {}) {
-    switch (normalizarTexto(estado)) {
-      case 'sin iniciar':
-        return '#808080'
-
-      case 'canalizado':
-        return '#d32f2f'
-
-      case 'cableado':
-        return '#fbc02d'
-
-      case 'terminaciones':
-        return '#1976d2'
-
-      case 'prueba electrica':
-      case 'sin instalacion':
-        return '#388e3c'
-
-      case 'en garantia':
-        return estaDentroDeGarantia(modulo.fecha_prueba_electrica) ? '#388e3c' : '#d32f2f'
-
-      default:
-        return '#444'
-    }
-  }
-
-  const modulosActivos = datos.filter((x) => x.serie)
-
-  const ocupacion = modulosActivos.length
-
-  const canalizados = modulosActivos.filter(
-    (x) => x.estado?.toLowerCase() === 'canalizado'
-  ).length
-
-  const cableados = modulosActivos.filter(
-    (x) => x.estado?.toLowerCase() === 'cableado'
-  ).length
-
-  const terminaciones = modulosActivos.filter(
-    (x) => x.estado?.toLowerCase() === 'terminaciones'
-  ).length
-
-  const pruebas = modulosActivos.filter(
-    (x) =>
-      x.estado?.toLowerCase() === 'prueba elÃ©ctrica' ||
-      x.estado?.toLowerCase() === 'prueba electrica'
-  ).length
-
-const esFechaDeHoy = (valor) => {
-  if (!valor) return false
-  const fecha = new Date(valor)
-  const hoyLocal = new Date()
-
-  return (
-    fecha.getFullYear() === hoyLocal.getFullYear() &&
-    fecha.getMonth() === hoyLocal.getMonth() &&
-    fecha.getDate() === hoyLocal.getDate()
-  )
-}
-
-const pruebasElectricasHoy = [...modulosActivos, ...historial].filter(
-  (modulo) => esFechaDeHoy(modulo.fecha_prueba_electrica)
-).length
-
-const hoy = new Date().toISOString().slice(0, 10)
-
-const terminadosHoy = historial.filter(
-  (x) =>
-    x.fecha_salida &&
-    x.fecha_salida.slice(0, 10) === hoy
-).length
-
-const mesActual = new Date().getMonth()
-const anioActual = new Date().getFullYear()
-
-const pruebasElectricasMes = [...modulosActivos, ...historial].filter((modulo) => {
-  if (!modulo.fecha_prueba_electrica) return false
-  const fecha = new Date(modulo.fecha_prueba_electrica)
-
-  return (
-    !Number.isNaN(fecha.getTime()) &&
-    fecha.getMonth() === mesActual &&
-    fecha.getFullYear() === anioActual
-  )
-}).length
-
-const ultimosFinalizados = [...historial]
-  .filter((item) => item.serie)
-  .sort((a, b) => new Date(b.fecha_salida || 0) - new Date(a.fecha_salida || 0))
-  .slice(0, 5)
+  const {
+    modulosActivos,
+    ocupacion,
+    canalizados,
+    cableados,
+    terminaciones,
+    pruebas,
+    pruebasElectricasHoy,
+    terminadosHoy,
+    pruebasElectricasMes,
+    ultimosFinalizados,
+  } = calcularIndicadoresTablero(datos, historial)
 
   
 
@@ -3956,7 +3378,6 @@ const ultimosFinalizados = [...historial]
                 onClick={(e) => {
                   e.stopPropagation()
                   cerrarVentanasEmergentes()
-                  console.log('CLICK POSICION', pos)
 
                   if (pos.serie) {
                     setNombreSolicitante('')
@@ -3980,7 +3401,6 @@ const ultimosFinalizados = [...historial]
                       cargarNombreSolicitante(pos.solicitado_por, pos.id)
                     }
                   } else {
-                    console.log('POSICION VACIA')
                     if (puedeAgregarModulos) {
                       setPosicionSeleccionada(pos)
                       setMostrarNuevoModulo(true)
@@ -4168,7 +3588,6 @@ const ultimosFinalizados = [...historial]
                 onClick={(e) => {
   e.stopPropagation()
   cerrarVentanasEmergentes()
-  console.log('CLICK POSICION', pos)
 
   if (pos.serie) {
 
@@ -4196,9 +3615,6 @@ const ultimosFinalizados = [...historial]
     }
 
   } else {
-
-    console.log('POSICION VACIA')
-
     if (puedeAgregarModulos) {
       setPosicionSeleccionada(pos)
       setMostrarNuevoModulo(true)
@@ -4430,6 +3846,7 @@ const ultimosFinalizados = [...historial]
         setNotaEditada={setNotaEditada}
       >
         <FormularioElectrico
+          secciones={seccionesFormularioElectrico}
           valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
           onChange={actualizarMaterialFormulario}
         />
@@ -4493,6 +3910,7 @@ const ultimosFinalizados = [...historial]
     onClickFondo={cerrarPanelesFlotantes}
   >
     <FormularioElectrico
+      secciones={seccionesFormularioElectrico}
       valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
       onChange={actualizarMaterialFormulario}
     />
@@ -4529,7 +3947,9 @@ const ultimosFinalizados = [...historial]
       encabezados={encabezadosProtocolosMensuales}
       conteoClaves={conteoClavesProtocolos}
       puedeEliminarProtocolosMensuales={puedeEliminarProtocolosMensuales}
-      BotonValorCobro={BotonValorCobro}
+      BotonValorCobro={(props) => (
+        <BotonValorCobro {...props} onAbrirDetalle={abrirDetalleCobro} />
+      )}
       formatearFecha={formatearFecha}
       formatearPrecio={formatearPrecioMaterial}
       claveProtocoloUnico={claveProtocoloUnico}
