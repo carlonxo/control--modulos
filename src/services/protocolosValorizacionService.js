@@ -81,10 +81,18 @@ function calcularValoresProtocoloMensual({
     item.material,
     normalizarPrecioMaterial(precios[item.material] ?? item.precio),
   ]))
-  const preciosBaseNormalizados = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
-    normalizarTextoComparacion(item.material),
-    normalizarPrecioMaterial(precios[item.material] ?? item.precio),
-  ]))
+  const preciosBaseNormalizados = {}
+  catalogoPreciosProtocolo.forEach((item) => {
+    const precio = normalizarPrecioMaterial(
+      precios[item.material] ??
+      precios[item.materialOriginal] ??
+      item.precio
+    )
+    preciosBaseNormalizados[normalizarTextoComparacion(item.material)] = precio
+    if (item.materialOriginal) {
+      preciosBaseNormalizados[normalizarTextoComparacion(item.materialOriginal)] = precio
+    }
+  })
   Object.entries(precios || {}).forEach(([material, precio]) => {
     preciosBaseNormalizados[normalizarTextoComparacion(material)] = normalizarPrecioMaterial(precio)
   })
@@ -187,9 +195,20 @@ function obtenerMaterialPrecioParaProtocolo({
   normalizarTextoComparacion,
 }) {
   const clave = normalizarTextoComparacion(itemProtocolo)
-  const directo = catalogoPreciosProtocolo.find((item) => normalizarTextoComparacion(item.material) === clave)
+  const directo = catalogoPreciosProtocolo.find((item) => (
+    normalizarTextoComparacion(item.material) === clave ||
+    normalizarTextoComparacion(item.materialOriginal) === clave
+  ))
   if (directo) return directo.material
-  return equivalenciasPrecioProtocolo[clave] || itemProtocolo
+  const equivalente = equivalenciasPrecioProtocolo[clave]
+  if (equivalente) {
+    const itemEquivalente = catalogoPreciosProtocolo.find((item) => (
+      normalizarTextoComparacion(item.material) === normalizarTextoComparacion(equivalente) ||
+      normalizarTextoComparacion(item.materialOriginal) === normalizarTextoComparacion(equivalente)
+    ))
+    return itemEquivalente?.material || equivalente
+  }
+  return itemProtocolo
 }
 
 function calcularCobroCantidadProtocolo(valor, precioUnitario, parsearCantidadProtocolo) {

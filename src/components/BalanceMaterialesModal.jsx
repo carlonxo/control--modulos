@@ -7,6 +7,9 @@ function BalanceMaterialesModal({
   filas,
   configMateriales = {},
   materialesCatalogados = [],
+  catalogoPrecios = [],
+  preciosMateriales = {},
+  preciosCompraMateriales = {},
   formatearPrecio,
   onCambiarRango,
   onCambiarFecha,
@@ -17,23 +20,84 @@ function BalanceMaterialesModal({
 }) {
   const [mostrarReutilizados, setMostrarReutilizados] = useState(false)
   const clavesMaterialesCatalogados = new Set(materialesCatalogados.map(normalizarTextoBalance))
+  materialesCatalogados.forEach((material) => clavesMaterialesCatalogados.add(normalizarTextoBalanceFlexible(material)))
+  const preciosVentaPorMaterial = construirMapaPreciosBalance(catalogoPrecios, preciosMateriales, 'precio')
+  const preciosCompraPorMaterial = construirMapaPreciosBalance(catalogoPrecios, preciosCompraMateriales, 'precioCompra')
+  const preciosVentaPorId = construirMapaPreciosBalancePorId(catalogoPrecios, preciosMateriales, 'precio')
+  const preciosCompraPorId = construirMapaPreciosBalancePorId(catalogoPrecios, preciosCompraMateriales, 'precioCompra')
+  const nombresCatalogoPorMaterial = construirMapaNombresCatalogoBalance(catalogoPrecios)
+  const nombresCatalogoPorId = construirMapaNombresCatalogoBalancePorId(catalogoPrecios)
+  const obtenerNombreCatalogo = (fila) => {
+    if (fila.idArt && nombresCatalogoPorId[String(fila.idArt)]) {
+      return nombresCatalogoPorId[String(fila.idArt)]
+    }
+
+    const candidatos = [
+      configMateriales[fila.clave]?.nombreVisible,
+      fila.materialVisible,
+      fila.material,
+      fila.materialOriginal,
+      fila.clave,
+    ]
+
+    for (const candidato of candidatos) {
+      const nombre = nombresCatalogoPorMaterial[normalizarTextoBalance(candidato)]
+        || nombresCatalogoPorMaterial[normalizarTextoBalanceFlexible(candidato)]
+      if (nombre) return nombre
+    }
+
+    return configMateriales[fila.clave]?.nombreVisible || fila.material
+  }
+  const obtenerPrecioCatalogo = (fila, mapaPrecios, respaldo = 0) => {
+    const mapaPorId = mapaPrecios === preciosCompraPorMaterial ? preciosCompraPorId : preciosVentaPorId
+    if (fila.idArt && Number(normalizarPrecioManual(mapaPorId[String(fila.idArt)])) > 0) {
+      return normalizarPrecioManual(mapaPorId[String(fila.idArt)])
+    }
+
+    const candidatos = [
+      configMateriales[fila.clave]?.nombreVisible,
+      fila.materialVisible,
+      fila.material,
+      fila.materialOriginal,
+      fila.clave,
+    ]
+
+    for (const candidato of candidatos) {
+      const valor = mapaPrecios[normalizarTextoBalance(candidato)]
+        || mapaPrecios[normalizarTextoBalanceFlexible(candidato)]
+      if (Number(normalizarPrecioManual(valor)) > 0) return normalizarPrecioManual(valor)
+    }
+
+    return normalizarPrecioManual(respaldo)
+  }
   const filasBalance = filas.map((fila) => {
-    const valorCompra = fila.precioUnitarioCompra || 0
+    const materialVisible = obtenerNombreCatalogo(fila)
+    const valorVenta = obtenerPrecioCatalogo(
+      { ...fila, materialVisible },
+      preciosVentaPorMaterial,
+      fila.precioUnitarioNuevo || 0
+    )
+    const valorCompra = obtenerPrecioCatalogo(
+      { ...fila, materialVisible },
+      preciosCompraPorMaterial,
+      fila.precioUnitarioCompra || 0
+    )
     const valorCompraNumero = normalizarPrecioManual(valorCompra)
-    const materialVisible = configMateriales[fila.clave]?.nombreVisible || fila.material
     const estaEnCatalogoPrecios = clavesMaterialesCatalogados.has(normalizarTextoBalance(materialVisible))
+      || clavesMaterialesCatalogados.has(normalizarTextoBalanceFlexible(materialVisible))
       || clavesMaterialesCatalogados.has(normalizarTextoBalance(fila.material))
+      || clavesMaterialesCatalogados.has(normalizarTextoBalanceFlexible(fila.material))
 
     return {
       ...fila,
       materialVisible,
       noCatalogado: fila.noCatalogado && !estaEnCatalogoPrecios,
       instalado: Number(fila.nuevo || 0),
-      valorVenta: Number(fila.precioUnitarioNuevo || 0),
+      valorVenta,
       valorCompra,
       valorCompraNumero,
       retirado: Number(fila.retirado || 0),
-      balance: (Number(fila.precioUnitarioNuevo || 0) * Number(fila.nuevo || 0)) - (valorCompraNumero * Number(fila.retirado || 0)),
+      balance: (Number(valorVenta || 0) * Number(fila.nuevo || 0)) - (valorCompraNumero * Number(fila.retirado || 0)),
     }
   })
   const balanceTotal = filasBalance.reduce(
@@ -42,13 +106,23 @@ function BalanceMaterialesModal({
   )
   const filasReutilizadas = filas
     .filter((fila) => Number(fila.reutilizado || 0) > 0)
-    .map((fila) => ({
-      ...fila,
-      noCatalogado: fila.noCatalogado && !clavesMaterialesCatalogados.has(normalizarTextoBalance(fila.material)),
-      cantidadReutilizada: Number(fila.reutilizado || 0),
-      valorUnitarioReutilizado: Number(fila.precioUnitarioReutilizado || 0),
-      valorTotalReutilizado: Number(fila.valorReutilizado || 0),
-    }))
+    .map((fila) => {
+      const materialVisible = obtenerNombreCatalogo(fila)
+      const estaEnCatalogoPrecios = clavesMaterialesCatalogados.has(normalizarTextoBalance(materialVisible))
+        || clavesMaterialesCatalogados.has(normalizarTextoBalanceFlexible(materialVisible))
+        || clavesMaterialesCatalogados.has(normalizarTextoBalance(fila.material))
+        || clavesMaterialesCatalogados.has(normalizarTextoBalanceFlexible(fila.material))
+
+      return {
+        ...fila,
+        material: materialVisible,
+        materialVisible,
+        noCatalogado: fila.noCatalogado && !estaEnCatalogoPrecios,
+        cantidadReutilizada: Number(fila.reutilizado || 0),
+        valorUnitarioReutilizado: Number(fila.precioUnitarioReutilizado || 0),
+        valorTotalReutilizado: Number(fila.valorReutilizado || 0),
+      }
+    })
   const totalReutilizados = filasReutilizadas.reduce(
     (total, fila) => total + Number(fila.cantidadReutilizada || 0),
     0
@@ -349,6 +423,88 @@ function normalizarTextoBalance(valor) {
     .toLowerCase()
     .replace(/°/g, '')
     .replace(/[^a-z0-9]+/g, '')
+}
+
+function normalizarTextoBalanceFlexible(valor) {
+  return normalizarTextoBalance(valor)
+    .replace(/modulo/g, '')
+    .replace(/matix/g, '')
+    .replace(/vimar/g, '')
+    .replace(/neve/g, '')
+    .replace(/r\d+/g, '')
+    .replace(/(\d+)a/g, '$1')
+    .replace(/enchufe/g, 'ench')
+    .replace(/hembra/g, 'hemb')
+    .replace(/macho/g, 'mch')
+}
+
+function construirMapaPreciosBalance(catalogoPrecios = [], precios = {}, campoCatalogo) {
+  const mapa = {}
+
+  catalogoPrecios.forEach((item) => {
+    const valor = precios[item.material] ?? precios[item.materialOriginal] ?? item[campoCatalogo] ?? 0
+    const claves = [
+      item.material,
+      item.materialOriginal,
+      item.clave,
+    ]
+
+    claves.forEach((clave) => {
+      if (!normalizarTextoBalance(clave)) return
+      mapa[normalizarTextoBalance(clave)] = valor
+      mapa[normalizarTextoBalanceFlexible(clave)] = valor
+    })
+  })
+
+  Object.entries(precios || {}).forEach(([material, valor]) => {
+    if (!normalizarTextoBalance(material)) return
+    mapa[normalizarTextoBalance(material)] = valor
+    mapa[normalizarTextoBalanceFlexible(material)] = valor
+  })
+
+  return mapa
+}
+
+function construirMapaPreciosBalancePorId(catalogoPrecios = [], precios = {}, campoCatalogo) {
+  const mapa = {}
+
+  catalogoPrecios.forEach((item) => {
+    if (!item.idArt) return
+    mapa[String(item.idArt)] = precios[item.material] ?? precios[item.materialOriginal] ?? item[campoCatalogo] ?? 0
+  })
+
+  return mapa
+}
+
+function construirMapaNombresCatalogoBalance(catalogoPrecios = []) {
+  const mapa = {}
+
+  catalogoPrecios.forEach((item) => {
+    const claves = [
+      item.material,
+      item.materialOriginal,
+      item.clave,
+    ]
+
+    claves.forEach((clave) => {
+      if (!normalizarTextoBalance(clave)) return
+      mapa[normalizarTextoBalance(clave)] = item.material
+      mapa[normalizarTextoBalanceFlexible(clave)] = item.material
+    })
+  })
+
+  return mapa
+}
+
+function construirMapaNombresCatalogoBalancePorId(catalogoPrecios = []) {
+  const mapa = {}
+
+  catalogoPrecios.forEach((item) => {
+    if (!item.idArt) return
+    mapa[String(item.idArt)] = item.material
+  })
+
+  return mapa
 }
 
 export default BalanceMaterialesModal

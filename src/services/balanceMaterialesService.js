@@ -7,10 +7,17 @@ export function compilarBalanceMateriales(registros = [], vales = [], opciones =
     normalizarTextoComparacion = normalizarTextoComparacionLocal,
   } = opciones
 
-  const catalogoPorNombre = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
-    normalizarClaveMaterialBalance(item.material, normalizarTextoComparacion),
-    item,
-  ]))
+  const catalogoPorNombre = {}
+  catalogoPreciosProtocolo.forEach((item) => {
+    obtenerClavesMaterialBalance(item.material, normalizarTextoComparacion).forEach((clave) => {
+      catalogoPorNombre[clave] = item
+    })
+    if (item.materialOriginal) {
+      obtenerClavesMaterialBalance(item.materialOriginal, normalizarTextoComparacion).forEach((clave) => {
+        catalogoPorNombre[clave] = item
+      })
+    }
+  })
 
   const acumulado = new Map()
   const materialesExcluidos = new Set([
@@ -30,7 +37,7 @@ export function compilarBalanceMateriales(registros = [], vales = [], opciones =
     ].filter(Boolean)
 
     for (const candidato of candidatos) {
-      const catalogo = catalogoPorNombre[normalizarClaveMaterialBalance(candidato, normalizarTextoComparacion)]
+      const catalogo = buscarCatalogoMaterialBalance(candidato, catalogoPorNombre, normalizarTextoComparacion)
       if (catalogo) {
         return {
           clave: normalizarClaveMaterialBalance(catalogo.material, normalizarTextoComparacion),
@@ -148,7 +155,7 @@ function consolidarFilasBalanceMateriales(
   filas.forEach((fila) => {
     const nombreVisible = configMateriales[fila.clave]?.nombreVisible || fila.material
     const claveVisible = normalizarClaveMaterialBalance(nombreVisible, normalizarTextoComparacion)
-    const catalogo = catalogoPorNombre[claveVisible]
+    const catalogo = buscarCatalogoMaterialBalance(nombreVisible, catalogoPorNombre, normalizarTextoComparacion)
     const claveFinal = catalogo ? normalizarClaveMaterialBalance(catalogo.material, normalizarTextoComparacion) : claveVisible
     const materialFinal = catalogo?.material || nombreVisible || fila.material
     const existente = consolidadas.get(claveFinal)
@@ -205,6 +212,34 @@ function normalizarClaveMaterialBalance(valor, normalizarTextoComparacion = norm
     .replace(/barra/g, '')
     .replace(/accesorios/g, 'acces')
     .replace(/accesorio/g, 'acces')
+}
+
+function normalizarClaveMaterialBalanceFlexible(valor, normalizarTextoComparacion = normalizarTextoComparacionLocal) {
+  return normalizarClaveMaterialBalance(valor, normalizarTextoComparacion)
+    .replace(/modulo/g, '')
+    .replace(/matix/g, '')
+    .replace(/vimar/g, '')
+    .replace(/neve/g, '')
+    .replace(/r\d+/g, '')
+    .replace(/(\d+)a/g, '$1')
+    .replace(/enchufe/g, 'ench')
+    .replace(/hembra/g, 'hemb')
+    .replace(/macho/g, 'mch')
+}
+
+function obtenerClavesMaterialBalance(valor, normalizarTextoComparacion = normalizarTextoComparacionLocal) {
+  return [
+    normalizarClaveMaterialBalance(valor, normalizarTextoComparacion),
+    normalizarClaveMaterialBalanceFlexible(valor, normalizarTextoComparacion),
+  ].filter(Boolean)
+}
+
+function buscarCatalogoMaterialBalance(valor, catalogoPorNombre, normalizarTextoComparacion = normalizarTextoComparacionLocal) {
+  for (const clave of obtenerClavesMaterialBalance(valor, normalizarTextoComparacion)) {
+    if (catalogoPorNombre[clave]) return catalogoPorNombre[clave]
+  }
+
+  return null
 }
 
 function normalizarTextoComparacionLocal(valor) {

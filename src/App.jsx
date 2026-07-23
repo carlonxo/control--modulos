@@ -53,7 +53,10 @@ import {
 import {
   cargarCatalogoMaterialesGuardado,
   cargarPreciosMateriales as cargarPreciosMaterialesSupabase,
+  eliminarMaterialPrecio,
   guardarPreciosMateriales as guardarPreciosMaterialesSupabase,
+  propagarRenombradoMaterial,
+  renombrarMaterialPrecio,
 } from './services/preciosMaterialesService'
 import {
   cargarProtocolosDiarios,
@@ -288,79 +291,75 @@ function normalizarTextoComparacion(valor) {
 
 function construirCatalogoPreciosMaterialesCompleto({
   catalogoBase,
-  balanceMateriales,
-  configMateriales,
-  equivalenciasPrecioProtocolo = {},
-  normalizarPrecioMaterial,
 }) {
-  const normalizarClaveBalance = (valor) => normalizarTextoComparacion(valor)
-    .replace(/retenedoresde/g, 'retenedor')
-    .replace(/retenedores/g, 'retenedor')
-    .replace(/retenedorde/g, 'retenedor')
-    .replace(/retenedor20mm/g, 'retenedor20')
-    .replace(/monofasica/g, 'monof')
-    .replace(/monofasico/g, 'monof')
-    .replace(/bifasica/g, 'bif')
-    .replace(/bifasico/g, 'bif')
-    .replace(/repartidora/g, 'repartidor')
-    .replace(/barra/g, '')
-    .replace(/accesorios/g, 'acces')
-    .replace(/accesorio/g, 'acces')
-
-  const obtenerValorCompraDesdeBalance = (item) => {
-    const clavesCandidatas = new Set([
-      normalizarTextoComparacion(item.material),
-      normalizarClaveBalance(item.material),
-    ])
-
-    Object.entries(equivalenciasPrecioProtocolo).forEach(([aliasNormalizado, materialCatalogo]) => {
-      if (normalizarTextoComparacion(materialCatalogo) === normalizarTextoComparacion(item.material)) {
-        clavesCandidatas.add(aliasNormalizado)
-        clavesCandidatas.add(normalizarClaveBalance(aliasNormalizado))
-      }
-    })
-
-    for (const clave of clavesCandidatas) {
-      const valorCompra = configMateriales[clave]?.valorCompra
-      if (Number(normalizarPrecioMaterial(valorCompra)) > 0) return normalizarPrecioMaterial(valorCompra)
-    }
-
-    const valorPorNombreVisible = Object.values(configMateriales).find((config) => (
-      config?.nombreVisible &&
-      normalizarTextoComparacion(config.nombreVisible) === normalizarTextoComparacion(item.material)
-    ))?.valorCompra
-
-    return Number(normalizarPrecioMaterial(valorPorNombreVisible)) > 0
-      ? normalizarPrecioMaterial(valorPorNombreVisible)
-      : item.precioCompra ?? ''
-  }
-
-  const catalogo = catalogoBase.map((item) => ({
+  return catalogoBase.map((item) => ({
     ...item,
     seccion: seccionCatalogoPrecios(item),
-    precioCompra: obtenerValorCompraDesdeBalance(item),
   }))
-  const clavesExistentes = new Set(catalogo.map((item) => normalizarTextoComparacion(item.material)))
+}
 
-  balanceMateriales
-    .filter((fila) => fila.noCatalogado)
-    .forEach((fila) => {
-      const nombreVisible = configMateriales[fila.clave]?.nombreVisible || fila.material
-      const material = String(nombreVisible || '').trim()
-      const clave = normalizarTextoComparacion(material)
-      if (!material || clavesExistentes.has(clave)) return
+function asignarIdsInternosMateriales(catalogo = []) {
+  const secciones = [...new Set(catalogo.map((item) => item.seccion || 'Consumibles'))]
+  const codigosUsados = new Set(catalogo
+    .map((item) => item.idArtInterno || '')
+    .filter(Boolean))
+  const obtenerSiguienteCodigo = () => {
+    let indice = 0
+    while (codigosUsados.has(`Z${String(indice).padStart(2, '0')}`)) {
+      indice += 1
+    }
+    const codigo = `Z${String(indice).padStart(2, '0')}`
+    codigosUsados.add(codigo)
+    return codigo
+  }
+  const materialesSinIdOrdenados = catalogo
+    .filter((item) => !item.idArt && !item.idArtInterno)
+    .map((item, indiceOriginal) => ({ item, indiceOriginal }))
+    .sort((a, b) => {
+      const ordenSeccionA = secciones.indexOf(a.item.seccion || 'Consumibles')
+      const ordenSeccionB = secciones.indexOf(b.item.seccion || 'Consumibles')
+      if (ordenSeccionA !== ordenSeccionB) return ordenSeccionA - ordenSeccionB
 
-      catalogo.push({
-        seccion: seccionNoCatalogadosBalance,
-        material,
-        idArt: '',
-        precio: Number(fila.precioUnitarioNuevo || 0),
-        precioCompra: normalizarPrecioMaterial(configMateriales[fila.clave]?.valorCompra ?? fila.precioUnitarioCompra ?? 0),
+      const nombreA = String(a.item.material || '')
+      const nombreB = String(b.item.material || '')
+      const comparacionNombre = nombreA.localeCompare(nombreB, 'es', {
+        numeric: true,
+        sensitivity: 'base',
       })
-      clavesExistentes.add(clave)
+      return comparacionNombre || a.indiceOriginal - b.indiceOriginal
     })
+  const idsPorMaterial = new Map()
 
-  return catalogo
+  materialesSinIdOrdenados.forEach(({ item }) => {
+    idsPorMaterial.set(normalizarTextoComparacion(item.material), obtenerSiguienteCodigo())
+  })
+
+  return catalogo.map((item) => {
+    if (item.idArt) {
+      return {
+        ...item,
+        idArtVisible: String(item.idArt),
+      }
+    }
+
+    const idArtInterno = item.idArtInterno || idsPorMaterial.get(normalizarTextoComparacion(item.material)) || ''
+    return {
+      ...item,
+      idArtInterno,
+      idArtVisible: idArtInterno,
+    }
+  })
+}
+
+function obtenerSiguienteIdInternoMaterial(catalogo = []) {
+  const codigosUsados = new Set(catalogo
+    .map((item) => item.idArtInterno || item.idArtVisible || '')
+    .filter((codigo) => /^Z\d+$/i.test(String(codigo))))
+  let indice = 0
+  while (codigosUsados.has(`Z${String(indice).padStart(2, '0')}`)) {
+    indice += 1
+  }
+  return `Z${String(indice).padStart(2, '0')}`
 }
 
 const equivalenciasPrecioProtocolo = {
@@ -576,22 +575,43 @@ const conteoClavesProtocolos = protocolosMensuales.reduce((conteo, registro) => 
   conteo[clave] = (conteo[clave] || 0) + 1
   return conteo
 }, {})
+const catalogoMaterialesGuardadoActivos = catalogoMaterialesGuardado.filter((item) => item.activo !== false)
+const primerPrecioDisponible = (...valores) => {
+  const valoresNormalizados = valores.map((valor) => normalizarPrecioMaterial(valor))
+  return valoresNormalizados.find((valor) => Number(valor) > 0) ?? 0
+}
+const materialPrecioEliminado = (itemBase) => catalogoMaterialesGuardado.some((itemGuardado) => (
+  itemGuardado.activo === false &&
+  (
+    (itemGuardado.idArt && itemBase.idArt && String(itemGuardado.idArt) === String(itemBase.idArt)) ||
+    normalizarTextoComparacion(itemGuardado.materialOriginal || itemGuardado.material) === normalizarTextoComparacion(itemBase.material)
+  )
+))
 const catalogoPreciosBaseYGuardado = [
-  ...catalogoPreciosProtocolo.map((itemBase) => {
-    const itemGuardado = catalogoMaterialesGuardado.find((item) => (
+  ...catalogoPreciosProtocolo
+    .filter((itemBase) => !materialPrecioEliminado(itemBase))
+    .map((itemBase) => {
+    const itemGuardadoPorId = catalogoMaterialesGuardadoActivos.find((item) => (
       item.idArt && itemBase.idArt && String(item.idArt) === String(itemBase.idArt)
     ))
+    const itemGuardadoPorNombre = catalogoMaterialesGuardadoActivos.find((item) => (
+      !item.idArt &&
+      normalizarTextoComparacion(item.materialOriginal || item.material) === normalizarTextoComparacion(itemBase.material)
+    ))
+    const itemGuardado = itemGuardadoPorId || itemGuardadoPorNombre
     return itemGuardado
       ? {
           ...itemBase,
+          materialOriginal: itemGuardado.materialOriginal || itemBase.material,
+          idArtInterno: itemGuardado.idArtInterno || itemBase.idArtInterno || '',
           material: itemGuardado.material || itemBase.material,
           seccion: seccionCatalogoPrecios(itemGuardado),
-          precio: normalizarPrecioMaterial(itemGuardado.precio ?? itemBase.precio ?? 0),
-          precioCompra: normalizarPrecioMaterial(itemGuardado.precioCompra ?? itemBase.precioCompra ?? 0),
+          precio: primerPrecioDisponible(itemGuardado.precio, itemBase.precio),
+          precioCompra: primerPrecioDisponible(itemGuardado.precioCompra, itemBase.precioCompra),
         }
       : itemBase
   }),
-  ...catalogoMaterialesGuardado.filter((itemGuardado) => {
+  ...catalogoMaterialesGuardadoActivos.filter((itemGuardado) => {
     const existePorId = itemGuardado.idArt && catalogoPreciosProtocolo.some(
       (itemBase) => itemBase.idArt && String(itemBase.idArt) === String(itemGuardado.idArt)
     )
@@ -601,9 +621,14 @@ const catalogoPreciosBaseYGuardado = [
     )
   }),
 ]
-const catalogoPreciosParaBalance = (catalogoBalanceMateriales.length > 0 ? catalogoBalanceMateriales : catalogoPreciosBaseYGuardado).map((item) => ({
+const catalogoPreciosParaBalance = catalogoPreciosBaseYGuardado.map((item) => ({
   ...item,
-  precioCompra: normalizarPrecioMaterial(preciosCompraMateriales[item.material] ?? item.precioCompra ?? 0),
+    precio: primerPrecioDisponible(preciosMateriales[item.material], preciosMateriales[item.materialOriginal], item.precio),
+  precioCompra: primerPrecioDisponible(
+    preciosCompraMateriales[item.material],
+    preciosCompraMateriales[item.materialOriginal],
+    item.precioCompra
+  ),
 }))
 const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales, valesBalanceMateriales, {
   configMateriales: configBalanceMateriales,
@@ -612,13 +637,14 @@ const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales,
   equivalenciasValeBodega,
   normalizarTextoComparacion,
 })
-const catalogoPreciosMaterialesCompleto = construirCatalogoPreciosMaterialesCompleto({
+const catalogoPreciosMaterialesBaseCompleto = construirCatalogoPreciosMaterialesCompleto({
   catalogoBase: catalogoPreciosBaseYGuardado,
   balanceMateriales,
   configMateriales: configBalanceMateriales,
   equivalenciasPrecioProtocolo,
   normalizarPrecioMaterial,
 })
+const catalogoPreciosMaterialesCompleto = asignarIdsInternosMateriales(catalogoPreciosMaterialesBaseCompleto)
 const seccionesCatalogoPreciosCompleto = [
   ...new Set(catalogoPreciosMaterialesCompleto.map((item) => item.seccion)),
 ]
@@ -1120,23 +1146,45 @@ function descargarProtocolosDiarios() {
 
 async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompleto) {
   setCargandoPreciosMateriales(true)
-  const [
-    { precios, preciosCompra, error },
-    { catalogo: catalogoGuardado, error: errorCatalogoGuardado },
-  ] = await Promise.all([
-    cargarPreciosMaterialesSupabase({
-      supabase,
-      catalogo,
-    }),
-    cargarCatalogoMaterialesGuardado({
-      supabase,
-    }),
-  ])
-  setCargandoPreciosMateriales(false)
-
+  const { catalogo: catalogoGuardado, error: errorCatalogoGuardado } = await cargarCatalogoMaterialesGuardado({
+    supabase,
+  })
   if (!errorCatalogoGuardado) {
     setCatalogoMaterialesGuardado(catalogoGuardado)
   }
+  const catalogoGuardadoActivo = (catalogoGuardado || []).filter((item) => item.activo !== false)
+  const catalogoConGuardado = [
+    ...catalogo.map((itemBase) => {
+      const itemGuardadoPorId = catalogoGuardadoActivo.find((item) => (
+        item.idArt && itemBase.idArt && String(item.idArt) === String(itemBase.idArt)
+      ))
+      const itemGuardadoPorNombre = catalogoGuardadoActivo.find((item) => (
+        normalizarTextoComparacion(item.material) === normalizarTextoComparacion(itemBase.material)
+      ))
+      const itemGuardado = itemGuardadoPorId || itemGuardadoPorNombre
+      return itemGuardado
+        ? {
+            ...itemBase,
+            materialOriginal: itemGuardado.materialOriginal || itemBase.material,
+            idArtInterno: itemGuardado.idArtInterno || itemBase.idArtInterno || '',
+            material: itemGuardado.material || itemBase.material,
+            seccion: itemGuardado.seccion || itemBase.seccion,
+            precio: primerPrecioDisponible(itemGuardado.precio, itemBase.precio),
+            precioCompra: primerPrecioDisponible(itemGuardado.precioCompra, itemBase.precioCompra),
+          }
+        : itemBase
+    }),
+    ...catalogoGuardadoActivo.filter((itemGuardado) => !catalogo.some((itemBase) => (
+      (itemGuardado.idArt && itemBase.idArt && String(itemGuardado.idArt) === String(itemBase.idArt)) ||
+      normalizarTextoComparacion(itemGuardado.material) === normalizarTextoComparacion(itemBase.material)
+    ))),
+  ]
+
+  const { precios, preciosCompra, error } = await cargarPreciosMaterialesSupabase({
+    supabase,
+    catalogo: catalogoConGuardado,
+  })
+  setCargandoPreciosMateriales(false)
 
   if (error) {
     mostrarNotificacion('No se pudieron cargar los precios: ' + error.message)
@@ -1155,39 +1203,7 @@ async function abrirPreciosMateriales() {
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarPreciosMateriales(true)
-
-  if (puedeVerBalanceMateriales) {
-    const [configCargada, balanceCargado] = await Promise.all([
-      cargarConfigBalanceMateriales(),
-      cargarBalanceMateriales(),
-    ])
-    const catalogoBalanceLocal = catalogoPreciosProtocolo.map((item) => ({
-      ...item,
-      precioCompra: normalizarPrecioMaterial(preciosCompraMateriales[item.material] ?? item.precioCompra ?? 0),
-    }))
-    const balanceLocal = compilarBalanceMateriales(
-      balanceCargado?.registros || [],
-      balanceCargado?.vales || [],
-      {
-        configMateriales: configCargada || {},
-        catalogoPreciosProtocolo: catalogoBalanceLocal,
-        equivalenciasPrecioProtocolo,
-        equivalenciasValeBodega,
-        normalizarTextoComparacion,
-      }
-    )
-    const catalogoCompletoLocal = construirCatalogoPreciosMaterialesCompleto({
-      catalogoBase: catalogoPreciosProtocolo,
-      balanceMateriales: balanceLocal,
-      configMateriales: configCargada || {},
-      equivalenciasPrecioProtocolo,
-      normalizarPrecioMaterial,
-    })
-    await cargarPreciosMateriales(catalogoCompletoLocal)
-    return
-  }
-
-  await cargarPreciosMateriales(catalogoPreciosProtocolo)
+  await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
 }
 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
@@ -1195,7 +1211,7 @@ function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMat
     registro,
     origen,
     precios,
-    catalogoPreciosProtocolo,
+    catalogoPreciosProtocolo: catalogoPreciosMaterialesCompleto,
     camposMateriales,
     equivalenciasPrecioProtocolo,
     normalizarTextoComparacion,
@@ -1322,7 +1338,7 @@ async function obtenerRegistrosProtocolosPorRango(valor, rango) {
 
   const preciosActuales = Object.keys(preciosParaCalculo || {}).length > 0
     ? preciosParaCalculo
-    : Object.fromEntries(catalogoPreciosProtocolo.map((item) => [item.material, item.precio]))
+    : Object.fromEntries(catalogoPreciosMaterialesCompleto.map((item) => [item.material, item.precio]))
 
   const registros = [
     ...registrosActivos.map((item) => prepararRegistroProtocoloMensual(item, 'actual', preciosActuales)),
@@ -1412,11 +1428,29 @@ async function cargarBalanceMateriales(valor = fechaBalanceMateriales, rango = r
   if (!errorCatalogoGuardado) {
     setCatalogoMaterialesGuardado(catalogoGuardado)
   }
+  const catalogoGuardadoActivo = (catalogoGuardado || []).filter((item) => item.activo !== false)
   const catalogoParaBalanceActualizado = [
-    ...catalogoPreciosProtocolo,
-    ...catalogoGuardado.filter((itemGuardado) => !catalogoPreciosProtocolo.some(
-      (itemBase) => normalizarTextoComparacion(itemBase.material) === normalizarTextoComparacion(itemGuardado.material)
-    )),
+    ...catalogoPreciosProtocolo.map((itemBase) => {
+      const itemGuardado = catalogoGuardadoActivo.find((item) => (
+        (item.idArt && itemBase.idArt && String(item.idArt) === String(itemBase.idArt)) ||
+        normalizarTextoComparacion(item.material) === normalizarTextoComparacion(itemBase.material)
+      ))
+      return itemGuardado
+        ? {
+            ...itemBase,
+            materialOriginal: itemGuardado.materialOriginal || itemBase.material,
+            idArtInterno: itemGuardado.idArtInterno || itemBase.idArtInterno || '',
+            material: itemGuardado.material || itemBase.material,
+            seccion: itemGuardado.seccion || itemBase.seccion,
+            precio: primerPrecioDisponible(itemGuardado.precio, itemBase.precio),
+            precioCompra: primerPrecioDisponible(itemGuardado.precioCompra, itemBase.precioCompra),
+          }
+        : itemBase
+    }),
+    ...catalogoGuardadoActivo.filter((itemGuardado) => !catalogoPreciosProtocolo.some((itemBase) => (
+      (itemGuardado.idArt && itemBase.idArt && String(itemGuardado.idArt) === String(itemBase.idArt)) ||
+      normalizarTextoComparacion(itemBase.material) === normalizarTextoComparacion(itemGuardado.material)
+    ))),
   ]
   setCatalogoBalanceMateriales(catalogoParaBalanceActualizado)
   await cargarPreciosMateriales(catalogoParaBalanceActualizado)
@@ -1793,6 +1827,82 @@ function actualizarPrecioMaterial(material, tipo, valor) {
   }))
 }
 
+function renombrarClaveObjetoMaterialesLocal(valor, materialAnterior, materialNuevo) {
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return valor
+
+  const claveAnterior = normalizarTextoComparacion(materialAnterior)
+  return Object.fromEntries(Object.entries(valor).map(([clave, contenido]) => (
+    normalizarTextoComparacion(clave) === claveAnterior
+      ? [materialNuevo, contenido]
+      : [clave, contenido]
+  )))
+}
+
+function renombrarMaterialEnProtocoloLocal(protocolo, materialAnterior, materialNuevo) {
+  if (!protocolo || typeof protocolo !== 'object' || Array.isArray(protocolo)) return protocolo
+
+  return {
+    ...protocolo,
+    materiales: renombrarClaveObjetoMaterialesLocal(protocolo.materiales, materialAnterior, materialNuevo),
+    detalleMateriales: renombrarClaveObjetoMaterialesLocal(protocolo.detalleMateriales, materialAnterior, materialNuevo),
+  }
+}
+
+function renombrarMaterialEnEstadoLocal(materialAnterior, materialNuevo) {
+  setFormulariosElectricos((actuales) => Object.fromEntries(Object.entries(actuales || {}).map(([moduloId, materiales]) => [
+    moduloId,
+    renombrarClaveObjetoMaterialesLocal(materiales, materialAnterior, materialNuevo),
+  ])))
+
+  setDatos((actuales) => actuales.map((modulo) => ({
+    ...modulo,
+    materiales: renombrarClaveObjetoMaterialesLocal(modulo.materiales, materialAnterior, materialNuevo),
+    protocolo_entrega: renombrarMaterialEnProtocoloLocal(modulo.protocolo_entrega, materialAnterior, materialNuevo),
+  })))
+
+  setProtocolosMensuales((actuales) => actuales.map((registro) => ({
+    ...registro,
+    materiales: renombrarClaveObjetoMaterialesLocal(registro.materiales, materialAnterior, materialNuevo),
+    protocolo_entrega: renombrarMaterialEnProtocoloLocal(registro.protocolo_entrega, materialAnterior, materialNuevo),
+  })))
+
+  setProtocolosBalanceMateriales((actuales) => actuales.map((registro) => ({
+    ...registro,
+    materiales: renombrarClaveObjetoMaterialesLocal(registro.materiales, materialAnterior, materialNuevo),
+    protocolo_entrega: renombrarMaterialEnProtocoloLocal(registro.protocolo_entrega, materialAnterior, materialNuevo),
+  })))
+
+  setValesBalanceMateriales((actuales) => actuales.map((item) => (
+    normalizarTextoComparacion(item.material_balance) === normalizarTextoComparacion(materialAnterior)
+      ? { ...item, material_balance: materialNuevo }
+      : item
+  )))
+
+  setValesBodegaDia((actuales) => actuales.map((vale) => ({
+    ...vale,
+    items: (vale.items || []).map((item) => (
+      normalizarTextoComparacion(item.material_balance) === normalizarTextoComparacion(materialAnterior)
+        ? { ...item, material_balance: materialNuevo }
+        : item
+    )),
+  })))
+
+  setConfigBalanceMateriales((actuales) => {
+    const claveAnterior = normalizarTextoComparacion(materialAnterior)
+    const claveNueva = normalizarTextoComparacion(materialNuevo)
+    const actualizados = { ...actuales }
+    Object.entries(actuales || {}).forEach(([clave, config]) => {
+      if (clave === claveAnterior) {
+        actualizados[claveNueva] = { ...config, nombreVisible: materialNuevo }
+        delete actualizados[claveAnterior]
+      } else if (normalizarTextoComparacion(config?.nombreVisible) === claveAnterior) {
+        actualizados[clave] = { ...config, nombreVisible: materialNuevo }
+      }
+    })
+    return actualizados
+  })
+}
+
 function agregarMaterialCatalogoPrecios(seccion) {
   if (!puedeEditarPreciosMateriales) return
 
@@ -1809,9 +1919,12 @@ function agregarMaterialCatalogoPrecios(seccion) {
     return
   }
 
+  const idArtInterno = obtenerSiguienteIdInternoMaterial(catalogoPreciosMaterialesCompleto)
   const nuevoMaterial = {
     material,
     idArt: '',
+    idArtInterno,
+    idArtVisible: idArtInterno,
     seccion,
     precio: 0,
     precioCompra: 0,
@@ -1830,7 +1943,7 @@ function agregarMaterialCatalogoPrecios(seccion) {
   mostrarNotificacion('Material agregado. Recuerda guardar precios para conservarlo.')
 }
 
-function renombrarMaterialCatalogoPrecios(item, nuevoNombre) {
+async function renombrarMaterialCatalogoPrecios(item, nuevoNombre) {
   if (!puedeEditarPreciosMateriales) return
 
   const material = String(nuevoNombre || '').trim()
@@ -1859,15 +1972,48 @@ function renombrarMaterialCatalogoPrecios(item, nuevoNombre) {
   const precioCompraActual = normalizarPrecioMaterial(preciosCompraMateriales[materialActual] ?? item.precioCompra ?? 0)
   const itemRenombrado = {
     ...item,
+    materialOriginal: item.materialOriginal || materialActual,
+    idArtInterno: item.idArtInterno || '',
+    idArtVisible: item.idArtVisible || item.idArtInterno || '',
     material,
     seccion: seccionCatalogoPrecios(item),
     precio: precioVentaActual,
     precioCompra: precioCompraActual,
   }
 
-  setCatalogoMaterialesGuardado((actuales) => {
+  const { error, requierePermisoInsert } = await renombrarMaterialPrecio({
+    supabase,
+    itemAnterior: item,
+    itemNuevo: itemRenombrado,
+    precioVenta: precioVentaActual,
+    precioCompra: precioCompraActual,
+    normalizarPrecioMaterial,
+  })
+
+  if (error) {
+    if (requierePermisoInsert) {
+      mostrarNotificacion('No se pudo renombrar: Supabase no permite crear el registro base en material_precios. Detalle: ' + error.message)
+    } else {
+      mostrarNotificacion('No se pudo renombrar el material: ' + error.message)
+    }
+    return
+  }
+
+  const propagacion = await propagarRenombradoMaterial({
+    supabase,
+    materialAnterior: materialActual,
+    materialNuevo: material,
+  })
+
+  if (propagacion.error) {
+    mostrarNotificacion('El nombre cambió en el catálogo, pero no se pudo actualizar todos los registros: ' + propagacion.error.message)
+    return
+  }
+
+  const actualizarListaCatalogo = (actuales) => {
     const indice = actuales.findIndex((actual) => (
       (item.idArt && actual.idArt && String(actual.idArt) === String(item.idArt)) ||
+      normalizarTextoComparacion(actual.materialOriginal || actual.material) === claveActual ||
       normalizarTextoComparacion(actual.material) === claveActual
     ))
 
@@ -1880,7 +2026,11 @@ function renombrarMaterialCatalogoPrecios(item, nuevoNombre) {
     }
 
     return [...actuales, itemRenombrado]
-  })
+  }
+
+  setCatalogoMaterialesGuardado(actualizarListaCatalogo)
+  setCatalogoBalanceMateriales(actualizarListaCatalogo)
+  renombrarMaterialEnEstadoLocal(materialActual, material)
 
   setPreciosMateriales((actuales) => {
     const actualizados = {
@@ -1901,14 +2051,72 @@ function renombrarMaterialCatalogoPrecios(item, nuevoNombre) {
   })
 
   setPrecioMaterialEnEdicion(null)
-  mostrarNotificacion('Nombre de material actualizado. Recuerda guardar precios para conservarlo.')
+  mostrarNotificacion(`Nombre de material actualizado en catálogo y registros (${propagacion.actualizados} cambio(s)).`)
+}
+
+async function eliminarMaterialCatalogoPrecios(item) {
+  if (!puedeEditarPreciosMateriales) return
+
+  const confirmado = window.confirm(`¿Eliminar el material "${item.material}" del catálogo de precios?`)
+  if (!confirmado) return
+
+  const itemEliminado = {
+    ...item,
+    materialOriginal: item.materialOriginal || item.material,
+    activo: false,
+  }
+
+  const { error, requiereColumnaActivo } = await eliminarMaterialPrecio({
+    supabase,
+    item: itemEliminado,
+    precios: preciosMateriales,
+    preciosCompra: preciosCompraMateriales,
+    normalizarPrecioMaterial,
+  })
+
+  if (error) {
+    if (requiereColumnaActivo) {
+      mostrarNotificacion('Para ocultar materiales base falta agregar la columna activo en Supabase.')
+    } else {
+      mostrarNotificacion('No se pudo eliminar el material: ' + error.message)
+    }
+    return
+  }
+
+  const quitarDeLista = (actuales) => {
+    if (item.idArt) {
+      const sinDuplicado = actuales.filter((actual) => !(
+        actual.idArt && String(actual.idArt) === String(item.idArt)
+      ))
+      return [...sinDuplicado, itemEliminado]
+    }
+
+    return actuales.filter((actual) => (
+      normalizarTextoComparacion(actual.material) !== normalizarTextoComparacion(item.material)
+    ))
+  }
+
+  setCatalogoMaterialesGuardado(quitarDeLista)
+  setCatalogoBalanceMateriales(quitarDeLista)
+  setPreciosMateriales((actuales) => {
+    const actualizados = { ...actuales }
+    delete actualizados[item.material]
+    return actualizados
+  })
+  setPreciosCompraMateriales((actuales) => {
+    const actualizados = { ...actuales }
+    delete actualizados[item.material]
+    return actualizados
+  })
+  setPrecioMaterialEnEdicion(null)
+  mostrarNotificacion('Material eliminado del catálogo')
 }
 
 async function guardarPreciosMateriales() {
   if (!puedeEditarPreciosMateriales || guardandoPreciosMateriales) return
 
   setGuardandoPreciosMateriales(true)
-  const { error } = await guardarPreciosMaterialesSupabase({
+  const { error, catalogo: catalogoConfirmado } = await guardarPreciosMaterialesSupabase({
     supabase,
     catalogo: catalogoPreciosMaterialesCompleto,
     precios: preciosMateriales,
@@ -1924,6 +2132,9 @@ async function guardarPreciosMateriales() {
   }
 
   setPrecioMaterialEnEdicion(null)
+  if (catalogoConfirmado) {
+    setCatalogoMaterialesGuardado(catalogoConfirmado)
+  }
   mostrarNotificacion('Precios de materiales guardados correctamente')
 }
 
@@ -4263,7 +4474,13 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     cargando={cargandoBalanceMateriales}
     filas={balanceMateriales}
     configMateriales={configBalanceMateriales}
-    materialesCatalogados={catalogoPreciosMaterialesCompleto.map((item) => item.material)}
+    materialesCatalogados={catalogoPreciosMaterialesCompleto.flatMap((item) => [
+      item.material,
+      item.materialOriginal,
+    ]).filter(Boolean)}
+    catalogoPrecios={catalogoPreciosMaterialesCompleto}
+    preciosMateriales={preciosMateriales}
+    preciosCompraMateriales={preciosCompraMateriales}
     formatearPrecio={formatearPrecioMaterial}
     onCambiarRango={(nuevoRango) => {
       setRangoBalanceMateriales(nuevoRango)
@@ -4314,6 +4531,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onCambiarEdicion={setPrecioMaterialEnEdicion}
     onRenombrarMaterial={renombrarMaterialCatalogoPrecios}
     onAgregarMaterial={agregarMaterialCatalogoPrecios}
+    onEliminarMaterial={eliminarMaterialCatalogoPrecios}
     onGuardar={guardarPreciosMateriales}
     onCerrar={() => setMostrarPreciosMateriales(false)}
     onClickFondo={cerrarPanelesFlotantes}

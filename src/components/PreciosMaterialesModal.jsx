@@ -14,6 +14,7 @@ function PreciosMaterialesModal({
   onCambiarEdicion,
   onRenombrarMaterial,
   onAgregarMaterial,
+  onEliminarMaterial,
   onGuardar,
   onCerrar,
   onClickFondo,
@@ -24,7 +25,7 @@ function PreciosMaterialesModal({
   const claveEdicion = (material, tipo) => `${tipo}::${material}`
   const estaEditando = (material, tipo) => precioEnEdicion === claveEdicion(material, tipo)
   const columnasPrecio = puedeEditar
-    ? (puedeVerCompra ? '56px minmax(190px, 340px) 112px 112px' : '56px minmax(190px, 340px) 112px')
+    ? (puedeVerCompra ? '56px minmax(190px, 340px) 96px 96px 30px' : '56px minmax(190px, 340px) 96px 30px')
     : '56px minmax(190px, 340px) 112px'
   const precioWrapStyle = {
     display: 'grid',
@@ -78,6 +79,23 @@ function PreciosMaterialesModal({
     setMaterialEnEdicion(null)
     setNombreMaterialEditado('')
   }
+  const ordenarMaterialesSeccion = (items) => items
+    .map((item, ordenOriginal) => ({ item, ordenOriginal }))
+    .sort((a, b) => {
+      const aManual = !a.item.idArt
+      const bManual = !b.item.idArt
+
+      if (aManual && bManual) {
+        return String(a.item.material || '').localeCompare(String(b.item.material || ''), 'es', {
+          numeric: true,
+          sensitivity: 'base',
+        })
+      }
+
+      if (aManual !== bManual) return aManual ? 1 : -1
+      return a.ordenOriginal - b.ordenOriginal
+    })
+    .map(({ item }) => item)
 
   return (
     <div
@@ -199,9 +217,10 @@ function PreciosMaterialesModal({
                   <span style={{ whiteSpace: 'nowrap' }}>Material</span>
                   <span style={{ paddingLeft: '20px', whiteSpace: 'nowrap' }}>Venta</span>
                   {puedeVerCompra && <span style={{ paddingLeft: '20px', whiteSpace: 'nowrap' }}>Compra</span>}
+                  {puedeEditar && <span aria-label="Eliminar" />}
                 </div>
-                {catalogo
-                  .filter((item) => item.seccion === seccion)
+                {ordenarMaterialesSeccion(catalogo
+                  .filter((item) => item.seccion === seccion))
                   .map((item) => (
                     <div
                       key={item.material}
@@ -215,7 +234,7 @@ function PreciosMaterialesModal({
                       }}
                     >
                       <strong style={{ color: '#bbb', fontSize: '13px' }}>
-                        {item.idArt}
+                        {item.idArtVisible || item.idArt}
                       </strong>
                       {materialEnEdicion === item.material ? (
                         <input
@@ -319,6 +338,34 @@ function PreciosMaterialesModal({
                             )}
                           </div>
                         </div>
+                      )}
+                      {puedeEditar && (
+                        <button
+                          type="button"
+                          onClick={() => onEliminarMaterial?.(item)}
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: '1px solid #777',
+                            borderRadius: '6px',
+                            background: '#1b1b1b',
+                            color: 'white',
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                          title={`Eliminar ${item.material}`}
+                          aria-label={`Eliminar ${item.material}`}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+                            <path
+                              fill="currentColor"
+                              d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 12H8L7 9Zm3 2v8h2v-8h-2Zm4 0v8h2v-8h-2Z"
+                            />
+                          </svg>
+                        </button>
                       )}
                     </div>
                   ))}
