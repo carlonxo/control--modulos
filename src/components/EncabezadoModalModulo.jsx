@@ -113,7 +113,7 @@ export default function EncabezadoModalModulo({
                     marginBottom: '6px',
                   }}
                 >
-                  Materiales 📜
+                  Materiales {'\u{1F4DC}'}
                 </button>
 
                 <button
@@ -134,7 +134,7 @@ export default function EncabezadoModalModulo({
                     marginBottom: puedeDejarObservacionAlerta ? '6px' : 0,
                   }}
                 >
-                  Llamar a prueba eléctrica ⚡
+                  Llamar a prueba eléctrica {'\u26A1'}
                 </button>
 
                 {puedeDejarObservacionAlerta && (
@@ -153,7 +153,7 @@ export default function EncabezadoModalModulo({
                       fontWeight: 700,
                     }}
                   >
-                    Dejar observación 📜
+                    Dejar observación {'\u{1F4DC}'}
                   </button>
                 )}
               </div>

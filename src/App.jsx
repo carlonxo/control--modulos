@@ -2737,7 +2737,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
               }}
             >
-              🔔
+              {'\u{1F514}'}
               {llamadosPendientes.length > 0 && (
                 <span
                   style={{
@@ -3267,7 +3267,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           }}
         >
           <span style={{ display: 'block' }}>Ver protocolo</span>
-          <span style={{ display: 'block', fontSize: '24px', marginTop: '4px' }}>📜</span>
+          <span style={{ display: 'block', fontSize: '24px', marginTop: '4px' }}>{'\u{1F4DC}'}</span>
         </button>
       )}
     </div>
@@ -3436,7 +3436,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                               lineHeight: 1,
                             }}
                           >
-                            🚨
+                            {'\u{1F6A8}'}
                           </span>
                         )}
 
@@ -3448,7 +3448,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                               lineHeight: 1,
                             }}
                           >
-                            📝
+                            {'\u{1F4DD}'}
                           </span>
                         )}
                       </span>
@@ -3650,7 +3650,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                               lineHeight: 1,
                             }}
                           >
-                            🚨
+                            {'\u{1F6A8}'}
                           </span>
                         )}
 
@@ -3662,7 +3662,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                               lineHeight: 1,
                             }}
                           >
-                            📝
+                            {'\u{1F4DD}'}
                           </span>
                         )}
                       </span>
@@ -3727,7 +3727,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             color: 'white',
           }}
         >
-          <h2 style={{ marginTop: 0 }}>⚡ PRUEBA ELÉCTRICA SOLICITADA</h2>
+          <h2 style={{ marginTop: 0 }}>{'\u26A1'} PRUEBA ELÉCTRICA SOLICITADA</h2>
           <p style={{ marginBottom: '8px' }}>
             <strong>Módulo:</strong> {moduloSeleccionado.serie}
           </p>

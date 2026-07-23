@@ -113,7 +113,7 @@ function DetalleCobroModal({
                         cursor: 'pointer',
                       }}
                     >
-                      
+                      {'\u270F\uFE0F'}
                     </button>
                   )}
                 </div>

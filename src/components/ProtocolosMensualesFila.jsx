@@ -63,7 +63,7 @@ function ProtocolosMensualesFila({
             fontSize: '24px',
           }}
         >
-          📜
+          {'\u{1F4DC}'}
         </button>
       </td>
       <td style={{ padding: '8px', border: '1px solid #444', fontWeight: 700 }}>
@@ -173,7 +173,7 @@ function ProtocolosMensualesFila({
               fontSize: '14px',
             }}
           >
-            {idOtEnEdicion === claveRegistro ? '' : ''}
+            {idOtEnEdicion === claveRegistro ? '\u2713' : '\u270F\uFE0F'}
           </button>
         </div>
       </td>

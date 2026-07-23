@@ -68,7 +68,7 @@ function ProtocolosMensualesToolbar({
           fontSize: '18px',
         }}
       >
-        <span>💰 ingresos</span>
+        <span>{'\u{1F4B0}'} ingresos</span>
         <span>{formatearPrecio(ingresos)}</span>
       </div>
 

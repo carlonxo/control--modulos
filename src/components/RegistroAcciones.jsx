@@ -33,7 +33,7 @@ export default function RegistroAcciones({
           boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
         }}
       >
-        =
+        {'\u{1F502}'}
       </button>
 
       {visible && (

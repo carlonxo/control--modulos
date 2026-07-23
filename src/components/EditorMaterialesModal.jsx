@@ -28,7 +28,7 @@ function EditorMaterialesModal({
         textAlign: 'left',
       }}
     >
-      <h2 style={{ marginTop: 0 }}>Materiales 📜  {modulo?.serie}</h2>
+      <h2 style={{ marginTop: 0 }}>Materiales {'\u{1F4DC}'}  -  {modulo?.serie}</h2>
 
       {cargandoMateriales ? (
         <p>Cargando...</p>
