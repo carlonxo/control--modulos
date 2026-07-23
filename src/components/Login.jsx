@@ -25,7 +25,7 @@ function Login({ supabase }) {
         margin: '100px auto',
       }}
     >
-      <h2>Iniciar sesiÃ³n</h2>
+      <h2>Iniciar sesión</h2>
 
       <input
         type="email"
@@ -36,7 +36,7 @@ function Login({ supabase }) {
 
       <input
         type="password"
-        placeholder="ContraseÃ±a"
+        placeholder="Contraseña"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />

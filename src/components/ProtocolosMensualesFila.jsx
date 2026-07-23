@@ -173,7 +173,7 @@ function ProtocolosMensualesFila({
               fontSize: '14px',
             }}
           >
-            {idOtEnEdicion === claveRegistro ? '✓' : '✏️'}
+            {idOtEnEdicion === claveRegistro ? '' : ''}
           </button>
         </div>
       </td>

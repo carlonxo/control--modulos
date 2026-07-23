@@ -61,7 +61,7 @@ function ReintegrarModuloModal({
             >
               <strong>{item.serie}</strong>
               <span style={{ display: 'block', color: '#ccc', fontSize: '12px', marginTop: '2px' }}>
-                {item.tipo} · Salida {formatearFecha(item.fecha_salida) || 'sin fecha'}
+                {item.tipo}  | Salida {formatearFecha(item.fecha_salida) || 'sin fecha'}
               </span>
             </button>
           ))

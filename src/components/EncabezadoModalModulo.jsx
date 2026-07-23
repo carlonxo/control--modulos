@@ -113,7 +113,7 @@ export default function EncabezadoModalModulo({
                     marginBottom: '6px',
                   }}
                 >
-                  Materiales 📝
+                  Materiales 📜
                 </button>
 
                 <button
@@ -153,7 +153,7 @@ export default function EncabezadoModalModulo({
                       fontWeight: 700,
                     }}
                   >
-                    Dejar observación 🚨
+                    Dejar observación 📜
                   </button>
                 )}
               </div>

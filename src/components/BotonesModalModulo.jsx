@@ -46,7 +46,7 @@ function BotonesModalModulo({
               cursor: 'not-allowed',
             }}
           >
-            ✓ Prueba eléctrica aprobada
+            ⚡ Prueba eléctrica aprobada
           </button>
         ) : esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba) ? (
           <button
@@ -59,7 +59,7 @@ function BotonesModalModulo({
               cursor: 'pointer',
             }}
           >
-            <span style={{ display: 'block' }}>🟡 Esperando aprobación</span>
+            <span style={{ display: 'block' }}>📜 Esperando aprobación</span>
             <small style={{ display: 'block', marginTop: '3px' }}>
               (presione para cancelar)
             </small>

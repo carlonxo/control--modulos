@@ -27,7 +27,7 @@ function ResumenMaterialesModal({
         textAlign: 'left',
       }}
     >
-      <h2 style={{ marginTop: 0 }}>Materiales — {modulo?.serie}</h2>
+      <h2 style={{ marginTop: 0 }}>Materiales  {modulo?.serie}</h2>
 
       {cargandoMateriales ? (
         <p>Cargando...</p>
@@ -63,8 +63,8 @@ function ResumenMaterialesModal({
               }}
             >
               <span>{material}</span>
-              <strong style={{ textAlign: 'center' }}>{nuevo || '—'}</strong>
-              <strong style={{ textAlign: 'center' }}>{reutilizado || '—'}</strong>
+              <strong style={{ textAlign: 'center' }}>{nuevo || ''}</strong>
+              <strong style={{ textAlign: 'center' }}>{reutilizado || ''}</strong>
             </div>
           ))}
         </div>

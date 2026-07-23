@@ -1,10 +1,10 @@
 export function nombreTipoAccionModulo(tipo) {
   if (tipo === 'ingreso') return 'Ingreso'
-  if (tipo === 'finalizacion') return 'FinalizaciÃ³n'
+  if (tipo === 'finalizacion') return 'Finalización'
   if (tipo === 'cambio_estado') return 'Cambio estado'
-  if (tipo === 'aprobacion_prueba_electrica') return 'AprobaciÃ³n prueba elÃ©ctrica'
-  if (tipo === 'rechazo_prueba_electrica') return 'Rechazo prueba elÃ©ctrica'
-  return tipo || 'AcciÃ³n'
+  if (tipo === 'aprobacion_prueba_electrica') return 'Aprobación prueba eléctrica'
+  if (tipo === 'rechazo_prueba_electrica') return 'Rechazo prueba eléctrica'
+  return tipo || 'Acción'
 }
 
 export async function deshacerAccionModuloSupabase({ supabase, accion }) {
@@ -33,7 +33,7 @@ export async function deshacerAccionModuloSupabase({ supabase, accion }) {
       .eq('id', anterior.id || accion.modulo_id)
 
     if (error) {
-      return { ok: false, mensaje: 'No se pudo deshacer la acciÃ³n: ' + error.message }
+      return { ok: false, mensaje: 'No se pudo deshacer la acción: ' + error.message }
     }
   } else if (accion.tipo === 'rechazo_prueba_electrica') {
     const anterior = accion.datos_antes || {}
@@ -64,7 +64,7 @@ export async function deshacerAccionModuloSupabase({ supabase, accion }) {
     if (errorInsert) {
       return {
         ok: false,
-        mensaje: 'No se pudo restaurar el mÃ³dulo. Es posible que la posiciÃ³n ya estÃ© ocupada: ' + errorInsert.message,
+        mensaje: 'No se pudo restaurar el módulo. Es posible que la posición ya está ocupada: ' + errorInsert.message,
       }
     }
 
@@ -77,7 +77,7 @@ export async function deshacerAccionModuloSupabase({ supabase, accion }) {
       if (errorDelete) {
         return {
           ok: false,
-          mensaje: 'MÃ³dulo restaurado, pero no se pudo eliminar del historial: ' + errorDelete.message,
+          mensaje: 'Módulo restaurado, pero no se pudo eliminar del historial: ' + errorDelete.message,
         }
       }
     }

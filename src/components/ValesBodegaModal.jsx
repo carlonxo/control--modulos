@@ -105,7 +105,7 @@ function ValesBodegaModal({
               return (
                 <details key={vale.id} style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}>
                   <summary style={{ padding: '9px 10px', background: '#333', cursor: 'pointer', fontWeight: 800 }}>
-                    {vale.archivo_nombre || 'Vale sin archivo'} · {vale.items?.length || 0} materiales · total {totalItems}
+                    {vale.archivo_nombre || 'Vale sin archivo'}  | {vale.items?.length || 0} materiales  | total {totalItems}
                   </summary>
                   <div style={{ padding: '8px 10px', display: 'grid', gap: '5px' }}>
                     {(vale.items || []).map((item) => (

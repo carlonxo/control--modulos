@@ -11,7 +11,7 @@ export function normalizarTexto(valor) {
 }
 
 export function esEstadoPruebaElectrica(estado) {
-  return ['prueba elÃ©ctrica', 'prueba electrica'].includes(
+  return ['prueba eléctrica', 'prueba electrica'].includes(
     String(estado || '').trim().toLowerCase()
   )
 }

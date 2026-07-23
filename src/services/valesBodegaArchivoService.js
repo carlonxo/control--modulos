@@ -297,7 +297,7 @@ function esDescripcionMaterialVale(valor) {
   if (!texto || texto.length < 4) return false
   if (normalizarCantidadVale(textoOriginal)) return false
   if (esUnidadVale(textoOriginal) || esCeldaEncabezadoVale(textoOriginal)) return false
-  if (!/[a-záéíóúñ]/i.test(textoOriginal)) return false
+  if (!/[a-z??????]/i.test(textoOriginal)) return false
   if (/^\d+[\w.-]*$/.test(textoOriginal)) return false
   if (/^(fecha|solicitante|responsable|bodega|obra|ot|vale|numero|nro|rut|firma|subtotal|neto|iva|total)\b/i.test(textoOriginal)) return false
   if (/\$/.test(textoOriginal)) return false
@@ -362,15 +362,9 @@ function puntuarCeldaMaterialVale(valor) {
 
 function normalizarTextoComparacionLocal(valor) {
   return String(valor || '')
-    .replace(/Ã¡/gi, 'a')
-    .replace(/Ã©/gi, 'e')
-    .replace(/Ã­/gi, 'i')
-    .replace(/Ã³/gi, 'o')
-    .replace(/Ãº/gi, 'u')
-    .replace(/Ã±/gi, 'n')
-    .replace(/Â/g, '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/?/g, '')
     .replace(/[^a-z0-9]+/g, '')
 }

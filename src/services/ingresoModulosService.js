@@ -16,7 +16,7 @@ export async function prepararLineaParaIngresoModulo({ supabase, linea, extremo 
     .eq('linea', linea)
 
   if (error) {
-    throw new Error('No se pudo preparar la lÃ­nea: ' + error.message)
+    throw new Error('No se pudo preparar la línea: ' + error.message)
   }
 
   const modulosLinea = (registros || [])
@@ -24,7 +24,7 @@ export async function prepararLineaParaIngresoModulo({ supabase, linea, extremo 
     .sort((a, b) => Number(a.posicion) - Number(b.posicion))
 
   if (modulosLinea.length >= 9) {
-    throw new Error(`La lÃ­nea ${linea} ya estÃ¡ completa`)
+    throw new Error(`La línea ${linea} ya está completa`)
   }
 
   const posicionTemporalBase = 1000 + Math.floor(Math.random() * 100000)

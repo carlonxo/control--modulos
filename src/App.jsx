@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from './services/supabase'
 import { exportarHistorialExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
@@ -167,16 +167,16 @@ import {
 
 const seccionesFormularioElectrico = [
   {
-    nombre: 'CanalizaciÃ³n',
-    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metÃ¡lica 100x100x65', 'Caja tabique LH', 'Tapa ciega - Pasac.'],
+    nombre: 'Canalización',
+    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metálica 100x100x65', 'Caja tabique LH', 'Tapa ciega - Pasac.'],
   },
   {
     nombre: 'Cableado',
     items: ['Cable RZ1 2,5mm', 'Cable RZ1 4mm', 'Cable RZ1 6mm', 'Cordon 3x1.5mm', 'Cordon 3x4mm', 'Cordon 3 x 6mm'],
   },
   {
-    nombre: 'IluminaciÃ³n',
-    items: ['EQ. Herm. LED 40W (tubo/placa)', 'Tubo LED', 'Foco tortuga LED', 'Foco tortuga 60W', 'Ampolleta LED', 'PlafÃ³n'],
+    nombre: 'Iluminación',
+    items: ['EQ. Herm. LED 40W (tubo/placa)', 'Tubo LED', 'Foco tortuga LED', 'Foco tortuga 60W', 'Ampolleta LED', 'Plafón'],
   },
   {
     nombre: 'Artefactos',
@@ -184,7 +184,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Tableros',
-    items: ['Aut. monof. 10-16-20A', 'Aut. bifÃ¡sico 2x10A', 'Aut. bifÃ¡sico 2x16A', 'Aut. bifÃ¡sico 2x20A', 'Aut. bifÃ¡sico 2x25A', 'Diferencial 2x25A', 'Luz Piloto', 'Porta Fusible', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
+    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Aut. bifásico 2x25A', 'Diferencial 2x25A', 'Luz Piloto', 'Porta Fusible', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
   },
   {
     nombre: 'Especiales',
@@ -195,25 +195,25 @@ const seccionesFormularioElectrico = [
 const todosLosMateriales = seccionesFormularioElectrico.flatMap((seccion) => seccion.items)
 
 const catalogoPreciosProtocolo = [
-  { seccion: 'CanalizaciÃ³n', material: 'Ducto Flex/Rig 20mm LH (Incl Acc)', idArt: 323, precio: 1932 },
-  { seccion: 'CanalizaciÃ³n', material: 'Ducto Flex/Rig 25mm LH (Incl Acc)', idArt: 1681, precio: 2782 },
-  { seccion: 'CanalizaciÃ³n', material: 'Caja PVC 100x100x65', idArt: 244, precio: 2377 },
-  { seccion: 'CanalizaciÃ³n', material: 'Caja MetÃ¡lica 100x65x65 / Chuqui', idArt: 322, precio: 2378 },
-  { seccion: 'CanalizaciÃ³n', material: 'Caja MetÃ¡lica 100x100x65', idArt: 1704, precio: 3120 },
-  { seccion: 'CanalizaciÃ³n', material: 'Caja Tabique 3 Puestos LH', idArt: 1680, precio: 1900 },
-  { seccion: 'CanalizaciÃ³n', material: 'Tapa Ciega - PlÃ¡stica / MetÃ¡lica', idArt: 1684, precio: 480 },
-  { seccion: 'CanalizaciÃ³n', material: 'Prensa Estopa 16-21mm', idArt: 1683, precio: 1458 },
+  { seccion: 'Canalización', material: 'Ducto Flex/Rig 20mm LH (Incl Acc)', idArt: 323, precio: 1932 },
+  { seccion: 'Canalización', material: 'Ducto Flex/Rig 25mm LH (Incl Acc)', idArt: 1681, precio: 2782 },
+  { seccion: 'Canalización', material: 'Caja PVC 100x100x65', idArt: 244, precio: 2377 },
+  { seccion: 'Canalización', material: 'Caja Metálica 100x65x65 / Chuqui', idArt: 322, precio: 2378 },
+  { seccion: 'Canalización', material: 'Caja Metálica 100x100x65', idArt: 1704, precio: 3120 },
+  { seccion: 'Canalización', material: 'Caja Tabique 3 Puestos LH', idArt: 1680, precio: 1900 },
+  { seccion: 'Canalización', material: 'Tapa Ciega - Plástica / Metálica', idArt: 1684, precio: 480 },
+  { seccion: 'Canalización', material: 'Prensa Estopa 16-21mm', idArt: 1683, precio: 1458 },
   { seccion: 'Cableado', material: 'Cable RZ1 2,5mm (Alum + Ench)', idArt: 248, precio: 353 },
   { seccion: 'Cableado', material: 'Cable RZ1 4mm (Termo)', idArt: 249, precio: 493 },
-  { seccion: 'Cableado', material: 'Cable RZ1 6mm (AlimentaciÃ³n)', idArt: 1687, precio: 710 },
+  { seccion: 'Cableado', material: 'Cable RZ1 6mm (Alimentación)', idArt: 1687, precio: 710 },
   { seccion: 'Cableado', material: 'Cable RZ1 3x2.5 / 4mm (Ilu-Term)', idArt: 252, precio: 2872 },
-  { seccion: 'Cableado', material: 'Cable RZ1 3x6mm (AlimentaciÃ³n)', idArt: 1685, precio: 3460 },
-  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Ampolleta LED', idArt: 254, precio: 3180 },
-  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Foco Led 12W Sob', idArt: 259, precio: 6702 },
-  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Tubo Led', idArt: 255, precio: 3180 },
-  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Eq. Herm. Led 40w (Tubo/Placa)', idArt: 256, precio: 18559 },
-  { seccion: 'IluminaciÃ³n bÃ¡sica', material: 'Foco Tortuga Led', idArt: 258, precio: 7733 },
-  { seccion: 'Accesorios', material: 'InstalaciÃ³n Extractor', idArt: 273, precio: 3500 },
+  { seccion: 'Cableado', material: 'Cable RZ1 3x6mm (Alimentación)', idArt: 1685, precio: 3460 },
+  { seccion: 'Iluminación básica', material: 'Ampolleta LED', idArt: 254, precio: 3180 },
+  { seccion: 'Iluminación básica', material: 'Foco Led 12W Sob', idArt: 259, precio: 6702 },
+  { seccion: 'Iluminación básica', material: 'Tubo Led', idArt: 255, precio: 3180 },
+  { seccion: 'Iluminación básica', material: 'Eq. Herm. Led 40w (Tubo/Placa)', idArt: 256, precio: 18559 },
+  { seccion: 'Iluminación básica', material: 'Foco Tortuga Led', idArt: 258, precio: 7733 },
+  { seccion: 'Accesorios', material: 'Instalación Extractor', idArt: 273, precio: 3500 },
   { seccion: 'Artefactos tableros', material: 'Artefacto Simple', idArt: 263, precio: 1856 },
   { seccion: 'Artefactos tableros', material: 'Artefacto Doble', idArt: 264, precio: 2578 },
   { seccion: 'Artefactos tableros', material: 'Artefacto Triple', idArt: 265, precio: 3299 },
@@ -225,33 +225,33 @@ const catalogoPreciosProtocolo = [
   { seccion: 'Tableros', material: 'Tablero PVC IP65', idArt: 1701, precio: 56279 },
   { seccion: 'Tableros', material: 'Inst Tab. TOP (Armado)', idArt: 17, precio: 70000 },
   { seccion: 'Tableros', material: 'Aut. Monof 10-16-20A', idArt: 268, precio: 2578 },
-  { seccion: 'Tableros', material: 'Auto. BifÃ¡sico 2x10A', idArt: 1705, precio: 6740 },
-  { seccion: 'Tableros', material: 'Auto. BifÃ¡sico 2x16A', idArt: 1706, precio: 6950 },
-  { seccion: 'Tableros', material: 'Auto. BifÃ¡sico 2x20A', idArt: 1707, precio: 7308 },
-  { seccion: 'Tableros', material: 'Auto. BifÃ¡sico 2x25-32A', idArt: 1708, precio: 8450 },
+  { seccion: 'Tableros', material: 'Auto. Bifásico 2x10A', idArt: 1705, precio: 6740 },
+  { seccion: 'Tableros', material: 'Auto. Bifásico 2x16A', idArt: 1706, precio: 6950 },
+  { seccion: 'Tableros', material: 'Auto. Bifásico 2x20A', idArt: 1707, precio: 7308 },
+  { seccion: 'Tableros', material: 'Auto. Bifásico 2x25-32A', idArt: 1708, precio: 8450 },
   { seccion: 'Tableros', material: 'Diferencial 2x25A', idArt: 269, precio: 8673 },
   { seccion: 'Tableros', material: 'Diferencial 2x40A', idArt: 1709, precio: 13520 },
   { seccion: 'Tableros', material: 'Porta Fusibles', idArt: 1698, precio: 1850 },
   { seccion: 'Tableros', material: 'Luz Piloto', idArt: 1697, precio: 2100 },
-  { seccion: 'Tableros', material: 'Barra MonofÃ¡sica 4cto', idArt: 271, precio: 1577 },
+  { seccion: 'Tableros', material: 'Barra Monofásica 4cto', idArt: 271, precio: 1577 },
   { seccion: 'Tableros', material: 'Repartidor 4x80A', idArt: 1699, precio: 4200 },
   { seccion: 'Tableros', material: 'Falso Polo 1Mts', idArt: 272, precio: 1237 },
-  { seccion: 'Moldura plÃ¡stica', material: 'Mold Bca C/T 20x10 x 2mt + Acces', idArt: 325, precio: 2000 },
-  { seccion: 'Bandeja plÃ¡stica', material: 'BPC LH 100x45 + Acces', idArt: 1694, precio: 25200 },
-  { seccion: 'Bandeja plÃ¡stica', material: 'Tapa Idrobox IP55', idArt: 1692, precio: 11033 },
-  { seccion: 'Eq. iluminaciÃ³n', material: 'Foco Sobrep LED 18W', idArt: 1712, precio: 8940 },
-  { seccion: 'Eq. iluminaciÃ³n', material: 'Panel Led 600x600mm', idArt: 1690, precio: 1690 },
-  { seccion: 'Eq. iluminaciÃ³n', material: 'Accesorio Mtaje Panel Led', idArt: 1688, precio: 15200 },
-  { seccion: 'Eq. iluminaciÃ³n', material: 'Foco Sobrep LED 24W', idArt: 1713, precio: 14320 },
-  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Tub Flexible MetÃ¡lica c/acces', idArt: 1711, precio: 3390 },
-  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'TuberÃ­a EMT c/accesorio', idArt: 1710, precio: 3900 },
-  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Ducto Flex/Rig 32mm LH (Incl Acc)', idArt: 1682, precio: 3744 },
-  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Caja Chuqui PVC', idArt: 324, precio: 1200 },
-  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Int. Difer. Legrand 2x10A 10mA', idArt: 1695, precio: 102500 },
-  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Int. Difer. Legrand 2x16A 10mA', idArt: 1696, precio: 24200 },
-  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'CordÃ³n Flex 3x18 AWG', idArt: 250, precio: 919 },
-  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Cable RZ-1 3x1.5mm2', idArt: 251, precio: 1658 },
-  { seccion: 'CanalizaciÃ³n-Cableado-SPT', material: 'Cable RZ-1 5x4mm2', idArt: 1686, precio: 4620 },
+  { seccion: 'Moldura plástica', material: 'Mold Bca C/T 20x10 x 2mt + Acces', idArt: 325, precio: 2000 },
+  { seccion: 'Bandeja plástica', material: 'BPC LH 100x45 + Acces', idArt: 1694, precio: 25200 },
+  { seccion: 'Bandeja plástica', material: 'Tapa Idrobox IP55', idArt: 1692, precio: 11033 },
+  { seccion: 'Eq. iluminación', material: 'Foco Sobrep LED 18W', idArt: 1712, precio: 8940 },
+  { seccion: 'Eq. iluminación', material: 'Panel Led 600x600mm', idArt: 1690, precio: 1690 },
+  { seccion: 'Eq. iluminación', material: 'Accesorio Mtaje Panel Led', idArt: 1688, precio: 15200 },
+  { seccion: 'Eq. iluminación', material: 'Foco Sobrep LED 24W', idArt: 1713, precio: 14320 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Tub Flexible Metálica c/acces', idArt: 1711, precio: 3390 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Tubería EMT c/accesorio', idArt: 1710, precio: 3900 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Ducto Flex/Rig 32mm LH (Incl Acc)', idArt: 1682, precio: 3744 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Caja Chuqui PVC', idArt: 324, precio: 1200 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Int. Difer. Legrand 2x10A 10mA', idArt: 1695, precio: 102500 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Int. Difer. Legrand 2x16A 10mA', idArt: 1696, precio: 24200 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Cordón Flex 3x18 AWG', idArt: 250, precio: 919 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Cable RZ-1 3x1.5mm2', idArt: 251, precio: 1658 },
+  { seccion: 'Canalización-Cableado-SPT', material: 'Cable RZ-1 5x4mm2', idArt: 1686, precio: 4620 },
   { seccion: 'SPT', material: 'Barra Coperw 5/8 Inc. Con', idArt: 1702, precio: 12540 },
   { seccion: 'SPT', material: 'Camarilla Registro PVC', idArt: 1703, precio: 5600 },
 ]
@@ -272,38 +272,26 @@ const encabezadosProtocolosMensuales = [
 
 function normalizarTextoComparacion(valor) {
   return String(valor || '')
-    .replace(/ÃƒÂ¡/gi, 'a')
-    .replace(/ÃƒÂ©/gi, 'e')
-    .replace(/ÃƒÂ­/gi, 'i')
-    .replace(/ÃƒÂ³/gi, 'o')
-    .replace(/ÃƒÂº/gi, 'u')
-    .replace(/ÃƒÂ±/gi, 'n')
-    .replace(/ÃƒÂ¡/gi, 'a')
-    .replace(/ÃƒÂ©/gi, 'e')
-    .replace(/ÃƒÂ­/gi, 'i')
-    .replace(/ÃƒÂ³/gi, 'o')
-    .replace(/ÃƒÂº/gi, 'u')
-    .replace(/ÃƒÂ±/gi, 'n')
-    .replace(/Ã‚/g, '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/?/g, '')
     .replace(/[^a-z0-9]+/g, '')
 }
 
 const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Conduit 20mm')]: 'Ducto Flex/Rig 20mm LH (Incl Acc)',
   [normalizarTextoComparacion('Conduit 25mm')]: 'Ducto Flex/Rig 25mm LH (Incl Acc)',
-  [normalizarTextoComparacion('Caja metÃ¡lica 100x100x65')]: 'Caja MetÃ¡lica 100x100x65',
+  [normalizarTextoComparacion('Caja metálica 100x100x65')]: 'Caja Metálica 100x100x65',
   [normalizarTextoComparacion('Caja tabique LH')]: 'Caja Tabique 3 Puestos LH',
-  [normalizarTextoComparacion('Tapa ciega - Pasac.')]: 'Tapa Ciega - PlÃ¡stica / MetÃ¡lica',
+  [normalizarTextoComparacion('Tapa ciega - Pasac.')]: 'Tapa Ciega - Plástica / Metálica',
   [normalizarTextoComparacion('Cable RZ1 2,5mm')]: 'Cable RZ1 2,5mm (Alum + Ench)',
   [normalizarTextoComparacion('Cable RZ1 4mm')]: 'Cable RZ1 4mm (Termo)',
-  [normalizarTextoComparacion('Cable RZ1 6mm')]: 'Cable RZ1 6mm (AlimentaciÃ³n)',
+  [normalizarTextoComparacion('Cable RZ1 6mm')]: 'Cable RZ1 6mm (Alimentación)',
   [normalizarTextoComparacion('Cordon flex 3 x 2.5/4mm')]: 'Cable RZ1 3x2.5 / 4mm (Ilu-Term)',
-  [normalizarTextoComparacion('Cordon flex 3 x 6mm')]: 'Cable RZ1 3x6mm (AlimentaciÃ³n)',
-  [normalizarTextoComparacion('PlafÃ³n')]: 'Foco Led 12W Sob',
-  [normalizarTextoComparacion('Extractor')]: 'InstalaciÃ³n Extractor',
+  [normalizarTextoComparacion('Cordon flex 3 x 6mm')]: 'Cable RZ1 3x6mm (Alimentación)',
+  [normalizarTextoComparacion('Plafón')]: 'Foco Led 12W Sob',
+  [normalizarTextoComparacion('Extractor')]: 'Instalación Extractor',
   [normalizarTextoComparacion('Conduit 32mm')]: 'Ducto Flex/Rig 32mm LH (Incl Acc)',
   [normalizarTextoComparacion('Artefacto simple')]: 'Artefacto Simple',
   [normalizarTextoComparacion('Artefacto doble')]: 'Artefacto Doble',
@@ -314,10 +302,10 @@ const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Tablero IP65')]: 'Tablero PVC IP65',
   [normalizarTextoComparacion('Tablero armado')]: 'Inst Tab. TOP (Armado)',
   [normalizarTextoComparacion('Aut. monof. 10-16-20A')]: 'Aut. Monof 10-16-20A',
-  [normalizarTextoComparacion('Aut. bifÃ¡sico 2x10A')]: 'Auto. BifÃ¡sico 2x10A',
-  [normalizarTextoComparacion('Aut. bifÃ¡sico 2x16A')]: 'Auto. BifÃ¡sico 2x16A',
-  [normalizarTextoComparacion('Aut. bifÃ¡sico 2x20A')]: 'Auto. BifÃ¡sico 2x20A',
-  [normalizarTextoComparacion('Aut. bifÃ¡sico 2x25A')]: 'Auto. BifÃ¡sico 2x25-32A',
+  [normalizarTextoComparacion('Aut. bifásico 2x10A')]: 'Auto. Bifásico 2x10A',
+  [normalizarTextoComparacion('Aut. bifásico 2x16A')]: 'Auto. Bifásico 2x16A',
+  [normalizarTextoComparacion('Aut. bifásico 2x20A')]: 'Auto. Bifásico 2x20A',
+  [normalizarTextoComparacion('Aut. bifásico 2x25A')]: 'Auto. Bifásico 2x25-32A',
   [normalizarTextoComparacion('Porta Fusible')]: 'Porta Fusibles',
   [normalizarTextoComparacion('Repartidor 4x80A')]: 'Repartidor 4x80A',
   [normalizarTextoComparacion('Barra repartidora')]: 'Repartidor 4x80A',
@@ -353,10 +341,10 @@ const equivalenciasValeBodega = {
   [normalizarTextoComparacion('TORNILLO AUTOPERFORANTE 8*3')]: 'TORNILLO AUTOPERFORANTE 8*3',
   [normalizarTextoComparacion('TDA EMBUTIDO 24 MODULOS ARMAI')]: 'Tablero armado',
   [normalizarTextoComparacion('AUTOM. * 10A LEXO / LEGRAND /STECK')]: 'Aut. Monof 10-16-20A',
-  [normalizarTextoComparacion('AUTOM. * 16A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. BifÃ¡sico 2x16A',
-  [normalizarTextoComparacion('AUTOM. * 20A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. BifÃ¡sico 2x20A',
-  [normalizarTextoComparacion('AUTOM. * 25A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. BifÃ¡sico 2x25-32A',
-  [normalizarTextoComparacion('AUTOM. * 32A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. BifÃ¡sico 2x25-32A',
+  [normalizarTextoComparacion('AUTOM. * 16A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x16A',
+  [normalizarTextoComparacion('AUTOM. * 20A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x20A',
+  [normalizarTextoComparacion('AUTOM. * 25A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x25-32A',
+  [normalizarTextoComparacion('AUTOM. * 32A 10KA LEXO / LEGRAND / BTICINO')]: 'Auto. Bifásico 2x25-32A',
   [normalizarTextoComparacion('DIFERENCIAL 2 * 25A 30MA LEXO / LEGRAND / BTICINO')]: 'Diferencial 2x25A',
   [normalizarTextoComparacion('LUZ PILOTO')]: 'Luz Piloto',
   [normalizarTextoComparacion('PORTA FUSIBLE CON FUSIBLE')]: 'Porta Fusibles',
@@ -572,7 +560,7 @@ async function registrarAccionModulo({ tipo, modulo = {}, datosAntes = null, dat
   if (error) {
     console.error(error)
     if (!error.message?.includes('registro_acciones_modulos')) {
-      mostrarNotificacion('La acciÃ³n se realizÃ³, pero no se pudo guardar en el registro: ' + error.message)
+      mostrarNotificacion('La acción se realizó, pero no se pudo guardar en el registro: ' + error.message)
     }
   }
 }
@@ -584,7 +572,7 @@ async function marcarAccionDeshecha(accion) {
   )
 
   if (error) {
-    mostrarNotificacion('La acciÃ³n se deshizo, pero no se pudo marcar en el registro: ' + error.message)
+    mostrarNotificacion('La acción se deshizo, pero no se pudo marcar en el registro: ' + error.message)
     return
   }
 
@@ -594,7 +582,7 @@ async function marcarAccionDeshecha(accion) {
 async function deshacerAccionModulo(accion) {
   if (perfil?.rol !== 'admin' || !accion || accion.deshecho) return
 
-  const confirmado = window.confirm(`Â¿Deshacer ${nombreTipoAccion(accion.tipo).toLowerCase()} de la serie ${accion.serie || ''}?`)
+  const confirmado = window.confirm(`¿Deshacer ${nombreTipoAccion(accion.tipo).toLowerCase()} de la serie ${accion.serie || ''}?`)
   if (!confirmado) return
 
   const resultado = await deshacerAccionModuloSupabase({
@@ -603,14 +591,14 @@ async function deshacerAccionModulo(accion) {
   })
 
   if (!resultado.ok) {
-    mostrarNotificacion(resultado.mensaje || 'No se pudo deshacer la acciÃ³n')
+    mostrarNotificacion(resultado.mensaje || 'No se pudo deshacer la acción')
     return
   }
 
   await marcarAccionDeshecha(accion)
   await cargarTablero()
   await cargarHistorial()
-  mostrarNotificacion('AcciÃ³n deshecha correctamente')
+  mostrarNotificacion('Acción deshecha correctamente')
 }
 
 function detenerAutoScrollArrastre() {
@@ -673,7 +661,7 @@ function hayMaterialesPendientes(moduloId = moduloSeleccionado?.id) {
 
 function cerrarEditorMateriales({ forzar = false } = {}) {
   if (!forzar && hayMaterialesPendientes()) {
-    const confirmar = window.confirm('Hay cambios de materiales sin guardar. Â¿Cerrar de todas formas?')
+    const confirmar = window.confirm('Hay cambios de materiales sin guardar. ¿Cerrar de todas formas?')
     if (!confirmar) return
   }
   if (moduloSeleccionado?.id) {
@@ -899,7 +887,7 @@ async function crearModulo() {
   if (creandoModulo) return
 
   if (!puedeAgregarModulos) {
-    mostrarNotificacion('No tienes permisos para agregar mÃ³dulos')
+    mostrarNotificacion('No tienes permisos para agregar módulos')
     setMostrarNuevoModulo(false)
     return
   }
@@ -956,13 +944,13 @@ async function crearModulo() {
     modulo: moduloCreado || { serie: serieNueva, linea: lineaIngreso },
     datosAntes: null,
     datosDespues: moduloCreado,
-    descripcion: `IngresÃ³ mÃ³dulo en lÃ­nea ${lineaIngreso}`,
+    descripcion: `Ingresó módulo en línea ${lineaIngreso}`,
   })
 
   setMostrarNuevoModulo(false)
   setCreandoModulo(false)
 
-  alert('MÃ³dulo creado correctamente')
+  alert('Módulo creado correctamente')
 }
 
 function abrirIngresoModuloEnExtremo(linea, extremo) {
@@ -971,7 +959,7 @@ function abrirIngresoModuloEnExtremo(linea, extremo) {
 
   const cantidadModulos = datos.filter((x) => Number(x.linea) === Number(linea) && x.serie).length
   if (cantidadModulos >= 9) {
-    mostrarNotificacion(`La lÃ­nea ${linea} ya estÃ¡ completa`)
+    mostrarNotificacion(`La línea ${linea} ya está completa`)
     return
   }
 
@@ -1083,7 +1071,7 @@ async function guardarAjusteValorizacionProtocolo() {
 
   const motivo = ajusteCobroMensual.motivo.trim()
   if (!motivo) {
-    mostrarNotificacion('Debe ingresar el motivo de la modificaciÃ³n')
+    mostrarNotificacion('Debe ingresar el motivo de la modificación')
     return
   }
 
@@ -1104,7 +1092,7 @@ async function guardarAjusteValorizacionProtocolo() {
   })
 
   if (error) {
-    mostrarNotificacion(mensaje || ('No se pudo guardar el ajuste de valorizaciÃ³n: ' + error.message))
+    mostrarNotificacion(mensaje || ('No se pudo guardar el ajuste de valorización: ' + error.message))
     return
   }
 
@@ -1133,7 +1121,7 @@ async function guardarAjusteValorizacionProtocolo() {
         : actualizado.valorTotal,
   } : actual)
   setAjusteCobroMensual({ itemKey: '', itemLabel: '', tipoCobro: '', valor: '', motivo: '' })
-  mostrarNotificacion('Ajuste de valorizaciÃ³n guardado')
+  mostrarNotificacion('Ajuste de valorización guardado')
 }
 
 async function obtenerRegistrosProtocolosPorRango(valor, rango) {
@@ -1308,7 +1296,7 @@ async function cargarValesBodegaDia(fecha = fechaValeBodega) {
 
   if (error) {
     if (!error.message?.includes('vales_bodega')) {
-      mostrarNotificacion('No se pudieron cargar los vales del dÃ­a: ' + error.message)
+      mostrarNotificacion('No se pudieron cargar los vales del día: ' + error.message)
     }
     setValesBodegaDia(vales)
     return
@@ -1346,7 +1334,7 @@ async function leerValeBodega() {
     })
   } catch (error) {
     console.error(error)
-    mostrarNotificacion(error.message || 'No se pudo leer el archivo automÃ¡ticamente. Puedes ingresar los materiales manualmente.')
+    mostrarNotificacion(error.message || 'No se pudo leer el archivo automáticamente. Puedes ingresar los materiales manualmente.')
   } finally {
     setLeyendoValeBodega(false)
   }
@@ -1366,7 +1354,7 @@ async function guardarValeBodega() {
   const items = prepararItemsValeBodega(filasValeBodega)
 
   if (items.length === 0) {
-    mostrarNotificacion('No hay materiales vÃ¡lidos para guardar')
+    mostrarNotificacion('No hay materiales válidos para guardar')
     return
   }
 
@@ -1475,7 +1463,7 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
   const idOtConfirmado = String(registroGuardado.id_ot ?? registroGuardado.protocolo_entrega?.id_ot ?? registroGuardado.protocolo_entrega?.idOt ?? '').trim()
 
   if (idOtConfirmado !== valorIdOt) {
-    mostrarNotificacion(`Supabase no confirmÃ³ el ID OT en ${tablaDestino}. Valor recibido: ${idOtConfirmado || 'vacÃ­o'}`)
+    mostrarNotificacion(`Supabase no confirmó el ID OT en ${tablaDestino}. Valor recibido: ${idOtConfirmado || 'vacío'}`)
     return
   }
 
@@ -1564,7 +1552,7 @@ async function eliminarProtocoloMensual(registro) {
 
   if (registro.origen === 'actual') {
     const confirmadoActual = window.confirm(
-      `Â¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}? El mÃ³dulo seguirÃ¡ activo en el tablero.`
+      `¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}? El módulo seguirá activo en el tablero.`
     )
 
     if (!confirmadoActual) return
@@ -1582,12 +1570,12 @@ async function eliminarProtocoloMensual(registro) {
     setProtocolosMensuales((actuales) => actuales.filter((item) => !(
       item.origen === registro.origen && item.id === registro.id
     )))
-    mostrarNotificacion('Protocolo eliminado. El mÃ³dulo sigue activo.')
+    mostrarNotificacion('Protocolo eliminado. El módulo sigue activo.')
     return
   }
 
   const confirmado = window.confirm(
-    `Â¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}?`
+    `¿Eliminar el protocolo de la serie ${registro.serie || ''} con fecha ${formatearFecha(registro.fecha_prueba_electrica) || ''}?`
   )
 
   if (!confirmado) return
@@ -1685,7 +1673,7 @@ async function reintegrarModuloFinalizado() {
       })
 
       if (error) {
-        mostrarNotificacion('No se pudo buscar el mÃ³dulo: ' + error.message)
+        mostrarNotificacion('No se pudo buscar el módulo: ' + error.message)
         return
       }
 
@@ -1693,7 +1681,7 @@ async function reintegrarModuloFinalizado() {
     }
 
     if (!moduloHistorial) {
-      mostrarNotificacion('No se encontrÃ³ un mÃ³dulo finalizado con esa serie')
+      mostrarNotificacion('No se encontró un módulo finalizado con esa serie')
       return
     }
 
@@ -1706,30 +1694,30 @@ async function reintegrarModuloFinalizado() {
 
     if (!resultado.ok) {
       if (resultado.tipo === 'error_verificacion_activo') {
-        mostrarNotificacion('No se pudo verificar el mÃ³dulo activo: ' + resultado.error.message)
+        mostrarNotificacion('No se pudo verificar el módulo activo: ' + resultado.error.message)
         return
       }
 
       if (resultado.tipo === 'ya_activo') {
-        mostrarNotificacion('Ese mÃ³dulo ya se encuentra activo en una lÃ­nea')
+        mostrarNotificacion('Ese módulo ya se encuentra activo en una línea')
         return
       }
 
       if (resultado.tipo === 'error_insert') {
-        mostrarNotificacion('No se pudo reintegrar el mÃ³dulo: ' + resultado.error.message)
+        mostrarNotificacion('No se pudo reintegrar el módulo: ' + resultado.error.message)
         await cargarTablero()
         return
       }
 
-      mostrarNotificacion('No se pudo reintegrar el mÃ³dulo')
+      mostrarNotificacion('No se pudo reintegrar el módulo')
       await cargarTablero()
       return
     }
 
     if (resultado.tipo === 'reintegrado_sin_borrar_historial') {
-      mostrarNotificacion('MÃ³dulo reintegrado, pero no se pudo retirar del historial: ' + resultado.error.message)
+      mostrarNotificacion('Módulo reintegrado, pero no se pudo retirar del historial: ' + resultado.error.message)
     } else {
-      mostrarNotificacion('MÃ³dulo reintegrado correctamente')
+      mostrarNotificacion('Módulo reintegrado correctamente')
     }
 
     setMostrarReintegrar(false)
@@ -1762,13 +1750,13 @@ function limpiarEstadosModal() {
 }
 
   async function guardarCambios() {
-  const isPruebaElectrica = estadoEditado === 'Prueba elÃ©ctrica'
-  const isEnGarantia = estadoEditado === 'En garantÃ­a'
+  const isPruebaElectrica = estadoEditado === 'Prueba eléctrica'
+  const isEnGarantia = estadoEditado === 'En garantía'
   const shouldSetFechaPrueba =
-    isPruebaElectrica && moduloSeleccionado?.estado !== 'Prueba elÃ©ctrica'
+    isPruebaElectrica && moduloSeleccionado?.estado !== 'Prueba eléctrica'
 
   if (isEnGarantia && !fechaPruebaEditada) {
-    mostrarNotificacion('Debe ingresar la fecha de la prueba elÃ©ctrica')
+    mostrarNotificacion('Debe ingresar la fecha de la prueba eléctrica')
     return
   }
 
@@ -1864,12 +1852,12 @@ async function solicitarPruebaElectrica() {
   const usuario = session?.user
 
   if (esEstadoPruebaElectrica(moduloSeleccionado?.estado)) {
-    mostrarNotificacion('Este mÃ³dulo ya tiene la prueba elÃ©ctrica aprobada')
+    mostrarNotificacion('Este módulo ya tiene la prueba eléctrica aprobada')
     return
   }
 
   if (!usuario || !moduloSeleccionado?.id) {
-    mostrarNotificacion('No se pudo identificar al usuario o al mÃ³dulo')
+    mostrarNotificacion('No se pudo identificar al usuario o al módulo')
     return
   }
 
@@ -1891,14 +1879,14 @@ async function solicitarPruebaElectrica() {
 
   setModuloSeleccionado(null)
 
-  mostrarNotificacion('Solicitud de prueba elÃ©ctrica enviada')
+  mostrarNotificacion('Solicitud de prueba eléctrica enviada')
 }
 
 async function dejarObservacionAlerta() {
   if (!moduloSeleccionado?.id || !puedeDejarObservacionAlerta) return
 
   const textoActual = moduloSeleccionado.observacion_alerta || ''
-  const observacion = window.prompt('Ingrese la observaciÃ³n del mÃ³dulo:', textoActual)
+  const observacion = window.prompt('Ingrese la observación del módulo:', textoActual)
 
   if (observacion === null) return
 
@@ -1911,7 +1899,7 @@ async function dejarObservacionAlerta() {
   })
 
   if (error) {
-    mostrarNotificacion('No se pudo guardar la observaciÃ³n: ' + error.message)
+    mostrarNotificacion('No se pudo guardar la observación: ' + error.message)
     return
   }
 
@@ -1923,8 +1911,8 @@ async function dejarObservacionAlerta() {
   setMostrarMenuModulo(false)
   mostrarNotificacion(
     observacionLimpia
-      ? 'ObservaciÃ³n guardada'
-      : 'ObservaciÃ³n eliminada'
+      ? 'Observación guardada'
+      : 'Observación eliminada'
   )
 }
 
@@ -1948,7 +1936,7 @@ async function cancelarSolicitudPruebaElectrica() {
 
   await cargarTablero()
   limpiarEstadosModal()
-  mostrarNotificacion('Solicitud de prueba elÃ©ctrica cancelada')
+  mostrarNotificacion('Solicitud de prueba eléctrica cancelada')
 }
 
 async function aprobarPruebaElectrica() {
@@ -1961,7 +1949,7 @@ async function aprobarPruebaElectrica() {
     .single()
 
   if (errorCargaModulo) {
-    mostrarNotificacion('No se pudo cargar el mÃƒÂ³dulo para aprobar la prueba: ' + errorCargaModulo.message)
+    mostrarNotificacion('No se pudo cargar el módulo para aprobar la prueba: ' + errorCargaModulo.message)
     return
   }
 
@@ -1995,14 +1983,14 @@ async function aprobarPruebaElectrica() {
     tipo: 'aprobacion_prueba_electrica',
     modulo: {
       ...moduloParaAprobar,
-      estado: 'Prueba elÃƒÂ©ctrica',
+      estado: 'Prueba eléctrica',
       fecha_prueba_electrica: fechaPruebaDb,
     },
     datosAntes: moduloParaAprobar,
     datosDespues: {
       ...moduloParaAprobar,
       solicitud_prueba: false,
-      estado: 'Prueba elÃƒÂ©ctrica',
+      estado: 'Prueba eléctrica',
       fecha_prueba_electrica: fechaPruebaDb,
       protocolo_entrega: protocoloActualizado,
     },
@@ -2011,7 +1999,7 @@ async function aprobarPruebaElectrica() {
 
   await cargarTablero()
   limpiarEstadosModal()
-  mostrarNotificacion('Prueba elÃ©ctrica aprobada')
+  mostrarNotificacion('Prueba eléctrica aprobada')
 }
 
 async function rechazarPruebaElectrica() {
@@ -2024,7 +2012,7 @@ async function rechazarPruebaElectrica() {
     .single()
 
   if (errorCargaModulo) {
-    mostrarNotificacion('No se pudo cargar el mÃƒÂ³dulo para rechazar la prueba: ' + errorCargaModulo.message)
+    mostrarNotificacion('No se pudo cargar el módulo para rechazar la prueba: ' + errorCargaModulo.message)
     return
   }
 
@@ -2051,7 +2039,7 @@ async function rechazarPruebaElectrica() {
 
   await cargarTablero()
   limpiarEstadosModal()
-  mostrarNotificacion('Solicitud de prueba elÃ©ctrica rechazada')
+  mostrarNotificacion('Solicitud de prueba eléctrica rechazada')
 }
 
 
@@ -2501,10 +2489,10 @@ async function finalizarModulo() {
       modulo,
       datosAntes: modulo,
       datosDespues: null,
-      descripcion: 'Retirado sin instalaciÃ³n',
+      descripcion: 'Retirado sin instalación',
     })
     limpiarEstadosModal()
-    mostrarNotificacion('MÃ³dulo sin instalacion retirado sin registro')
+    mostrarNotificacion('Módulo sin instalacion retirado sin registro')
     return
   }
 
@@ -2549,19 +2537,19 @@ async function finalizarModulo() {
     modulo,
     datosAntes: modulo,
     datosDespues: historialCreado || historialGuardadoPayload,
-    descripcion: `FinalizÃ³ mÃ³dulo desde lÃ­nea ${modulo.linea}`,
+    descripcion: `Finalizó módulo desde línea ${modulo.linea}`,
   })
 
   limpiarEstadosModal()
 
-  mostrarNotificacion('MÃ³dulo finalizado correctamente')
+  mostrarNotificacion('Módulo finalizado correctamente')
 }
 
 async function eliminarModuloSinRegistro() {
   if (perfil?.rol !== 'admin' || !moduloSeleccionado?.id) return
 
   const confirmado = window.confirm(
-    `Â¿Eliminar el mÃ³dulo ${moduloSeleccionado.serie || ''} sin dejar registro? Esta acciÃ³n no se puede deshacer.`
+    `¿Eliminar el módulo ${moduloSeleccionado.serie || ''} sin dejar registro? Esta acción no se puede deshacer.`
   )
 
   if (!confirmado) return
@@ -2572,7 +2560,7 @@ async function eliminarModuloSinRegistro() {
   })
 
   if (error) {
-    mostrarNotificacion('No se pudo eliminar el mÃ³dulo: ' + error.message)
+    mostrarNotificacion('No se pudo eliminar el módulo: ' + error.message)
     return
   }
 
@@ -2583,12 +2571,12 @@ async function eliminarModuloSinRegistro() {
   })
   await cargarTablero()
   limpiarEstadosModal()
-  mostrarNotificacion('MÃ³dulo eliminado sin dejar registro')
+  mostrarNotificacion('Módulo eliminado sin dejar registro')
 }
 
 async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   if (!puedeMoverModulos) {
-    mostrarNotificacion('No tienes permisos para mover mÃ³dulos')
+    mostrarNotificacion('No tienes permisos para mover módulos')
     return
   }
 
@@ -2602,39 +2590,39 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
     if (!resultado.ok) {
       if (resultado.tipo === 'modulo_invalido') {
-        mostrarNotificacion('Error: MÃ³dulo invÃ¡lido')
+        mostrarNotificacion('Error: Módulo inválido')
         return
       }
 
       if (resultado.tipo === 'error_carga') {
-        mostrarNotificacion('Error al cargar mÃ³dulos: ' + resultado.error.message)
+        mostrarNotificacion('Error al cargar módulos: ' + resultado.error.message)
         return
       }
 
       if (resultado.tipo === 'no_encontrado') {
-        mostrarNotificacion('Error: No se encontrÃ³ el mÃ³dulo')
+        mostrarNotificacion('Error: No se encontró el módulo')
         return
       }
 
       if (resultado.tipo === 'linea_llena') {
-        mostrarNotificacion(`La lÃ­nea ${resultado.lineaDestino} ya estÃ¡ completa`)
+        mostrarNotificacion(`La línea ${resultado.lineaDestino} ya está completa`)
         return
       }
 
-      mostrarNotificacion('Error desconocido al mover el mÃ³dulo')
+      mostrarNotificacion('Error desconocido al mover el módulo')
       return
     }
 
     await cargarTablero()
 
     if (resultado.tipo === 'misma_posicion') {
-      mostrarNotificacion('El mÃ³dulo ya estÃ¡ en esa posiciÃ³n')
+      mostrarNotificacion('El módulo ya está en esa posición')
     } else if (resultado.tipo === 'insertado_misma_linea') {
-      mostrarNotificacion('MÃ³dulo insertado correctamente')
+      mostrarNotificacion('Módulo insertado correctamente')
     } else if (resultado.tipo === 'agregado_otra_linea') {
-      mostrarNotificacion('MÃ³dulo agregado a la lÃ­nea correctamente')
+      mostrarNotificacion('Módulo agregado a la línea correctamente')
     } else {
-      mostrarNotificacion(resultado.tipo === 'intercambiado' ? 'MÃ³dulos intercambiados correctamente' : 'MÃ³dulo movido correctamente')
+      mostrarNotificacion(resultado.tipo === 'intercambiado' ? 'Módulos intercambiados correctamente' : 'Módulo movido correctamente')
     }
   } catch (err) {
     console.error(err)
@@ -2670,7 +2658,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           margin: '0 auto',
         }}
       >
-        <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Control de MÃ³dulos</h1>
+        <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Control de Módulos</h1>
 
         <Notificacion mensaje={notificacion} />
 
@@ -2698,7 +2686,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
               cursor: 'pointer',
             }}
           >
-            Prueba elÃ©ctrica lÃ­nea {avisoPruebaElectrica.linea}
+            Prueba eléctrica línea {avisoPruebaElectrica.linea}
           </button>
         )}
 
@@ -2726,7 +2714,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         {recibeAvisosPrueba && (
           <>
             <button
-              aria-label="Ver llamados a prueba elÃ©ctrica pendientes"
+              aria-label="Ver llamados a prueba eléctrica pendientes"
               onClick={(e) => {
                 e.stopPropagation()
                 const abrir = !mostrarLlamadosPendientes
@@ -2749,7 +2737,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
               }}
             >
-              ðŸ””
+              🔔
               {llamadosPendientes.length > 0 && (
                 <span
                   style={{
@@ -2806,7 +2794,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       style={{ padding: '9px 0', borderBottom: '1px solid #444' }}
                     >
                       <strong style={{ display: 'block' }}>
-                        LÃNEA {modulo.linea}
+                        LÍNEA {modulo.linea}
                       </strong>
                       <span style={{ display: 'block', marginTop: '2px', fontSize: '13px', color: '#ccc' }}>
                         {solicitantesPendientes[modulo.id] || 'Cargando...'} - {modulo.serie}
@@ -2822,7 +2810,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         {puedeVerMenuAcciones && (
           <>
             <button
-              aria-label="Abrir menÃº de acciones"
+              aria-label="Abrir menú de acciones"
               onClick={(e) => {
                 e.stopPropagation()
                 const abrir = !mostrarMenuAcciones
@@ -2934,7 +2922,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     marginBottom: '20px',
   }}
 >
-  Cerrar sesiÃ³n
+  Cerrar sesión
 </button>
 
         
@@ -2968,7 +2956,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       cursor: 'pointer',
     }}
   >
-    {mostrarVistaGeneral ? 'Ver por lÃ­nea' : 'Vista general'}
+    {mostrarVistaGeneral ? 'Ver por línea' : 'Vista general'}
   </button>
   {puedeVerProtocolosMensuales && (
     <button
@@ -3089,7 +3077,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         minWidth: '120px',
       }}
     >
-      <h3>Prueba elÃ©ctrica OK</h3>
+      <h3>Prueba eléctrica OK</h3>
       <h2>{pruebas}/{ocupacion}</h2>
     </div>
 
@@ -3101,7 +3089,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         minWidth: '120px',
       }}
     >
-      <h3 style={{ color: 'white' }}>Pruebas elÃ©ctricas hoy</h3>
+      <h3 style={{ color: 'white' }}>Pruebas eléctricas hoy</h3>
       <h2 style={{ color: 'white' }}>{pruebasElectricasHoy}</h2>
     </div>
 
@@ -3125,7 +3113,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         minWidth: '120px',
       }}
     >
-      <h3>Pruebas elÃ©ctricas este mes</h3>
+      <h3>Pruebas eléctricas este mes</h3>
       <h2>{pruebasElectricasMes}</h2>
     </div>
 
@@ -3166,7 +3154,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     <button
       type="button"
       onClick={limpiarBusquedaSerie}
-      title="Limpiar bÃºsqueda"
+      title="Limpiar búsqueda"
       style={{
         width: '28px',
         height: '28px',
@@ -3178,7 +3166,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         fontWeight: 900,
       }}
     >
-      Ã—
+      ×
     </button>
   )}
 </div>
@@ -3227,7 +3215,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     >
       <div style={{ flex: '1 1 260px', textAlign: 'center' }}>
         <div style={{ color: item.esActual ? '#81c784' : '#ffcc80', fontWeight: 800, marginBottom: '4px' }}>
-          {item.esActual ? 'Registro actual' : 'Registro histÃ³rico'}
+          {item.esActual ? 'Registro actual' : 'Registro histórico'}
         </div>
 
         <div>
@@ -3243,7 +3231,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
         {item.esActual && (
           <div style={{ marginTop: '4px', color: '#81c784', fontWeight: 700 }}>
-            (Actualmente en lÃ­nea {item.linea})
+            (Actualmente en línea {item.linea})
           </div>
         )}
 
@@ -3279,7 +3267,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           }}
         >
           <span style={{ display: 'block' }}>Ver protocolo</span>
-          <span style={{ display: 'block', fontSize: '24px', marginTop: '4px' }}>ðŸ“œ</span>
+          <span style={{ display: 'block', fontSize: '24px', marginTop: '4px' }}>📜</span>
         </button>
       )}
     </div>
@@ -3290,16 +3278,16 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
 {mostrarVistaGeneral ? (
   <div onClick={cerrarPanelesYModulo} style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 1.2 }}>
-    <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Vista general de todas las lÃ­neas</h2>
+    <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Vista general de todas las líneas</h2>
 
     {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
       <div key={linea} style={{ marginBottom: '14px' }}>
         <h3 style={{ marginBottom: '8px', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
           <span style={{ fontSize: '26px', fontWeight: '800', textTransform: 'uppercase' }}>
-            LÃ­nea {linea}
+            Línea {linea}
           </span>
           <span style={{ fontSize: '16px', fontWeight: '500', color: '#ccc' }}>
-            ({datos.filter((x) => x.linea === linea && x.serie).length} mÃ³dulos)
+            ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
           </span>
         </h3>
 
@@ -3339,7 +3327,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar mÃ³dulo por calle acopio"
+              title="Ingresar módulo por calle acopio"
             >
               +
             </button>
@@ -3437,7 +3425,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                         {pos.observacion_alerta && (
                           <span
-                            title="Ver observaciÃ³n"
+                            title="Ver observación"
                             onClick={(e) => {
                               e.stopPropagation()
                               mostrarObservacionAlerta(pos)
@@ -3448,19 +3436,19 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                               lineHeight: 1,
                             }}
                           >
-                            ðŸš¨
+                            🚨
                           </span>
                         )}
 
                         {pos.nota && (
                           <span
-                            title="Este mÃ³dulo tiene una nota"
+                            title="Este módulo tiene una nota"
                             style={{
                               fontSize: '18px',
                               lineHeight: 1,
                             }}
                           >
-                            ðŸ’¬
+                            📝
                           </span>
                         )}
                       </span>
@@ -3468,7 +3456,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     <div>{pos.tipo}</div>
                   </>
                 ) : (
-                  <div>VacÃ­o</div>
+                  <div>Vacío</div>
                 )}
               </div>
             ))}
@@ -3490,7 +3478,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar mÃ³dulo por calle agua"
+              title="Ingresar módulo por calle agua"
             >
               +
             </button>
@@ -3505,10 +3493,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       <div key={linea} style={{ marginBottom: '30px' }}>
         <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontSize: '22px' }}>
           <span style={{ fontWeight: '800', textTransform: 'uppercase' }}>
-            LÃ­nea {linea}
+            Línea {linea}
           </span>
           <span style={{ fontWeight: '500', fontSize: '18px', color: '#ccc' }}>
-            ({datos.filter((x) => x.linea === linea && x.serie).length} mÃ³dulos)
+            ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
           </span>
         </h2>
 
@@ -3548,7 +3536,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar mÃ³dulo por calle acopio"
+              title="Ingresar módulo por calle acopio"
             >
               +
             </button>
@@ -3651,7 +3639,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                         {pos.observacion_alerta && (
                           <span
-                            title="Ver observaciÃ³n"
+                            title="Ver observación"
                             onClick={(e) => {
                               e.stopPropagation()
                               mostrarObservacionAlerta(pos)
@@ -3662,19 +3650,19 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                               lineHeight: 1,
                             }}
                           >
-                            ðŸš¨
+                            🚨
                           </span>
                         )}
 
                         {pos.nota && (
                           <span
-                            title="Este mÃ³dulo tiene una nota"
+                            title="Este módulo tiene una nota"
                             style={{
                               fontSize: '18px',
                               lineHeight: 1,
                             }}
                           >
-                            ðŸ’¬
+                            📝
                           </span>
                         )}
                       </span>
@@ -3684,7 +3672,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     <div>{pos.estado}</div>
                   </>
                 ) : (
-                  <div>VacÃ­o</div>
+                  <div>Vacío</div>
                 )}
               </div>
             ))}
@@ -3706,7 +3694,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar mÃ³dulo por calle agua"
+              title="Ingresar módulo por calle agua"
             >
               +
             </button>
@@ -3739,9 +3727,9 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             color: 'white',
           }}
         >
-          <h2 style={{ marginTop: 0 }}>âš  PRUEBA ELÃ‰CTRICA SOLICITADA</h2>
+          <h2 style={{ marginTop: 0 }}>⚡ PRUEBA ELÉCTRICA SOLICITADA</h2>
           <p style={{ marginBottom: '8px' }}>
-            <strong>MÃ³dulo:</strong> {moduloSeleccionado.serie}
+            <strong>Módulo:</strong> {moduloSeleccionado.serie}
           </p>
           <p style={{ marginBottom: '20px' }}>
             <strong>Solicitado por:</strong>{' '}
@@ -3779,7 +3767,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
               cursor: 'pointer',
             }}
           >
-            âœ” Aprobar prueba
+            ✔ Aprobar prueba
           </button>
 
           <button
@@ -3795,7 +3783,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
               cursor: 'pointer',
             }}
           >
-            âœ– Rechazar solicitud
+            ✖ Rechazar solicitud
           </button>
 
           <button
@@ -4083,7 +4071,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
 {mostrarKPI && (
   <div className="kpi-grid">
-    <div style={{ color: '#ccc' }}>KPIs prÃ³ximos a implementarse</div>
+    <div style={{ color: '#ccc' }}>KPIs próximos a implementarse</div>
   </div>
 )}
 
@@ -4117,10 +4105,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       color: 'white',
     }}
   >
-    <h2>Nuevo mÃ³dulo</h2>
+    <h2>Nuevo módulo</h2>
 
     <p>
-      <strong>LÃ­nea:</strong> {posicionSeleccionada?.linea}
+      <strong>Línea:</strong> {posicionSeleccionada?.linea}
     </p>
 
     <input
@@ -4177,7 +4165,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
     {creandoModulo && (
       <div style={{ marginBottom: '10px', color: '#90caf9', fontWeight: 700 }}>
-        Guardando mÃ³dulo...
+        Guardando módulo...
       </div>
     )}
 

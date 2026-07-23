@@ -6,7 +6,7 @@ function esEstado(valor, estado) {
 
 function esEstadoPruebaElectricaTexto(valor) {
   const estado = String(valor || '').toLowerCase()
-  return estado === 'prueba elÃ©ctrica' || estado === 'prueba electrica'
+  return estado === 'prueba eléctrica' || estado === 'prueba electrica'
 }
 
 export function calcularIndicadoresTablero(datos = [], historial = []) {

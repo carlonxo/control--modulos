@@ -32,7 +32,7 @@ export async function aprobarPruebaElectricaModulo({
     .from('modulos')
     .update({
       solicitud_prueba: false,
-      estado: 'Prueba elÃ©ctrica',
+      estado: 'Prueba eléctrica',
       fecha_prueba_electrica: fechaPruebaDb,
       protocolo_entrega: protocoloActualizado,
     })

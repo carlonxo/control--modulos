@@ -119,7 +119,7 @@ function PreciosMaterialesModal({
                           }}
                           title="Editar precio"
                         >
-                          ✏️
+                          
                         </button>
                       )}
                     </div>

@@ -79,8 +79,8 @@ function DetalleCobroModal({
                   <div style={{ fontWeight: 800 }}>{item.material}</div>
                   <div style={{ color: '#ccc', fontSize: '13px', marginTop: '3px' }}>
                     {item.cantidad} x {formatearPrecio(item.precioUnitario)}
-                    {item.tipoCantidad ? ` · ${item.tipoCantidad}` : ''}
-                    {item.materialPrecio && item.materialPrecio !== item.material ? ` · precio: ${item.materialPrecio}` : ''}
+                    {item.tipoCantidad ? ` | ${item.tipoCantidad}` : ''}
+                    {item.materialPrecio && item.materialPrecio !== item.material ? ` | precio: ${item.materialPrecio}` : ''}
                   </div>
                 </div>
                 <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
@@ -113,7 +113,7 @@ function DetalleCobroModal({
                         cursor: 'pointer',
                       }}
                     >
-                      ✏️
+                      
                     </button>
                   )}
                 </div>
