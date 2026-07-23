@@ -161,6 +161,7 @@ function consolidarFilasBalanceMateriales(
         material: materialFinal,
         noCatalogado: catalogo ? false : fila.noCatalogado,
         precioUnitarioNuevo: catalogo?.precio || fila.precioUnitarioNuevo || 0,
+        precioUnitarioCompra: catalogo?.precioCompra || 0,
       })
       return
     }
@@ -178,6 +179,9 @@ function consolidarFilasBalanceMateriales(
     if (!existente.idArt && (catalogo?.idArt || fila.idArt)) existente.idArt = catalogo?.idArt || fila.idArt
     if (!existente.precioUnitarioNuevo && (catalogo?.precio || fila.precioUnitarioNuevo)) {
       existente.precioUnitarioNuevo = catalogo?.precio || fila.precioUnitarioNuevo
+    }
+    if (!existente.precioUnitarioCompra && catalogo?.precioCompra) {
+      existente.precioUnitarioCompra = catalogo.precioCompra
     }
     if (!existente.precioUnitarioReutilizado && fila.precioUnitarioReutilizado) {
       existente.precioUnitarioReutilizado = fila.precioUnitarioReutilizado

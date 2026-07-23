@@ -6,6 +6,7 @@ function BalanceMaterialesModal({
   cargando,
   filas,
   configMateriales = {},
+  materialesCatalogados = [],
   formatearPrecio,
   onCambiarRango,
   onCambiarFecha,
@@ -15,16 +16,26 @@ function BalanceMaterialesModal({
   onClickFondo,
 }) {
   const [mostrarReutilizados, setMostrarReutilizados] = useState(false)
-  const filasBalance = filas.map((fila) => ({
-    ...fila,
-    materialVisible: configMateriales[fila.clave]?.nombreVisible || fila.material,
-    instalado: Number(fila.nuevo || 0),
-    valorVenta: Number(fila.precioUnitarioNuevo || 0),
-    valorCompra: configMateriales[fila.clave]?.valorCompra ?? '',
-    valorCompraNumero: normalizarPrecioManual(configMateriales[fila.clave]?.valorCompra),
-    retirado: Number(fila.retirado || 0),
-    balance: (Number(fila.precioUnitarioNuevo || 0) * Number(fila.nuevo || 0)) - (normalizarPrecioManual(configMateriales[fila.clave]?.valorCompra) * Number(fila.retirado || 0)),
-  }))
+  const clavesMaterialesCatalogados = new Set(materialesCatalogados.map(normalizarTextoBalance))
+  const filasBalance = filas.map((fila) => {
+    const valorCompra = fila.precioUnitarioCompra || 0
+    const valorCompraNumero = normalizarPrecioManual(valorCompra)
+    const materialVisible = configMateriales[fila.clave]?.nombreVisible || fila.material
+    const estaEnCatalogoPrecios = clavesMaterialesCatalogados.has(normalizarTextoBalance(materialVisible))
+      || clavesMaterialesCatalogados.has(normalizarTextoBalance(fila.material))
+
+    return {
+      ...fila,
+      materialVisible,
+      noCatalogado: fila.noCatalogado && !estaEnCatalogoPrecios,
+      instalado: Number(fila.nuevo || 0),
+      valorVenta: Number(fila.precioUnitarioNuevo || 0),
+      valorCompra,
+      valorCompraNumero,
+      retirado: Number(fila.retirado || 0),
+      balance: (Number(fila.precioUnitarioNuevo || 0) * Number(fila.nuevo || 0)) - (valorCompraNumero * Number(fila.retirado || 0)),
+    }
+  })
   const balanceTotal = filasBalance.reduce(
     (total, fila) => total + Number(fila.balance || 0),
     0
@@ -33,6 +44,7 @@ function BalanceMaterialesModal({
     .filter((fila) => Number(fila.reutilizado || 0) > 0)
     .map((fila) => ({
       ...fila,
+      noCatalogado: fila.noCatalogado && !clavesMaterialesCatalogados.has(normalizarTextoBalance(fila.material)),
       cantidadReutilizada: Number(fila.reutilizado || 0),
       valorUnitarioReutilizado: Number(fila.precioUnitarioReutilizado || 0),
       valorTotalReutilizado: Number(fila.valorReutilizado || 0),
@@ -180,9 +192,6 @@ function BalanceMaterialesModal({
             onCambiarNombreMaterial={(clave, valor) => {
               onActualizarConfigMaterial(clave, { nombreVisible: valor })
             }}
-            onCambiarValorCompra={(clave, valor) => {
-              onActualizarConfigMaterial(clave, { valorCompra: valor })
-            }}
           />
         )
       )}
@@ -237,7 +246,6 @@ function TablaBalanceMateriales({
   tituloVacio,
   formatearPrecio,
   onCambiarNombreMaterial,
-  onCambiarValorCompra,
 }) {
   if (filas.length === 0) {
     return <p style={{ color: '#ccc' }}>{tituloVacio}</p>
@@ -285,25 +293,16 @@ function TablaBalanceMateriales({
               <td style={{ ...tdStyle, textAlign: 'right' }}>{formatearPrecio(fila.valorVenta || 0)}</td>
               <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.instalado || '-'}</td>
               <td style={{ ...tdStyle, textAlign: 'right' }}>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={fila.valorCompra}
-                  onChange={(e) => onCambiarValorCompra(fila.clave, e.target.value)}
-                  placeholder="$ 0"
+                <span
+                  title="Este valor se edita en Precios materiales"
                   style={{
-                    width: '105px',
-                    maxWidth: '100%',
-                    padding: '6px',
-                    boxSizing: 'border-box',
-                    textAlign: 'right',
-                    background: '#fff',
-                    color: '#111',
-                    border: '1px solid #777',
-                    borderRadius: '6px',
+                    display: 'inline-block',
+                    minWidth: '86px',
                     fontWeight: 700,
                   }}
-                />
+                >
+                  {formatearPrecio(fila.valorCompra || 0)}
+                </span>
               </td>
               <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.retirado || '-'}</td>
               <td
@@ -341,6 +340,15 @@ function normalizarPrecioManual(valor) {
   const limpio = String(valor).replace(/[^\d,-]/g, '').replace(',', '.')
   const numero = Number(limpio)
   return Number.isFinite(numero) ? numero : 0
+}
+
+function normalizarTextoBalance(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/°/g, '')
+    .replace(/[^a-z0-9]+/g, '')
 }
 
 export default BalanceMaterialesModal

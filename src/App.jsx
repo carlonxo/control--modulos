@@ -51,6 +51,7 @@ import {
   guardarValeBodega as guardarValeBodegaSupabase,
 } from './services/valesBodegaService'
 import {
+  cargarCatalogoMaterialesGuardado,
   cargarPreciosMateriales as cargarPreciosMaterialesSupabase,
   guardarPreciosMateriales as guardarPreciosMaterialesSupabase,
 } from './services/preciosMaterialesService'
@@ -197,6 +198,7 @@ const todosLosMateriales = seccionesFormularioElectrico.flatMap((seccion) => sec
 const catalogoPreciosProtocolo = [
   { seccion: 'Canalización', material: 'Ducto Flex/Rig 20mm LH (Incl Acc)', idArt: 323, precio: 1932 },
   { seccion: 'Canalización', material: 'Ducto Flex/Rig 25mm LH (Incl Acc)', idArt: 1681, precio: 2782 },
+  { seccion: 'Canalización', material: 'Ducto Flex/Rig 32mm LH (Incl Acc)', idArt: 1682, precio: 3744 },
   { seccion: 'Canalización', material: 'Caja PVC 100x100x65', idArt: 244, precio: 2377 },
   { seccion: 'Canalización', material: 'Caja Metálica 100x65x65 / Chuqui', idArt: 322, precio: 2378 },
   { seccion: 'Canalización', material: 'Caja Metálica 100x100x65', idArt: 1704, precio: 3120 },
@@ -245,7 +247,6 @@ const catalogoPreciosProtocolo = [
   { seccion: 'Eq. iluminación', material: 'Foco Sobrep LED 24W', idArt: 1713, precio: 14320 },
   { seccion: 'Canalización-Cableado-SPT', material: 'Tub Flexible Metálica c/acces', idArt: 1711, precio: 3390 },
   { seccion: 'Canalización-Cableado-SPT', material: 'Tubería EMT c/accesorio', idArt: 1710, precio: 3900 },
-  { seccion: 'Canalización-Cableado-SPT', material: 'Ducto Flex/Rig 32mm LH (Incl Acc)', idArt: 1682, precio: 3744 },
   { seccion: 'Canalización-Cableado-SPT', material: 'Caja Chuqui PVC', idArt: 324, precio: 1200 },
   { seccion: 'Canalización-Cableado-SPT', material: 'Int. Difer. Legrand 2x10A 10mA', idArt: 1695, precio: 102500 },
   { seccion: 'Canalización-Cableado-SPT', material: 'Int. Difer. Legrand 2x16A 10mA', idArt: 1696, precio: 24200 },
@@ -257,6 +258,12 @@ const catalogoPreciosProtocolo = [
 ]
 
 const seccionesCatalogoPrecios = [...new Set(catalogoPreciosProtocolo.map((item) => item.seccion))]
+const seccionNoCatalogadosBalance = 'Consumibles'
+const seccionCatalogoPrecios = (item) => (
+  item.material === 'Ducto Flex/Rig 32mm LH (Incl Acc)'
+    ? 'Canalización'
+    : item.seccion
+)
 const opcionesMaterialesBalance = [...new Set(camposMateriales.map(([item]) => item))]
   .sort((a, b) => a.localeCompare(b))
 const encabezadosProtocolosMensuales = [
@@ -277,6 +284,83 @@ function normalizarTextoComparacion(valor) {
     .toLowerCase()
     .replace(/°/g, '')
     .replace(/[^a-z0-9]+/g, '')
+}
+
+function construirCatalogoPreciosMaterialesCompleto({
+  catalogoBase,
+  balanceMateriales,
+  configMateriales,
+  equivalenciasPrecioProtocolo = {},
+  normalizarPrecioMaterial,
+}) {
+  const normalizarClaveBalance = (valor) => normalizarTextoComparacion(valor)
+    .replace(/retenedoresde/g, 'retenedor')
+    .replace(/retenedores/g, 'retenedor')
+    .replace(/retenedorde/g, 'retenedor')
+    .replace(/retenedor20mm/g, 'retenedor20')
+    .replace(/monofasica/g, 'monof')
+    .replace(/monofasico/g, 'monof')
+    .replace(/bifasica/g, 'bif')
+    .replace(/bifasico/g, 'bif')
+    .replace(/repartidora/g, 'repartidor')
+    .replace(/barra/g, '')
+    .replace(/accesorios/g, 'acces')
+    .replace(/accesorio/g, 'acces')
+
+  const obtenerValorCompraDesdeBalance = (item) => {
+    const clavesCandidatas = new Set([
+      normalizarTextoComparacion(item.material),
+      normalizarClaveBalance(item.material),
+    ])
+
+    Object.entries(equivalenciasPrecioProtocolo).forEach(([aliasNormalizado, materialCatalogo]) => {
+      if (normalizarTextoComparacion(materialCatalogo) === normalizarTextoComparacion(item.material)) {
+        clavesCandidatas.add(aliasNormalizado)
+        clavesCandidatas.add(normalizarClaveBalance(aliasNormalizado))
+      }
+    })
+
+    for (const clave of clavesCandidatas) {
+      const valorCompra = configMateriales[clave]?.valorCompra
+      if (Number(normalizarPrecioMaterial(valorCompra)) > 0) return normalizarPrecioMaterial(valorCompra)
+    }
+
+    const valorPorNombreVisible = Object.values(configMateriales).find((config) => (
+      config?.nombreVisible &&
+      normalizarTextoComparacion(config.nombreVisible) === normalizarTextoComparacion(item.material)
+    ))?.valorCompra
+
+    return Number(normalizarPrecioMaterial(valorPorNombreVisible)) > 0
+      ? normalizarPrecioMaterial(valorPorNombreVisible)
+      : item.precioCompra ?? ''
+  }
+
+  const catalogo = catalogoBase.map((item) => ({
+    ...item,
+    seccion: seccionCatalogoPrecios(item),
+    precioCompra: obtenerValorCompraDesdeBalance(item),
+  }))
+  const clavesExistentes = new Set(catalogo.map((item) => normalizarTextoComparacion(item.material)))
+
+  balanceMateriales
+    .filter((fila) => fila.noCatalogado)
+    .forEach((fila) => {
+      const nombreVisible = configMateriales[fila.clave]?.nombreVisible || fila.material
+      const material = String(nombreVisible || '').trim()
+      const clave = normalizarTextoComparacion(material)
+      if (!material || clavesExistentes.has(clave)) return
+
+      catalogo.push({
+        seccion: seccionNoCatalogadosBalance,
+        material,
+        idArt: '',
+        precio: Number(fila.precioUnitarioNuevo || 0),
+        precioCompra: normalizarPrecioMaterial(configMateriales[fila.clave]?.valorCompra ?? fila.precioUnitarioCompra ?? 0),
+      })
+      clavesExistentes.add(clave)
+    })
+
+  return catalogo
 }
 
 const equivalenciasPrecioProtocolo = {
@@ -408,6 +492,8 @@ const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(fal
 const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
 const [mostrarValesBodega, setMostrarValesBodega] = useState(false)
 const [preciosMateriales, setPreciosMateriales] = useState({})
+const [preciosCompraMateriales, setPreciosCompraMateriales] = useState({})
+const [catalogoMaterialesGuardado, setCatalogoMaterialesGuardado] = useState([])
 const [cargandoPreciosMateriales, setCargandoPreciosMateriales] = useState(false)
 const [guardandoPreciosMateriales, setGuardandoPreciosMateriales] = useState(false)
 const [precioMaterialEnEdicion, setPrecioMaterialEnEdicion] = useState(null)
@@ -421,6 +507,7 @@ const [fechaBalanceMateriales, setFechaBalanceMateriales] = useState(new Date().
 const [protocolosBalanceMateriales, setProtocolosBalanceMateriales] = useState([])
 const [valesBalanceMateriales, setValesBalanceMateriales] = useState([])
 const [configBalanceMateriales, setConfigBalanceMateriales] = useState({})
+const [catalogoBalanceMateriales, setCatalogoBalanceMateriales] = useState([])
 const [cargandoBalanceMateriales, setCargandoBalanceMateriales] = useState(false)
 const [fechaValeBodega, setFechaValeBodega] = useState(new Date().toISOString().slice(0, 10))
 const [archivoValeBodega, setArchivoValeBodega] = useState(null)
@@ -489,13 +576,33 @@ const conteoClavesProtocolos = protocolosMensuales.reduce((conteo, registro) => 
   conteo[clave] = (conteo[clave] || 0) + 1
   return conteo
 }, {})
+const catalogoPreciosBaseYGuardado = [
+  ...catalogoPreciosProtocolo,
+  ...catalogoMaterialesGuardado.filter((itemGuardado) => !catalogoPreciosProtocolo.some(
+    (itemBase) => normalizarTextoComparacion(itemBase.material) === normalizarTextoComparacion(itemGuardado.material)
+  )),
+]
+const catalogoPreciosParaBalance = (catalogoBalanceMateriales.length > 0 ? catalogoBalanceMateriales : catalogoPreciosBaseYGuardado).map((item) => ({
+  ...item,
+  precioCompra: normalizarPrecioMaterial(preciosCompraMateriales[item.material] ?? item.precioCompra ?? 0),
+}))
 const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales, valesBalanceMateriales, {
   configMateriales: configBalanceMateriales,
-  catalogoPreciosProtocolo,
+  catalogoPreciosProtocolo: catalogoPreciosParaBalance,
   equivalenciasPrecioProtocolo,
   equivalenciasValeBodega,
   normalizarTextoComparacion,
 })
+const catalogoPreciosMaterialesCompleto = construirCatalogoPreciosMaterialesCompleto({
+  catalogoBase: catalogoPreciosProtocolo,
+  balanceMateriales,
+  configMateriales: configBalanceMateriales,
+  equivalenciasPrecioProtocolo,
+  normalizarPrecioMaterial,
+})
+const seccionesCatalogoPreciosCompleto = [
+  ...new Set(catalogoPreciosMaterialesCompleto.map((item) => item.seccion)),
+]
 const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
 const resumenMateriales = Object.entries(materialesModuloSeleccionado)
   .map(([material, valor]) => {
@@ -992,21 +1099,35 @@ function descargarProtocolosDiarios() {
   setMostrarDescargaProtocolos(true)
 }
 
-async function cargarPreciosMateriales() {
+async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompleto) {
   setCargandoPreciosMateriales(true)
-  const { precios, error } = await cargarPreciosMaterialesSupabase({
-    supabase,
-    catalogo: catalogoPreciosProtocolo,
-  })
+  const [
+    { precios, preciosCompra, error },
+    { catalogo: catalogoGuardado, error: errorCatalogoGuardado },
+  ] = await Promise.all([
+    cargarPreciosMaterialesSupabase({
+      supabase,
+      catalogo,
+    }),
+    cargarCatalogoMaterialesGuardado({
+      supabase,
+    }),
+  ])
   setCargandoPreciosMateriales(false)
+
+  if (!errorCatalogoGuardado) {
+    setCatalogoMaterialesGuardado(catalogoGuardado)
+  }
 
   if (error) {
     mostrarNotificacion('No se pudieron cargar los precios: ' + error.message)
     setPreciosMateriales(precios)
+    setPreciosCompraMateriales(preciosCompra || {})
     return precios
   }
 
   setPreciosMateriales(precios)
+  setPreciosCompraMateriales(preciosCompra || {})
   return precios
 }
 
@@ -1015,7 +1136,39 @@ async function abrirPreciosMateriales() {
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarPreciosMateriales(true)
-  await cargarPreciosMateriales()
+
+  if (puedeVerBalanceMateriales) {
+    const [configCargada, balanceCargado] = await Promise.all([
+      cargarConfigBalanceMateriales(),
+      cargarBalanceMateriales(),
+    ])
+    const catalogoBalanceLocal = catalogoPreciosProtocolo.map((item) => ({
+      ...item,
+      precioCompra: normalizarPrecioMaterial(preciosCompraMateriales[item.material] ?? item.precioCompra ?? 0),
+    }))
+    const balanceLocal = compilarBalanceMateriales(
+      balanceCargado?.registros || [],
+      balanceCargado?.vales || [],
+      {
+        configMateriales: configCargada || {},
+        catalogoPreciosProtocolo: catalogoBalanceLocal,
+        equivalenciasPrecioProtocolo,
+        equivalenciasValeBodega,
+        normalizarTextoComparacion,
+      }
+    )
+    const catalogoCompletoLocal = construirCatalogoPreciosMaterialesCompleto({
+      catalogoBase: catalogoPreciosProtocolo,
+      balanceMateriales: balanceLocal,
+      configMateriales: configCargada || {},
+      equivalenciasPrecioProtocolo,
+      normalizarPrecioMaterial,
+    })
+    await cargarPreciosMateriales(catalogoCompletoLocal)
+    return
+  }
+
+  await cargarPreciosMateriales(catalogoPreciosProtocolo)
 }
 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
@@ -1233,9 +1386,21 @@ function actualizarConfigBalanceMaterial(clave, cambios) {
 }
 
 async function cargarBalanceMateriales(valor = fechaBalanceMateriales, rango = rangoBalanceMateriales) {
-  if (!puedeVerBalanceMateriales || !valor) return
+  if (!puedeVerBalanceMateriales || !valor) return { registros: [], vales: [] }
 
   setCargandoBalanceMateriales(true)
+  const { catalogo: catalogoGuardado, error: errorCatalogoGuardado } = await cargarCatalogoMaterialesGuardado({ supabase })
+  if (!errorCatalogoGuardado) {
+    setCatalogoMaterialesGuardado(catalogoGuardado)
+  }
+  const catalogoParaBalanceActualizado = [
+    ...catalogoPreciosProtocolo,
+    ...catalogoGuardado.filter((itemGuardado) => !catalogoPreciosProtocolo.some(
+      (itemBase) => normalizarTextoComparacion(itemBase.material) === normalizarTextoComparacion(itemGuardado.material)
+    )),
+  ]
+  setCatalogoBalanceMateriales(catalogoParaBalanceActualizado)
+  await cargarPreciosMateriales(catalogoParaBalanceActualizado)
   const [{ registros, error }, vales] = await Promise.all([
     obtenerRegistrosProtocolosPorRango(valor, rango),
     cargarValesBodegaPorRango(valor, rango),
@@ -1244,11 +1409,12 @@ async function cargarBalanceMateriales(valor = fechaBalanceMateriales, rango = r
 
   if (error) {
     mostrarNotificacion('No se pudo cargar el balance de materiales: ' + error.message)
-    return
+    return { registros: [], vales: [] }
   }
 
   setProtocolosBalanceMateriales(registros)
   setValesBalanceMateriales(vales)
+  return { registros, vales }
 }
 
 async function abrirBalanceMateriales() {
@@ -1597,8 +1763,12 @@ async function eliminarProtocoloMensual(registro) {
   mostrarNotificacion('Protocolo eliminado')
 }
 
-function actualizarPrecioMaterial(material, valor) {
-  setPreciosMateriales((actuales) => ({
+function actualizarPrecioMaterial(material, tipo, valor) {
+  const setter = tipo === 'compra'
+    ? setPreciosCompraMateriales
+    : setPreciosMateriales
+
+  setter((actuales) => ({
     ...actuales,
     [material]: limpiarPrecioMaterial(valor),
   }))
@@ -1610,8 +1780,9 @@ async function guardarPreciosMateriales() {
   setGuardandoPreciosMateriales(true)
   const { error } = await guardarPreciosMaterialesSupabase({
     supabase,
-    catalogo: catalogoPreciosProtocolo,
+    catalogo: catalogoPreciosMaterialesCompleto,
     precios: preciosMateriales,
+    preciosCompra: preciosCompraMateriales,
     normalizarPrecioMaterial,
   })
 
@@ -3962,6 +4133,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     cargando={cargandoBalanceMateriales}
     filas={balanceMateriales}
     configMateriales={configBalanceMateriales}
+    materialesCatalogados={catalogoPreciosMaterialesCompleto.map((item) => item.material)}
     formatearPrecio={formatearPrecioMaterial}
     onCambiarRango={(nuevoRango) => {
       setRangoBalanceMateriales(nuevoRango)
@@ -4002,9 +4174,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     puedeEditar={puedeEditarPreciosMateriales}
     cargando={cargandoPreciosMateriales}
     guardando={guardandoPreciosMateriales}
-    secciones={seccionesCatalogoPrecios}
-    catalogo={catalogoPreciosProtocolo}
+    secciones={seccionesCatalogoPreciosCompleto}
+    catalogo={catalogoPreciosMaterialesCompleto}
     precios={preciosMateriales}
+    preciosCompra={preciosCompraMateriales}
     precioEnEdicion={precioMaterialEnEdicion}
     formatearPrecio={formatearPrecioMaterial}
     onActualizarPrecio={actualizarPrecioMaterial}
