@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 function PreciosMaterialesModal({
   puedeEditar,
   cargando,
@@ -10,13 +12,72 @@ function PreciosMaterialesModal({
   formatearPrecio,
   onActualizarPrecio,
   onCambiarEdicion,
+  onRenombrarMaterial,
+  onAgregarMaterial,
   onGuardar,
   onCerrar,
   onClickFondo,
 }) {
+  const [materialEnEdicion, setMaterialEnEdicion] = useState(null)
+  const [nombreMaterialEditado, setNombreMaterialEditado] = useState('')
   const puedeVerCompra = puedeEditar
   const claveEdicion = (material, tipo) => `${tipo}::${material}`
   const estaEditando = (material, tipo) => precioEnEdicion === claveEdicion(material, tipo)
+  const columnasPrecio = puedeEditar
+    ? (puedeVerCompra ? '56px minmax(190px, 340px) 112px 112px' : '56px minmax(190px, 340px) 112px')
+    : '56px minmax(190px, 340px) 112px'
+  const precioWrapStyle = {
+    display: 'grid',
+    gridTemplateColumns: '16px max-content',
+    gap: '2px',
+    alignItems: 'center',
+    justifyContent: 'start',
+    minWidth: 0,
+  }
+  const inputPrecioStyle = () => ({
+    width: '100%',
+    minWidth: 0,
+    maxWidth: '78px',
+    padding: '2px 5px',
+    boxSizing: 'border-box',
+    textAlign: 'right',
+    lineHeight: 1.2,
+    font: 'inherit',
+    fontWeight: 'inherit',
+    color: 'white',
+    background: '#263238',
+    border: '1px solid #64b5f6',
+    borderRadius: '4px',
+    outline: 'none',
+  })
+  const valorPrecioStyle = (editable = true) => ({
+    display: 'block',
+    width: '100%',
+    minWidth: 0,
+    maxWidth: '78px',
+    boxSizing: 'border-box',
+    textAlign: 'right',
+    lineHeight: 1.2,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    cursor: editable ? 'text' : 'default',
+  })
+  const iniciarEdicionMaterial = (item) => {
+    if (!puedeEditar) return
+    setMaterialEnEdicion(item.material)
+    setNombreMaterialEditado(item.material)
+  }
+  const confirmarEdicionMaterial = (item) => {
+    const nuevoNombre = nombreMaterialEditado.trim()
+    setMaterialEnEdicion(null)
+    if (!nuevoNombre || nuevoNombre === item.material) return
+    onRenombrarMaterial?.(item, nuevoNombre)
+  }
+  const cancelarEdicionMaterial = () => {
+    setMaterialEnEdicion(null)
+    setNombreMaterialEditado('')
+  }
 
   return (
     <div
@@ -27,7 +88,7 @@ function PreciosMaterialesModal({
         left: '50%',
         transform: 'translate(-50%, -50%)',
         width: 'calc(100vw - 32px)',
-        maxWidth: puedeEditar ? '680px' : '520px',
+        maxWidth: puedeEditar ? '720px' : '560px',
         maxHeight: 'calc(100vh - 32px)',
         overflowY: 'auto',
         boxSizing: 'border-box',
@@ -59,22 +120,73 @@ function PreciosMaterialesModal({
             >
               <summary
                 style={{
-                  padding: '10px 12px',
+                  padding: '8px 10px',
                   background: '#333',
                   fontWeight: 700,
                   cursor: 'pointer',
+                  listStylePosition: 'inside',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
                 }}
               >
-                {seccion}
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    width: 'calc(100% - 18px)',
+                    verticalAlign: 'middle',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <span
+                    title={seccion}
+                    style={{
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {seccion}
+                  </span>
+                  {puedeEditar && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onAgregarMaterial(seccion)
+                      }}
+                      style={{
+                        flex: '0 0 28px',
+                        width: '30px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        border: '1px solid #90caf9',
+                        background: '#0d47a1',
+                        color: 'white',
+                        fontSize: '20px',
+                        lineHeight: '24px',
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                      title={`Agregar material a ${seccion}`}
+                    >
+                      +
+                    </button>
+                  )}
+                </span>
               </summary>
 
               <div style={{ padding: '8px 10px', overflowX: 'auto' }}>
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: puedeEditar
-                      ? (puedeVerCompra ? '72px minmax(0, 1fr) 118px 118px' : '72px minmax(0, 1fr) 120px')
-                      : '72px minmax(0, 1fr) 120px',
+                    gridTemplateColumns: columnasPrecio,
                     gap: '10px',
                     alignItems: 'center',
                     padding: '0 0 6px',
@@ -83,10 +195,10 @@ function PreciosMaterialesModal({
                     fontWeight: 800,
                   }}
                 >
-                  <span>ID</span>
-                  <span>Material</span>
-                  <span style={{ paddingLeft: '24px' }}>Venta</span>
-                  {puedeVerCompra && <span style={{ paddingLeft: '24px' }}>Compra</span>}
+                  <span style={{ whiteSpace: 'nowrap' }}>ID</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>Material</span>
+                  <span style={{ paddingLeft: '20px', whiteSpace: 'nowrap' }}>Venta</span>
+                  {puedeVerCompra && <span style={{ paddingLeft: '20px', whiteSpace: 'nowrap' }}>Compra</span>}
                 </div>
                 {catalogo
                   .filter((item) => item.seccion === seccion)
@@ -95,10 +207,8 @@ function PreciosMaterialesModal({
                       key={item.material}
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: puedeEditar
-                          ? (puedeVerCompra ? '72px minmax(0, 1fr) 118px 118px' : '72px minmax(0, 1fr) 120px')
-                          : '72px minmax(0, 1fr) 120px',
-                        gap: '10px',
+                        gridTemplateColumns: columnasPrecio,
+                        gap: '8px',
                         alignItems: 'center',
                         padding: '7px 0',
                         borderBottom: '1px solid #444',
@@ -107,58 +217,106 @@ function PreciosMaterialesModal({
                       <strong style={{ color: '#bbb', fontSize: '13px' }}>
                         {item.idArt}
                       </strong>
-                      <span style={{ lineHeight: 1.2 }}>{item.material}</span>
+                      {materialEnEdicion === item.material ? (
+                        <input
+                          type="text"
+                          value={nombreMaterialEditado}
+                          onChange={(e) => setNombreMaterialEditado(e.target.value)}
+                          onBlur={() => confirmarEdicionMaterial(item)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') confirmarEdicionMaterial(item)
+                            if (e.key === 'Escape') cancelarEdicionMaterial()
+                          }}
+                          autoFocus
+                          style={{
+                            width: '100%',
+                            minWidth: 0,
+                            boxSizing: 'border-box',
+                            padding: '2px 5px',
+                            lineHeight: 1.2,
+                            font: 'inherit',
+                            fontWeight: 'inherit',
+                            color: 'white',
+                            background: '#263238',
+                            border: '1px solid #64b5f6',
+                            borderRadius: '4px',
+                            outline: 'none',
+                          }}
+                          title="Editando nombre del material"
+                        />
+                      ) : (
+                        <span
+                          title={puedeEditar ? 'Doble click para editar nombre' : item.material}
+                          onDoubleClick={() => iniciarEdicionMaterial(item)}
+                          style={{
+                            lineHeight: 1.2,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            minWidth: 0,
+                            cursor: puedeEditar ? 'text' : 'default',
+                          }}
+                        >
+                          {item.material}
+                        </span>
+                      )}
                       <div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr)', gap: '6px', alignItems: 'center' }}>
+                        <div style={precioWrapStyle}>
                           <span style={{ color: '#00c853', fontSize: '20px', lineHeight: 1, fontWeight: 900 }}>▲</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={formatearPrecio(precios[item.material])}
-                            onChange={(e) => onActualizarPrecio(item.material, 'venta', e.target.value)}
-                            onDoubleClick={() => puedeEditar && onCambiarEdicion(claveEdicion(item.material, 'venta'))}
-                            onBlur={() => estaEditando(item.material, 'venta') && onCambiarEdicion(null)}
-                            disabled={!puedeEditar}
-                            readOnly={!estaEditando(item.material, 'venta')}
-                            placeholder="$ 0"
-                            style={{
-                              width: '100%',
-                              padding: '8px',
-                              boxSizing: 'border-box',
-                              textAlign: 'right',
-                              opacity: puedeEditar ? 1 : 0.8,
-                              background: estaEditando(item.material, 'venta') ? 'white' : '#ddd',
-                              color: '#111',
-                              cursor: puedeEditar ? 'text' : 'default',
-                            }}
-                            title={puedeEditar ? 'Doble click para editar precio venta' : 'Precio venta'}
-                          />
+                          {estaEditando(item.material, 'venta') ? (
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatearPrecio(precios[item.material])}
+                              onChange={(e) => onActualizarPrecio(item.material, 'venta', e.target.value)}
+                              onBlur={() => onCambiarEdicion(null)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === 'Escape') onCambiarEdicion(null)
+                              }}
+                              autoFocus
+                              placeholder="$ 0"
+                              style={inputPrecioStyle()}
+                              title="Editando precio venta"
+                            />
+                          ) : (
+                            <span
+                              onDoubleClick={() => puedeEditar && onCambiarEdicion(claveEdicion(item.material, 'venta'))}
+                              style={valorPrecioStyle(puedeEditar)}
+                              title={puedeEditar ? 'Doble click para editar precio venta' : 'Precio venta'}
+                            >
+                              {formatearPrecio(precios[item.material]) || '$ 0'}
+                            </span>
+                          )}
                         </div>
                       </div>
                       {puedeVerCompra && (
                         <div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr)', gap: '6px', alignItems: 'center' }}>
+                          <div style={precioWrapStyle}>
                             <span style={{ color: '#ff1744', fontSize: '20px', lineHeight: 1, fontWeight: 900 }}>▼</span>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={formatearPrecio(preciosCompra[item.material])}
-                              onChange={(e) => onActualizarPrecio(item.material, 'compra', e.target.value)}
-                              onDoubleClick={() => onCambiarEdicion(claveEdicion(item.material, 'compra'))}
-                              onBlur={() => estaEditando(item.material, 'compra') && onCambiarEdicion(null)}
-                              readOnly={!estaEditando(item.material, 'compra')}
-                              placeholder="$ 0"
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                boxSizing: 'border-box',
-                                textAlign: 'right',
-                                background: estaEditando(item.material, 'compra') ? 'white' : '#ddd',
-                                color: '#111',
-                                cursor: 'text',
-                              }}
-                              title="Doble click para editar precio compra"
-                            />
+                            {estaEditando(item.material, 'compra') ? (
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={formatearPrecio(preciosCompra[item.material])}
+                                onChange={(e) => onActualizarPrecio(item.material, 'compra', e.target.value)}
+                                onBlur={() => onCambiarEdicion(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === 'Escape') onCambiarEdicion(null)
+                                }}
+                                autoFocus
+                                placeholder="$ 0"
+                                style={inputPrecioStyle()}
+                                title="Editando precio compra"
+                              />
+                            ) : (
+                              <span
+                                onDoubleClick={() => onCambiarEdicion(claveEdicion(item.material, 'compra'))}
+                                style={valorPrecioStyle(true)}
+                                title="Doble click para editar precio compra"
+                              >
+                                {formatearPrecio(preciosCompra[item.material]) || '$ 0'}
+                              </span>
+                            )}
                           </div>
                         </div>
                       )}
