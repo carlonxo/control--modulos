@@ -1,4 +1,4 @@
-function ValesBodegaModal({
+﻿function ValesBodegaModal({
   fecha,
   archivo,
   filas,
@@ -181,7 +181,12 @@ function ValesBodegaModal({
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     <button type="button" onClick={() => onEliminarFila(index)} style={botonPeligro}>
-                      ×
+                      <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          fill="currentColor"
+                          d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-1 12H8L7 9Zm3 2v8h2v-8h-2Zm4 0v8h2v-8h-2Z"
+                        />
+                      </svg>
                     </button>
                   </td>
                 </tr>
@@ -247,7 +252,7 @@ function SelectorMaterialBalance({
             {opcion}
           </option>
         ))}
-        <option value="__otro__">Otro / no está en protocolos</option>
+        <option value="__otro__">Otro / no está en catálogo</option>
       </select>
 
       {valorSelector === '__otro__' && (
@@ -306,12 +311,17 @@ const botonAzul = {
 const botonPeligro = {
   width: '30px',
   height: '30px',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   borderRadius: '50%',
   border: '1px solid #ff8a80',
   background: '#3a1515',
   color: 'white',
   cursor: 'pointer',
   fontWeight: 900,
+  padding: 0,
 }
 
 export default ValesBodegaModal
+

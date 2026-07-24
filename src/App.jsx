@@ -267,8 +267,6 @@ const seccionCatalogoPrecios = (item) => (
     ? 'Canalización'
     : item.seccion
 )
-const opcionesMaterialesBalance = [...new Set(camposMateriales.map(([item]) => item))]
-  .sort((a, b) => a.localeCompare(b))
 const encabezadosProtocolosMensuales = [
   { clave: 'ver', lineas: ['Ver'], align: 'center' },
   { clave: 'serie', lineas: ['Serie'] },
@@ -648,6 +646,14 @@ const catalogoPreciosMaterialesCompleto = asignarIdsInternosMateriales(catalogoP
 const seccionesCatalogoPreciosCompleto = [
   ...new Set(catalogoPreciosMaterialesCompleto.map((item) => item.seccion)),
 ]
+const opcionesMaterialesBalance = [...new Set(catalogoPreciosMaterialesCompleto
+  .filter((item) => item.activo !== false)
+  .map((item) => item.material)
+  .filter(Boolean))]
+  .sort((a, b) => a.localeCompare(b, 'es', {
+    numeric: true,
+    sensitivity: 'base',
+  }))
 const materialesModuloSeleccionado = formulariosElectricos[moduloSeleccionado?.id] || {}
 const resumenMateriales = Object.entries(materialesModuloSeleccionado)
   .map(([material, valor]) => {
@@ -1545,6 +1551,7 @@ async function leerValeBodega() {
   if (!archivoValeBodega) return
 
   setLeyendoValeBodega(true)
+  await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
   let filas = []
   try {
     filas = await leerFilasValeBodegaDesdeArchivo(archivoValeBodega, {
@@ -1617,6 +1624,7 @@ async function abrirValesBodega() {
   setFechaValeBodega(new Date().toISOString().slice(0, 10))
   setArchivoValeBodega(null)
   setFilasValeBodega([])
+  await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
   setMostrarValesBodega(true)
   await cargarValesBodegaDia(new Date().toISOString().slice(0, 10))
 }
