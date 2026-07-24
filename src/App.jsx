@@ -21,6 +21,7 @@ import BotonValorCobro from './components/BotonValorCobro'
 import ReintegrarModuloModal from './components/ReintegrarModuloModal'
 import DescargaProtocolosDiariosModal from './components/DescargaProtocolosDiariosModal'
 import BalanceMaterialesModal from './components/BalanceMaterialesModal'
+import BalanceMantencionModal from './components/BalanceMantencionModal'
 import ValesBodegaModal from './components/ValesBodegaModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
@@ -487,6 +488,7 @@ const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false
 const [mostrarPreciosMateriales, setMostrarPreciosMateriales] = useState(false)
 const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(false)
 const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
+const [mostrarBalanceMantencion, setMostrarBalanceMantencion] = useState(false)
 const [mostrarValesBodega, setMostrarValesBodega] = useState(false)
 const [preciosMateriales, setPreciosMateriales] = useState({})
 const [preciosCompraMateriales, setPreciosCompraMateriales] = useState({})
@@ -506,6 +508,12 @@ const [valesBalanceMateriales, setValesBalanceMateriales] = useState([])
 const [configBalanceMateriales, setConfigBalanceMateriales] = useState({})
 const [catalogoBalanceMateriales, setCatalogoBalanceMateriales] = useState([])
 const [cargandoBalanceMateriales, setCargandoBalanceMateriales] = useState(false)
+const [rangoBalanceMantencion, setRangoBalanceMantencion] = useState('mes')
+const [fechaBalanceMantencion, setFechaBalanceMantencion] = useState(new Date().toISOString().slice(0, 7))
+const [protocolosBalanceMantencion, setProtocolosBalanceMantencion] = useState([])
+const [materialesBalanceMantencion, setMaterialesBalanceMantencion] = useState([])
+const [cargandoBalanceMantencion, setCargandoBalanceMantencion] = useState(false)
+const [sueldosBalanceMantencion, setSueldosBalanceMantencion] = useState('')
 const [fechaValeBodega, setFechaValeBodega] = useState(new Date().toISOString().slice(0, 10))
 const [archivoValeBodega, setArchivoValeBodega] = useState(null)
 const [filasValeBodega, setFilasValeBodega] = useState([])
@@ -549,6 +557,7 @@ const puedeVerPreciosMateriales = tienePermiso(perfil?.rol, 'verPreciosMateriale
 const puedeEditarPreciosMateriales = tienePermiso(perfil?.rol, 'editarPreciosMateriales')
 const puedeVerProtocolosMensuales = tienePermiso(perfil?.rol, 'verProtocolosMensuales')
 const puedeVerBalanceMateriales = tienePermiso(perfil?.rol, 'verBalanceMateriales')
+const puedeVerBalanceMantencion = tienePermiso(perfil?.rol, 'verBalanceMantencion')
 const puedeVerValesBodega = tienePermiso(perfil?.rol, 'verValesBodega')
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
@@ -1196,12 +1205,12 @@ async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompl
     mostrarNotificacion('No se pudieron cargar los precios: ' + error.message)
     setPreciosMateriales(precios)
     setPreciosCompraMateriales(preciosCompra || {})
-    return precios
+    return { precios, preciosCompra: preciosCompra || {}, catalogo: catalogoConGuardado }
   }
 
   setPreciosMateriales(precios)
   setPreciosCompraMateriales(preciosCompra || {})
-  return precios
+  return { precios, preciosCompra: preciosCompra || {}, catalogo: catalogoConGuardado }
 }
 
 async function abrirPreciosMateriales() {
@@ -1319,9 +1328,10 @@ async function guardarAjusteValorizacionProtocolo() {
 }
 
 async function obtenerRegistrosProtocolosPorRango(valor, rango) {
-  const preciosParaCalculo = Object.keys(preciosMateriales).length === 0
+  const preciosCargados = Object.keys(preciosMateriales).length === 0
     ? await cargarPreciosMateriales()
-    : preciosMateriales
+    : null
+  const preciosParaCalculo = preciosCargados?.precios || preciosMateriales
 
   const { inicio, fin: finTexto } = obtenerRangoFechasProtocolos(rango, valor)
 
@@ -1485,6 +1495,72 @@ async function abrirBalanceMateriales() {
     cargarConfigBalanceMateriales(),
     cargarBalanceMateriales(),
   ])
+}
+
+function completarCompraMaterialesBalance(filas = [], preciosCompraActuales = preciosCompraMateriales, catalogoActual = catalogoPreciosMaterialesCompleto) {
+  const preciosCompraPorNombre = {}
+  const preciosCompraPorId = {}
+  catalogoActual.forEach((item) => {
+    const valorCompra = normalizarPrecioMaterial(
+      preciosCompraActuales[item.material] ??
+      preciosCompraActuales[item.materialOriginal] ??
+      item.precioCompra ??
+      0
+    )
+    ;[item.material, item.materialOriginal].filter(Boolean).forEach((nombre) => {
+      preciosCompraPorNombre[normalizarTextoComparacion(nombre)] = valorCompra
+    })
+    if (item.idArt) preciosCompraPorId[String(item.idArt)] = valorCompra
+  })
+
+  return filas.map((fila) => {
+    const valorCatalogo = (fila.idArt ? preciosCompraPorId[String(fila.idArt)] : undefined)
+      ?? preciosCompraPorNombre[normalizarTextoComparacion(fila.material)]
+    return {
+      ...fila,
+      precioUnitarioCompra: Number(valorCatalogo || fila.precioUnitarioCompra || 0),
+    }
+  })
+}
+
+async function cargarBalanceMantencion(valor = fechaBalanceMantencion, rango = rangoBalanceMantencion) {
+  if (!puedeVerBalanceMantencion || !valor) return
+
+  setCargandoBalanceMantencion(true)
+  const preciosCargados = await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
+  const [{ registros, error }, vales] = await Promise.all([
+    obtenerRegistrosProtocolosPorRango(valor, rango),
+    cargarValesBodegaPorRango(valor, rango),
+  ])
+  setCargandoBalanceMantencion(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudo cargar el balance mantención: ' + error.message)
+    return
+  }
+
+  const materiales = compilarBalanceMateriales(registros || [], vales || [], {
+    configMateriales: configBalanceMateriales,
+    catalogoPreciosProtocolo: catalogoPreciosParaBalance,
+    equivalenciasPrecioProtocolo,
+    equivalenciasValeBodega,
+    normalizarTextoComparacion,
+  })
+
+  setProtocolosBalanceMantencion(registros || [])
+  setMaterialesBalanceMantencion(completarCompraMaterialesBalance(
+    materiales,
+    preciosCargados?.preciosCompra || preciosCompraMateriales,
+    preciosCargados?.catalogo || catalogoPreciosMaterialesCompleto
+  ))
+}
+
+async function abrirBalanceMantencion() {
+  if (!puedeVerBalanceMantencion) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setMostrarBalanceMantencion(true)
+  await cargarBalanceMantencion()
 }
 
 async function cargarValesBodegaPorRango(valor = fechaBalanceMateriales, rango = rangoBalanceMateriales) {
@@ -3511,6 +3587,24 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       Balance materiales
     </button>
   )}
+  {puedeVerBalanceMantencion && (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        abrirBalanceMantencion()
+      }}
+      style={{
+        padding: '10px 20px',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        background: '#1b5e20',
+        color: 'white',
+        border: '1px solid #66bb6a',
+      }}
+    >
+      Balance mantención
+    </button>
+  )}
   {puedeVerValesBodega && (
     <button
       onClick={(e) => {
@@ -4498,6 +4592,27 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onActualizar={() => cargarBalanceMateriales(fechaBalanceMateriales, rangoBalanceMateriales)}
     onActualizarConfigMaterial={actualizarConfigBalanceMaterial}
     onCerrar={() => setMostrarBalanceMateriales(false)}
+    onClickFondo={cerrarPanelesFlotantes}
+  />
+)}
+
+{mostrarBalanceMantencion && puedeVerBalanceMantencion && (
+  <BalanceMantencionModal
+    rango={rangoBalanceMantencion}
+    fecha={fechaBalanceMantencion}
+    cargando={cargandoBalanceMantencion}
+    protocolos={protocolosBalanceMantencion}
+    materiales={materialesBalanceMantencion}
+    sueldos={sueldosBalanceMantencion}
+    formatearPrecio={formatearPrecioMaterial}
+    onCambiarRango={(nuevoRango) => {
+      setRangoBalanceMantencion(nuevoRango)
+      setFechaBalanceMantencion(obtenerValorInicialRangoProtocolo(nuevoRango))
+    }}
+    onCambiarFecha={setFechaBalanceMantencion}
+    onCambiarSueldos={setSueldosBalanceMantencion}
+    onActualizar={() => cargarBalanceMantencion(fechaBalanceMantencion, rangoBalanceMantencion)}
+    onCerrar={() => setMostrarBalanceMantencion(false)}
     onClickFondo={cerrarPanelesFlotantes}
   />
 )}

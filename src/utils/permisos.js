@@ -13,6 +13,7 @@ const permisosPorAccion = {
   editarPreciosMateriales: ['analista', 'admin'],
   verProtocolosMensuales: ['analista', 'admin'],
   verBalanceMateriales: ['analista', 'admin'],
+  verBalanceMantencion: ['analista', 'admin'],
   verValesBodega: ['analista', 'admin'],
   eliminarProtocolosMensuales: ['admin', 'analista'],
   ajustarValoresProtocolos: ['admin', 'analista'],
