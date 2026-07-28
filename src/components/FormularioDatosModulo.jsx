@@ -1,3 +1,5 @@
+import { LINEAS_TABLERO } from '../utils/lineas'
+
 function FormularioDatosModulo({
   serieEditada,
   setSerieEditada,
@@ -71,7 +73,7 @@ function FormularioDatosModulo({
             boxSizing: 'border-box',
           }}
         >
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+          {LINEAS_TABLERO.map((n) => (
             <option key={n} value={n}>
               {n}
             </option>

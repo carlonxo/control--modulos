@@ -169,6 +169,7 @@ import {
   eliminarEntradaPorId,
   hayCambiosPendientesPorId,
 } from './utils/ventanas'
+import { LINEAS_TABLERO } from './utils/lineas'
 
 const seccionesFormularioElectrico = [
   {
@@ -3894,7 +3895,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   <div onClick={cerrarPanelesYModulo} style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 1.2 }}>
     <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Vista general de todas las líneas</h2>
 
-    {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
+    {LINEAS_TABLERO.map((linea) => (
       <div key={linea} style={{ marginBottom: '14px' }}>
         <h3 style={{ marginBottom: '8px', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
           <span style={{ fontSize: '26px', fontWeight: '800', textTransform: 'uppercase' }}>
@@ -4103,7 +4104,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   </div>
 ) : (
   <div onClick={cerrarPanelesYModulo}>
-    {Array.from({ length: 9 }, (_, i) => i + 1).map((linea) => (
+    {LINEAS_TABLERO.map((linea) => (
       <div key={linea} style={{ marginBottom: '30px' }}>
         <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontSize: '22px' }}>
           <span style={{ fontWeight: '800', textTransform: 'uppercase' }}>

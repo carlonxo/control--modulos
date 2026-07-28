@@ -1,3 +1,5 @@
+import { LINEAS_TABLERO } from '../utils/lineas'
+
 function ReintegrarModuloModal({
   ultimosFinalizados,
   historialSeleccionado,
@@ -94,7 +96,7 @@ function ReintegrarModuloModal({
             onChange={(e) => onCambiarLinea(Number(e.target.value))}
             style={{ width: '100%', padding: '9px', marginTop: '5px' }}
           >
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+            {LINEAS_TABLERO.map((n) => (
               <option key={n} value={n}>{n}</option>
             ))}
           </select>
