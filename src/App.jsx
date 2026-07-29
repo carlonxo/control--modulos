@@ -3902,7 +3902,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             Línea {linea}
           </span>
           <span style={{ fontSize: '16px', fontWeight: '500', color: '#ccc' }}>
-            ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
+            ({datos.filter((x) => Number(x.linea) === Number(linea) && x.serie).length} módulos)
           </span>
         </h3>
 
@@ -3948,7 +3948,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             </button>
           )}
           {datos
-            .filter((x) => x.linea === linea)
+            .filter((x) => Number(x.linea) === Number(linea))
             .filter((x) => x.serie)
             .map((pos) => (
               <div
@@ -4111,7 +4111,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             Línea {linea}
           </span>
           <span style={{ fontWeight: '500', fontSize: '18px', color: '#ccc' }}>
-            ({datos.filter((x) => x.linea === linea && x.serie).length} módulos)
+            ({datos.filter((x) => Number(x.linea) === Number(linea) && x.serie).length} módulos)
           </span>
         </h2>
 
@@ -4157,7 +4157,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             </button>
           )}
           {datos
-            .filter((x) => x.linea === linea)
+            .filter((x) => Number(x.linea) === Number(linea))
             .filter((x) => x.serie)
             .map((pos) => (
               <div

@@ -21,12 +21,16 @@ export async function cargarDatosTablero({ supabase, esSolicitudPruebaActiva }) 
 
   let { data: modulosData, error: modulosError } = await supabase
     .from('modulos')
-    .select('id, nota, observacion_alerta, fecha_prueba_electrica')
+    .select('*')
+    .order('linea')
+    .order('posicion')
 
   if (modulosError?.message?.includes('observacion_alerta')) {
     ;({ data: modulosData, error: modulosError } = await supabase
       .from('modulos')
-      .select('id, nota, fecha_prueba_electrica'))
+      .select('*')
+      .order('linea')
+      .order('posicion'))
   }
 
   if (modulosError) {
@@ -34,13 +38,31 @@ export async function cargarDatosTablero({ supabase, esSolicitudPruebaActiva }) 
   }
 
   const modulosMap = new Map((modulosData || []).map((item) => [item.id, item]))
-  const data = (tableroData || []).map((row) => ({
+  const dataTablero = (tableroData || []).map((row) => ({
     ...row,
     nota: row.nota || modulosMap.get(row.id)?.nota || '',
     observacion_alerta: row.observacion_alerta || modulosMap.get(row.id)?.observacion_alerta || '',
     fecha_prueba_electrica: row.fecha_prueba_electrica || modulosMap.get(row.id)?.fecha_prueba_electrica || null,
     solicitud_prueba: esSolicitudPruebaActiva(row.solicitud_prueba),
   }))
+
+  const idsTablero = new Set(dataTablero.map((row) => row.id).filter(Boolean))
+  const modulosFaltantes = (modulosData || [])
+    .filter((modulo) => modulo?.id && !idsTablero.has(modulo.id))
+    .filter((modulo) => modulo?.serie && String(modulo.serie).trim() !== '')
+    .map((modulo) => ({
+      ...modulo,
+      nota: modulo.nota || '',
+      observacion_alerta: modulo.observacion_alerta || '',
+      fecha_prueba_electrica: modulo.fecha_prueba_electrica || null,
+      solicitud_prueba: esSolicitudPruebaActiva(modulo.solicitud_prueba),
+    }))
+
+  const data = [...dataTablero, ...modulosFaltantes]
+    .sort((a, b) => (
+      Number(a.linea || 0) - Number(b.linea || 0) ||
+      Number(a.posicion || 0) - Number(b.posicion || 0)
+    ))
 
   return { data, error: null }
 }
