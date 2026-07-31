@@ -15,7 +15,10 @@ function ProtocolosMensualesFila({
   onEliminar,
   onAbrirProtocolo,
   onGuardarIdOt,
+  onGuardarNotaAlerta,
 }) {
+  const tieneNotaAlerta = Boolean(String(registro.notaAlertaMensual || '').trim())
+
   return (
     <tr style={{ background: estaDuplicado ? 'rgba(255, 152, 0, 0.16)' : 'transparent' }}>
       <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'center', position: 'relative', overflow: 'visible' }}>
@@ -174,6 +177,25 @@ function ProtocolosMensualesFila({
             }}
           >
             {idOtEnEdicion === claveRegistro ? '\u2713' : '\u270F\uFE0F'}
+          </button>
+          <button
+            type="button"
+            onClick={() => onGuardarNotaAlerta(registro)}
+            title={tieneNotaAlerta ? registro.notaAlertaMensual : 'Agregar alerta'}
+            style={{
+              width: '30px',
+              height: '30px',
+              borderRadius: '50%',
+              border: tieneNotaAlerta ? '1px solid #ffb74d' : '1px solid #555',
+              background: tieneNotaAlerta ? '#4e342e' : 'transparent',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '16px',
+              opacity: tieneNotaAlerta ? 1 : 0.35,
+              filter: tieneNotaAlerta ? 'none' : 'grayscale(1)',
+            }}
+          >
+            {'\u{1F6A8}'}
           </button>
         </div>
       </td>

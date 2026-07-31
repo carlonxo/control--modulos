@@ -163,6 +163,56 @@ export async function guardarIdOtProtocoloMensualSupabase({
   }
 }
 
+export async function guardarNotaAlertaProtocoloMensualSupabase({
+  supabase,
+  registro,
+  notaAlerta,
+}) {
+  const carga = await cargarRegistroProtocoloMensual({
+    supabase,
+    origen: registro?.origen,
+    id: registro?.id,
+    incluirIdOt: true,
+  })
+
+  if (carga.error) {
+    return {
+      error: carga.error,
+      tablaDestino: carga.tablaDestino,
+      mensaje: 'No se pudo cargar el protocolo para guardar la alerta: ' + carga.error.message,
+    }
+  }
+
+  if (!carga.data) {
+    return {
+      error: new Error('No se encontrÃ³ el protocolo para guardar la alerta'),
+      tablaDestino: carga.tablaDestino,
+      mensaje: 'No se encontrÃ³ el protocolo para guardar la alerta',
+    }
+  }
+
+  const registroActual = carga.data
+  const protocoloActualizado = {
+    ...(registroActual.protocolo_entrega || {}),
+    nota_alerta_mensual: notaAlerta,
+  }
+
+  const guardado = await actualizarRegistroProtocoloMensual({
+    supabase,
+    origen: registro.origen,
+    id: registroActual.id,
+    payload: { protocolo_entrega: protocoloActualizado },
+    columnas: carga.columnas,
+  })
+
+  return {
+    ...guardado,
+    registroActual,
+    protocoloActualizado,
+    tablaDestino: guardado.tablaDestino || carga.tablaDestino,
+  }
+}
+
 export async function guardarAjusteValorizacionProtocoloSupabase({
   supabase,
   registro,

@@ -62,6 +62,7 @@ export function prepararRegistroProtocoloMensual({
       modificacion: valores.detalleModificacion,
     },
     idOt: registro?.id_ot || datosProtocolo.id_ot || datosProtocolo.idOt || '',
+    notaAlertaMensual: datosProtocolo.nota_alerta_mensual || '',
   }
 }
 

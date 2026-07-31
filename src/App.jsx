@@ -71,6 +71,7 @@ import {
   eliminarRegistroProtocoloMensual,
   guardarAjusteValorizacionProtocoloSupabase,
   guardarIdOtProtocoloMensualSupabase,
+  guardarNotaAlertaProtocoloMensualSupabase,
   guardarProtocoloManualMensualSupabase,
   guardarProtocoloModuloSupabase,
   cargarDatosProtocoloModuloActivo,
@@ -457,6 +458,8 @@ const [proyectoNuevo, setProyectoNuevo] = useState('')
 const [responsableNuevo, setResponsableNuevo] = useState('')
 const [fechaDesde, setFechaDesde] = useState('')
 const [fechaHasta, setFechaHasta] = useState('')
+const [proyectosFiltrados, setProyectosFiltrados] = useState([])
+const [mostrarFiltroProyectos, setMostrarFiltroProyectos] = useState(false)
 const [session, setSession] = useState(null)
 const [perfil, setPerfil] = useState(null)
   const [serieEditada, setSerieEditada] = useState('')
@@ -502,6 +505,8 @@ const [fechaProtocolosMensuales, setFechaProtocolosMensuales] = useState(new Dat
 const [protocolosMensuales, setProtocolosMensuales] = useState([])
 const [cargandoProtocolosMensuales, setCargandoProtocolosMensuales] = useState(false)
 const [busquedaProtocolosMensuales, setBusquedaProtocolosMensuales] = useState('')
+const [mostrarSoloIdOtPendiente, setMostrarSoloIdOtPendiente] = useState(false)
+const [mostrarSoloConAlertaMensual, setMostrarSoloConAlertaMensual] = useState(false)
 const [rangoBalanceMateriales, setRangoBalanceMateriales] = useState('mes')
 const [fechaBalanceMateriales, setFechaBalanceMateriales] = useState(new Date().toISOString().slice(0, 7))
 const [protocolosBalanceMateriales, setProtocolosBalanceMateriales] = useState([])
@@ -565,6 +570,20 @@ const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresP
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
 const puedeVerMenuModulo = tienePermiso(perfil?.rol, 'verMenuModulo')
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
+const normalizarProyectoFiltro = (proyecto) => String(proyecto || '')
+  .replace(/\s*\([^)]*\)\s*$/g, '')
+  .replace(/\s+/g, ' ')
+  .trim()
+const proyectosEnLinea = [...new Set(
+  datos
+    .filter((modulo) => modulo.serie && normalizarProyectoFiltro(modulo.proyecto))
+    .map((modulo) => normalizarProyectoFiltro(modulo.proyecto))
+)]
+  .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+const proyectosFiltroActivos = proyectosFiltrados.filter((proyecto) => proyectosEnLinea.includes(proyecto))
+const datosFiltradosPorProyecto = proyectosFiltroActivos.length
+  ? datos.filter((modulo) => !modulo.serie || proyectosFiltroActivos.includes(normalizarProyectoFiltro(modulo.proyecto)))
+  : datos
 const llamadosPendientes = datos.filter(
   (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
 )
@@ -574,6 +593,11 @@ const ingresosProtocolosMensuales = protocolosMensuales.reduce(
 )
 const protocolosMensualesFiltrados = protocolosMensuales.filter((registro) => {
   const busqueda = normalizarTexto(busquedaProtocolosMensuales)
+  const idOtLimpio = String(registro.idOt || '').trim()
+  const idOtPendiente = !idOtLimpio || idOtLimpio === '-' || separarIdsOt(idOtLimpio).filter(Boolean).length === 0
+  const tieneAlertaMensual = Boolean(String(registro.notaAlertaMensual || '').trim())
+  if (mostrarSoloIdOtPendiente && !idOtPendiente) return false
+  if (mostrarSoloConAlertaMensual && !tieneAlertaMensual) return false
   if (!busqueda) return true
   return normalizarTexto(registro.serie).includes(busqueda) || normalizarTexto(registro.idOt).includes(busqueda)
 })
@@ -815,6 +839,7 @@ function cerrarPanelesFlotantes() {
     setMostrarTodasAccionesDia,
     setMostrarMenuAcciones,
     setMostrarMenuModulo,
+    setMostrarFiltroProyectos,
   ])
 }
 
@@ -1789,6 +1814,60 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
   setIdOtEnEdicion(null)
   setIdsOtEnEdicion(['', '', ''])
   mostrarNotificacion('ID OT guardado')
+}
+
+async function guardarNotaAlertaProtocoloMensual(registro) {
+  if (!puedeVerProtocolosMensuales || !registro?.id) return
+
+  const textoActual = registro.notaAlertaMensual || registro.protocolo_entrega?.nota_alerta_mensual || ''
+  const nota = window.prompt('Ingrese la nota de alerta del protocolo:', textoActual)
+
+  if (nota === null) return
+
+  const notaAlerta = nota.trim()
+  const {
+    data: registroGuardado,
+    error,
+    mensaje,
+    registroActual,
+    protocoloActualizado,
+    tablaDestino,
+  } = await guardarNotaAlertaProtocoloMensualSupabase({
+    supabase,
+    registro,
+    notaAlerta,
+  })
+
+  if (error) {
+    mostrarNotificacion(mensaje || ('No se pudo guardar la alerta: ' + error.message))
+    return
+  }
+
+  if (!registroGuardado) {
+    mostrarNotificacion(`No se pudo confirmar el guardado de la alerta en ${tablaDestino}.`)
+    return
+  }
+
+  const registroConfirmado = {
+    ...registroActual,
+    ...registroGuardado,
+    protocolo_entrega: registroGuardado.protocolo_entrega || protocoloActualizado,
+  }
+
+  setProtocolosMensuales((actuales) => actuales.map((item) => (
+    item.origen === registro.origen && (
+      item.id === registro.id ||
+      item.id === registroConfirmado.id
+    )
+      ? {
+        ...item,
+        ...registroConfirmado,
+        protocolo_entrega: registroConfirmado.protocolo_entrega || protocoloActualizado,
+        notaAlertaMensual: notaAlerta,
+      }
+      : item
+  )))
+  mostrarNotificacion(notaAlerta ? 'Alerta guardada' : 'Alerta eliminada')
 }
 
 async function buscarProtocoloDuplicado({ serie, fecha, origenActual = '', idActual = '' }) {
@@ -3786,28 +3865,144 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   )}
 </div>
 
-{/* BLOQUE FECHAS + EXPORTAR (SEPARADO) */}
-<div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+{/* BLOQUE FECHAS + EXPORTAR + FILTRO PROYECTOS */}
+<div
+  style={{
+    marginTop: '15px',
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+  }}
+>
+  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+    <input
+      type="date"
+      value={fechaDesde}
+      onChange={(e) => setFechaDesde(e.target.value)}
+    />
 
-  <input
-    type="date"
-    value={fechaDesde}
-    onChange={(e) => setFechaDesde(e.target.value)}
-  />
+    <input
+      type="date"
+      value={fechaHasta}
+      onChange={(e) => setFechaHasta(e.target.value)}
+    />
 
-  <input
-    type="date"
-    value={fechaHasta}
-    onChange={(e) => setFechaHasta(e.target.value)}
-  />
+    <button
+      type="button"
+      onClick={exportarHistorialExcelHandler}
+    >
+      Exportar Excel
+    </button>
+  </div>
 
-  <button
-    type="button"
-    onClick={exportarHistorialExcelHandler}
-  >
-    Exportar Excel
-  </button>
+  <div style={{ position: 'relative', marginLeft: 'auto' }}>
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        setMostrarFiltroProyectos((actual) => !actual)
+      }}
+      disabled={proyectosEnLinea.length === 0}
+      style={{
+        minWidth: '190px',
+        padding: '7px 10px',
+        borderRadius: '6px',
+        border: '1px solid #777',
+        background: proyectosFiltroActivos.length ? '#0d47a1' : '#444',
+        color: 'white',
+        cursor: proyectosEnLinea.length ? 'pointer' : 'not-allowed',
+        fontWeight: 700,
+        textAlign: 'left',
+      }}
+      title="Filtrar módulos visibles por proyecto"
+    >
+      Proyecto: {proyectosFiltroActivos.length ? `${proyectosFiltroActivos.length} seleccionado(s)` : 'Todos'} ▾
+    </button>
 
+    {mostrarFiltroProyectos && (
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute',
+          top: 'calc(100% + 6px)',
+          right: 0,
+          width: '280px',
+          maxWidth: 'calc(100vw - 40px)',
+          maxHeight: '260px',
+          overflowY: 'auto',
+          background: '#222',
+          border: '1px solid #777',
+          borderRadius: '8px',
+          padding: '10px',
+          zIndex: 2500,
+          boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
+          textAlign: 'left',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <strong>Filtrar proyecto</strong>
+          <button
+            type="button"
+            onClick={() => setProyectosFiltrados([])}
+            style={{
+              padding: '4px 8px',
+              borderRadius: '5px',
+              border: '1px solid #777',
+              background: '#555',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '12px',
+            }}
+          >
+            Limpiar
+          </button>
+        </div>
+
+        {proyectosEnLinea.length === 0 ? (
+          <div style={{ color: '#ccc', fontSize: '13px' }}>No hay proyectos en línea.</div>
+        ) : (
+          proyectosEnLinea.map((proyecto) => {
+            const seleccionado = proyectosFiltroActivos.includes(proyecto)
+            const cantidad = datos.filter((modulo) => (
+              modulo.serie &&
+              normalizarProyectoFiltro(modulo.proyecto) === proyecto
+            )).length
+
+            return (
+              <label
+                key={proyecto}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '7px 4px',
+                  borderBottom: '1px solid #333',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={seleccionado}
+                  onChange={(e) => {
+                    setProyectosFiltrados((actuales) => {
+                      if (e.target.checked) {
+                        return [...new Set([...actuales, proyecto])]
+                      }
+                      return actuales.filter((item) => item !== proyecto)
+                    })
+                  }}
+                />
+                <span style={{ flex: 1 }}>{proyecto}</span>
+                <span style={{ color: '#ccc', fontSize: '12px' }}>{cantidad}</span>
+              </label>
+            )
+          })
+        )}
+      </div>
+    )}
+  </div>
 </div>
 
   {busquedaRealizada && resultadoBusqueda.length === 0 && (
@@ -3902,7 +4097,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             Línea {linea}
           </span>
           <span style={{ fontSize: '16px', fontWeight: '500', color: '#ccc' }}>
-            ({datos.filter((x) => Number(x.linea) === Number(linea) && x.serie).length} módulos)
+            ({datosFiltradosPorProyecto.filter((x) => Number(x.linea) === Number(linea) && x.serie).length} módulos)
           </span>
         </h3>
 
@@ -3947,7 +4142,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
               +
             </button>
           )}
-          {datos
+          {datosFiltradosPorProyecto
             .filter((x) => Number(x.linea) === Number(linea))
             .filter((x) => x.serie)
             .map((pos) => (
@@ -4111,7 +4306,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             Línea {linea}
           </span>
           <span style={{ fontWeight: '500', fontSize: '18px', color: '#ccc' }}>
-            ({datos.filter((x) => Number(x.linea) === Number(linea) && x.serie).length} módulos)
+            ({datosFiltradosPorProyecto.filter((x) => Number(x.linea) === Number(linea) && x.serie).length} módulos)
           </span>
         </h2>
 
@@ -4156,7 +4351,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
               +
             </button>
           )}
-          {datos
+          {datosFiltradosPorProyecto
             .filter((x) => Number(x.linea) === Number(linea))
             .filter((x) => x.serie)
             .map((pos) => (
@@ -4550,6 +4745,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       encabezados={encabezadosProtocolosMensuales}
       conteoClaves={conteoClavesProtocolos}
       puedeEliminarProtocolosMensuales={puedeEliminarProtocolosMensuales}
+      mostrarSoloIdOtPendiente={mostrarSoloIdOtPendiente}
+      onAlternarIdOtPendiente={() => setMostrarSoloIdOtPendiente((actual) => !actual)}
+      mostrarSoloConAlertaMensual={mostrarSoloConAlertaMensual}
+      onAlternarAlertaMensual={() => setMostrarSoloConAlertaMensual((actual) => !actual)}
       BotonValorCobro={(props) => (
         <BotonValorCobro {...props} onAbrirDetalle={abrirDetalleCobro} />
       )}
@@ -4565,6 +4764,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       onEliminar={eliminarProtocoloMensual}
       onAbrirProtocolo={abrirProtocoloDesdeBusqueda}
       onGuardarIdOt={guardarIdOtProtocoloMensual}
+      onGuardarNotaAlerta={guardarNotaAlertaProtocoloMensual}
     />
 
   </ProtocolosMensualesModal>
