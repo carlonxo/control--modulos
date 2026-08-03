@@ -3,12 +3,19 @@
   archivo,
   filas,
   valesDia = [],
+  solicitanteVale,
+  solicitantes = [],
+  observacionVale = '',
+  modoManual = false,
   cargando,
   cargandoValesDia,
   guardando,
   opcionesMaterialBalance = [],
   onCambiarFecha,
   onCambiarArchivo,
+  onCambiarSolicitante,
+  onCambiarObservacion,
+  onPrepararValeManual,
   onLeerVale,
   onAgregarFila,
   onActualizarFila,
@@ -54,7 +61,7 @@
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '160px minmax(0, 1fr) auto', gap: '10px', alignItems: 'end', marginBottom: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '160px minmax(180px, 1fr) auto', gap: '10px', alignItems: 'end', marginBottom: '10px' }}>
         <label style={{ display: 'grid', gap: '5px' }}>
           <strong>Fecha vale</strong>
           <input
@@ -65,6 +72,29 @@
           />
         </label>
 
+        <label style={{ display: 'grid', gap: '5px' }}>
+          <strong>Solicitante</strong>
+          <select
+            value={solicitanteVale}
+            onChange={(e) => onCambiarSolicitante(e.target.value)}
+            style={{ padding: '9px', boxSizing: 'border-box' }}
+          >
+            <option value="">Seleccionar solicitante...</option>
+            <option value="__sin_asignar__">No asignado</option>
+            {solicitantes.map((solicitante) => (
+              <option key={solicitante.id || solicitante.nombre} value={solicitante.id || solicitante.nombre}>
+                {solicitante.nombre}{solicitante.rol ? ` (${solicitante.rol})` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button type="button" onClick={onPrepararValeManual} style={botonGris}>
+          + Vale manual
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '10px', alignItems: 'end', marginBottom: '10px' }}>
         <label style={{ display: 'grid', gap: '5px' }}>
           <strong>Adjuntar vale</strong>
           <input
@@ -92,6 +122,17 @@
         </button>
       </div>
 
+      <label style={{ display: 'grid', gap: '5px', marginBottom: '14px' }}>
+        <strong>Observación</strong>
+        <input
+          type="text"
+          value={observacionVale}
+          onChange={(e) => onCambiarObservacion(e.target.value)}
+          placeholder="Opcional"
+          style={inputStyle}
+        />
+      </label>
+
       <div style={{ marginBottom: '16px', padding: '12px', border: '1px solid #444', borderRadius: '8px', background: '#252525' }}>
         <h3 style={{ margin: '0 0 8px' }}>Vales cargados para esta fecha</h3>
         {cargandoValesDia ? (
@@ -105,8 +146,13 @@
               return (
                 <details key={vale.id} style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}>
                   <summary style={{ padding: '9px 10px', background: '#333', cursor: 'pointer', fontWeight: 800 }}>
-                    {vale.archivo_nombre || 'Vale sin archivo'}  | {vale.items?.length || 0} materiales  | total {totalItems}
+                    {vale.tipo_ingreso === 'manual' ? 'Vale manual' : (vale.archivo_nombre || 'Vale sin archivo')}  | {vale.solicitante_nombre || 'Sin solicitante'}  | {vale.items?.length || 0} materiales  | total {totalItems}
                   </summary>
+                  {vale.observacion && (
+                    <div style={{ padding: '8px 10px', color: '#ffcc80', borderBottom: '1px solid #444' }}>
+                      {vale.observacion}
+                    </div>
+                  )}
                   <div style={{ padding: '8px 10px', display: 'grid', gap: '5px' }}>
                     {(vale.items || []).map((item) => (
                       <div
@@ -132,7 +178,7 @@
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
-        <h3 style={{ margin: 0 }}>Materiales detectados</h3>
+        <h3 style={{ margin: 0 }}>{modoManual ? 'Materiales del vale manual' : 'Materiales detectados'}</h3>
         <button type="button" onClick={onAgregarFila} style={botonGris}>
           + Agregar fila
         </button>
@@ -167,7 +213,10 @@
                     <SelectorMaterialBalance
                       valor={fila.materialBalance}
                       opciones={opcionesMaterialBalance}
-                      onCambiar={(valor) => onActualizarFila(index, { materialBalance: valor })}
+                      onCambiar={(valor) => onActualizarFila(index, {
+                        materialBalance: valor,
+                        materialVale: fila.materialVale || valor,
+                      })}
                     />
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>

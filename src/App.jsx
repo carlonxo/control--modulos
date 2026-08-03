@@ -42,6 +42,7 @@ import {
 } from './services/registroAccionesService'
 import { leerFilasValeBodegaDesdeArchivo } from './services/valesBodegaArchivoService'
 import { compilarBalanceMateriales } from './services/balanceMaterialesService'
+import { compilarTrazabilidadMaterialesPorSolicitante } from './services/trazabilidadMaterialesService'
 import {
   cargarConfigBalanceMateriales as cargarConfigBalanceMaterialesSupabase,
   guardarConfigBalanceMaterial,
@@ -523,6 +524,10 @@ const [sueldosBalanceMantencion, setSueldosBalanceMantencion] = useState('')
 const [fechaValeBodega, setFechaValeBodega] = useState(new Date().toISOString().slice(0, 10))
 const [archivoValeBodega, setArchivoValeBodega] = useState(null)
 const [filasValeBodega, setFilasValeBodega] = useState([])
+const [solicitanteValeBodega, setSolicitanteValeBodega] = useState('')
+const [solicitantesValeBodega, setSolicitantesValeBodega] = useState([])
+const [observacionValeBodega, setObservacionValeBodega] = useState('')
+const [modoValeManual, setModoValeManual] = useState(false)
 const [valesBodegaDia, setValesBodegaDia] = useState([])
 const [cargandoValesBodegaDia, setCargandoValesBodegaDia] = useState(false)
 const [leyendoValeBodega, setLeyendoValeBodega] = useState(false)
@@ -667,6 +672,12 @@ const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales,
   catalogoPreciosProtocolo: catalogoPreciosParaBalance,
   equivalenciasPrecioProtocolo,
   equivalenciasValeBodega,
+  normalizarTextoComparacion,
+})
+const trazabilidadMaterialesSolicitante = compilarTrazabilidadMaterialesPorSolicitante({
+  registros: protocolosBalanceMateriales,
+  vales: valesBalanceMateriales,
+  catalogoPrecios: catalogoPreciosParaBalance,
   normalizarTextoComparacion,
 })
 const catalogoPreciosMaterialesBaseCompleto = construirCatalogoPreciosMaterialesCompleto({
@@ -1649,9 +1660,46 @@ function eliminarFilaValeBodega(index) {
   setFilasValeBodega((actuales) => eliminarFilaValeBodegaLista(actuales, index))
 }
 
+function obtenerSolicitanteValeSeleccionado() {
+  if (solicitanteValeBodega === '__sin_asignar__') {
+    return { id: null, nombre: 'No asignado' }
+  }
+
+  const encontrado = solicitantesValeBodega.find((item) => String(item.id || item.nombre) === String(solicitanteValeBodega))
+  return {
+    id: encontrado?.id || null,
+    nombre: encontrado?.nombre || '',
+  }
+}
+
+async function cargarSolicitantesValesBodega() {
+  const { data, error } = await supabase
+    .from('perfiles')
+    .select('id, nombre, rol')
+    .in('rol', ['electrico', 'operador', 'colaborador'])
+    .order('nombre')
+
+  if (error) {
+    console.error(error)
+    setSolicitantesValeBodega([])
+    return
+  }
+
+  setSolicitantesValeBodega(data || [])
+}
+
+function prepararValeManualBodega() {
+  setModoValeManual(true)
+  setArchivoValeBodega(null)
+  if (filasValeBodega.length === 0) {
+    agregarFilaValeBodega()
+  }
+}
+
 async function leerValeBodega() {
   if (!archivoValeBodega) return
 
+  setModoValeManual(false)
   setLeyendoValeBodega(true)
   await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
   let filas = []
@@ -1679,6 +1727,12 @@ async function leerValeBodega() {
 async function guardarValeBodega() {
   if (!fechaValeBodega || filasValeBodega.length === 0) return
 
+  const solicitante = obtenerSolicitanteValeSeleccionado()
+  if (!solicitante.nombre) {
+    mostrarNotificacion('Debes seleccionar el solicitante del vale')
+    return
+  }
+
   const items = prepararItemsValeBodega(filasValeBodega)
 
   if (items.length === 0) {
@@ -1693,13 +1747,17 @@ async function guardarValeBodega() {
     fecha: fechaValeBodega,
     archivoNombre: archivoValeBodega?.name || '',
     usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    solicitanteId: solicitante.id,
+    solicitanteNombre: solicitante.nombre,
+    tipoIngreso: modoValeManual || !archivoValeBodega ? 'manual' : 'archivo',
+    observacion: observacionValeBodega,
     items,
   })
 
   setGuardandoValeBodega(false)
 
   if (error && etapa === 'vale') {
-    mostrarNotificacion('No se pudo guardar el vale. Revisa si existen las tablas vales_bodega y vales_bodega_items.')
+    mostrarNotificacion('No se pudo guardar el vale. Si el error menciona solicitante/tipo_ingreso/observacion, ejecuta el SQL supabase_vales_solicitante.sql. Detalle: ' + error.message)
     return
   }
 
@@ -1711,6 +1769,9 @@ async function guardarValeBodega() {
   mostrarNotificacion('Vale de bodega guardado')
   setFilasValeBodega([])
   setArchivoValeBodega(null)
+  setSolicitanteValeBodega('')
+  setObservacionValeBodega('')
+  setModoValeManual(false)
   await cargarValesBodegaDia(fechaValeBodega)
   setMostrarValesBodega(false)
 
@@ -1726,7 +1787,11 @@ async function abrirValesBodega() {
   setFechaValeBodega(new Date().toISOString().slice(0, 10))
   setArchivoValeBodega(null)
   setFilasValeBodega([])
+  setSolicitanteValeBodega('')
+  setObservacionValeBodega('')
+  setModoValeManual(false)
   await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
+  await cargarSolicitantesValesBodega()
   setMostrarValesBodega(true)
   await cargarValesBodegaDia(new Date().toISOString().slice(0, 10))
 }
@@ -4776,6 +4841,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     fecha={fechaBalanceMateriales}
     cargando={cargandoBalanceMateriales}
     filas={balanceMateriales}
+    trazabilidadSolicitantes={trazabilidadMaterialesSolicitante}
     configMateriales={configBalanceMateriales}
     materialesCatalogados={catalogoPreciosMaterialesCompleto.flatMap((item) => [
       item.material,
@@ -4824,12 +4890,19 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     archivo={archivoValeBodega}
     filas={filasValeBodega}
     valesDia={valesBodegaDia}
+    solicitanteVale={solicitanteValeBodega}
+    solicitantes={solicitantesValeBodega}
+    observacionVale={observacionValeBodega}
+    modoManual={modoValeManual}
     cargando={leyendoValeBodega}
     cargandoValesDia={cargandoValesBodegaDia}
     guardando={guardandoValeBodega}
     opcionesMaterialBalance={opcionesMaterialesBalance}
     onCambiarFecha={cambiarFechaValeBodega}
     onCambiarArchivo={setArchivoValeBodega}
+    onCambiarSolicitante={setSolicitanteValeBodega}
+    onCambiarObservacion={setObservacionValeBodega}
+    onPrepararValeManual={prepararValeManualBodega}
     onLeerVale={leerValeBodega}
     onAgregarFila={() => agregarFilaValeBodega()}
     onActualizarFila={actualizarFilaValeBodega}

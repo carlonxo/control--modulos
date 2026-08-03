@@ -5,6 +5,7 @@ function BalanceMaterialesModal({
   fecha,
   cargando,
   filas,
+  trazabilidadSolicitantes = [],
   configMateriales = {},
   materialesCatalogados = [],
   catalogoPrecios = [],
@@ -19,6 +20,7 @@ function BalanceMaterialesModal({
   onClickFondo,
 }) {
   const [mostrarReutilizados, setMostrarReutilizados] = useState(false)
+  const [mostrarPorSolicitante, setMostrarPorSolicitante] = useState(false)
   const clavesMaterialesCatalogados = new Set(materialesCatalogados.map(normalizarTextoBalance))
   materialesCatalogados.forEach((material) => clavesMaterialesCatalogados.add(normalizarTextoBalanceFlexible(material)))
   const preciosVentaPorMaterial = construirMapaPreciosBalance(catalogoPrecios, preciosMateriales, 'precio')
@@ -133,6 +135,7 @@ function BalanceMaterialesModal({
   )
   const indicadorBalance = mostrarReutilizados ? totalValorReutilizados : balanceTotal
   const colorBalanceTotal = balanceTotal > 0 ? '#66bb6a' : balanceTotal < 0 ? '#ff5252' : 'white'
+  const alertasCriticas = trazabilidadSolicitantes.filter((fila) => fila.estado === 'critico' && fila.diferencia > 0).length
 
   return (
     <div
@@ -231,7 +234,10 @@ function BalanceMaterialesModal({
         </div>
         <button
           type="button"
-          onClick={() => setMostrarReutilizados((actual) => !actual)}
+          onClick={() => {
+            setMostrarReutilizados((actual) => !actual)
+            setMostrarPorSolicitante(false)
+          }}
           style={{
             padding: '10px 14px',
             borderRadius: '10px',
@@ -244,6 +250,24 @@ function BalanceMaterialesModal({
         >
           Reutilizados ({totalReutilizados})
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMostrarPorSolicitante((actual) => !actual)
+            setMostrarReutilizados(false)
+          }}
+          style={{
+            padding: '10px 14px',
+            borderRadius: '10px',
+            background: mostrarPorSolicitante ? '#6d1b1b' : '#263238',
+            border: '1px solid #ff8a80',
+            color: 'white',
+            fontWeight: 800,
+            cursor: 'pointer',
+          }}
+        >
+          Por solicitante ({alertasCriticas} alertas)
+        </button>
         <div style={{ padding: '10px 14px', borderRadius: '10px', background: '#1b5e20', border: '1px solid #66bb6a', fontWeight: 800, color: mostrarReutilizados ? 'white' : colorBalanceTotal }}>
           Balance: {formatearPrecio(indicadorBalance)}
         </div>
@@ -252,7 +276,12 @@ function BalanceMaterialesModal({
       {filas.length === 0 && !cargando ? (
         <p style={{ color: '#ccc' }}>No hay materiales cobrados en el rango seleccionado.</p>
       ) : (
-        mostrarReutilizados ? (
+        mostrarPorSolicitante ? (
+          <TablaTrazabilidadSolicitantes
+            filas={trazabilidadSolicitantes}
+            formatearPrecio={formatearPrecio}
+          />
+        ) : mostrarReutilizados ? (
           <TablaMaterialesReutilizados
             filas={filasReutilizadas}
             tituloVacio="No hay material reutilizado cobrado en el rango seleccionado."
@@ -391,6 +420,67 @@ function TablaBalanceMateriales({
               </td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TablaTrazabilidadSolicitantes({
+  filas,
+  formatearPrecio,
+}) {
+  const filasConDiferencia = filas.filter((fila) => Number(fila.diferencia || 0) !== 0)
+
+  if (filasConDiferencia.length === 0) {
+    return <p style={{ color: '#ccc' }}>No hay diferencias por solicitante en el rango seleccionado.</p>
+  }
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
+        <thead>
+          <tr style={{ background: '#333' }}>
+            <th style={thStyle}>Estado</th>
+            <th style={thStyle}>Solicitante</th>
+            <th style={thStyle}>Material</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Retirado</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Cobrado</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Diferencia</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>% fuga</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Valor fuga</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filasConDiferencia.map((fila) => {
+            const color = fila.estado === 'critico'
+              ? '#ff5252'
+              : fila.estado === 'alerta'
+                ? '#ffb74d'
+                : '#66bb6a'
+            const etiqueta = fila.estado === 'critico'
+              ? 'Crítico'
+              : fila.estado === 'alerta'
+                ? 'Alerta'
+                : 'OK'
+
+            return (
+              <tr key={fila.clave}>
+                <td style={{ ...tdStyle, color, fontWeight: 900 }}>{etiqueta}</td>
+                <td style={{ ...tdStyle, fontWeight: 800 }}>{fila.solicitante}</td>
+                <td style={tdStyle}>{fila.material}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.retirado || '-'}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.cobrado || '-'}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', color, fontWeight: 900 }}>{fila.diferencia}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', color, fontWeight: 900 }}>
+                  {Number(fila.porcentajeDiferencia || 0).toFixed(1)}%
+                </td>
+                <td style={{ ...tdStyle, textAlign: 'right', color, fontWeight: 900 }}>
+                  {formatearPrecio(fila.valorDiferencia || 0)}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

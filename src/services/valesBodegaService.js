@@ -3,11 +3,19 @@ export async function cargarItemsValesBodegaPorRango({
   fechaInicio,
   fechaFin,
 }) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('vales_bodega_items')
-    .select('id, fecha, material_vale, material_balance, cantidad')
+    .select('id, fecha, material_vale, material_balance, cantidad, solicitante_id, solicitante_nombre, tipo_ingreso')
     .gte('fecha', fechaInicio)
     .lt('fecha', fechaFin)
+
+  if (error?.message?.includes('solicitante') || error?.message?.includes('tipo_ingreso')) {
+    ;({ data, error } = await supabase
+      .from('vales_bodega_items')
+      .select('id, fecha, material_vale, material_balance, cantidad')
+      .gte('fecha', fechaInicio)
+      .lt('fecha', fechaFin))
+  }
 
   return {
     items: data || [],
@@ -19,11 +27,19 @@ export async function cargarValesBodegaDia({
   supabase,
   fecha,
 }) {
-  const { data: vales, error: errorVales } = await supabase
+  let { data: vales, error: errorVales } = await supabase
     .from('vales_bodega')
-    .select('id, fecha, archivo_nombre, usuario_nombre, created_at')
+    .select('id, fecha, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, created_at')
     .eq('fecha', fecha)
     .order('created_at', { ascending: false })
+
+  if (errorVales?.message?.includes('solicitante') || errorVales?.message?.includes('tipo_ingreso') || errorVales?.message?.includes('observacion')) {
+    ;({ data: vales, error: errorVales } = await supabase
+      .from('vales_bodega')
+      .select('id, fecha, archivo_nombre, usuario_nombre, created_at')
+      .eq('fecha', fecha)
+      .order('created_at', { ascending: false }))
+  }
 
   if (errorVales) {
     return {
@@ -40,10 +56,17 @@ export async function cargarValesBodegaDia({
     }
   }
 
-  const { data: items, error: errorItems } = await supabase
+  let { data: items, error: errorItems } = await supabase
     .from('vales_bodega_items')
-    .select('id, vale_id, material_vale, material_balance, cantidad')
+    .select('id, vale_id, material_vale, material_balance, cantidad, solicitante_id, solicitante_nombre, tipo_ingreso')
     .in('vale_id', ids)
+
+  if (errorItems?.message?.includes('solicitante') || errorItems?.message?.includes('tipo_ingreso')) {
+    ;({ data: items, error: errorItems } = await supabase
+      .from('vales_bodega_items')
+      .select('id, vale_id, material_vale, material_balance, cantidad')
+      .in('vale_id', ids))
+  }
 
   if (errorItems) {
     return {
@@ -71,6 +94,10 @@ export async function guardarValeBodega({
   fecha,
   archivoNombre,
   usuarioNombre,
+  solicitanteId,
+  solicitanteNombre,
+  tipoIngreso = 'archivo',
+  observacion = '',
   items,
 }) {
   const { data: vale, error: errorVale } = await supabase
@@ -79,6 +106,10 @@ export async function guardarValeBodega({
       fecha,
       archivo_nombre: archivoNombre || '',
       usuario_nombre: usuarioNombre || '',
+      solicitante_id: solicitanteId || null,
+      solicitante_nombre: solicitanteNombre || '',
+      tipo_ingreso: tipoIngreso || 'archivo',
+      observacion: observacion || '',
     }])
     .select('id')
     .single()
@@ -96,6 +127,9 @@ export async function guardarValeBodega({
     .insert(items.map((item) => ({
       vale_id: vale.id,
       fecha,
+      solicitante_id: solicitanteId || null,
+      solicitante_nombre: solicitanteNombre || '',
+      tipo_ingreso: tipoIngreso || 'archivo',
       ...item,
     })))
 
