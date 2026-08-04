@@ -5,6 +5,7 @@ function ValesBodegaModal({
   archivo,
   filas,
   valesDia = [],
+  serieVale = '',
   solicitanteVale,
   solicitantes = [],
   observacionVale = '',
@@ -14,6 +15,7 @@ function ValesBodegaModal({
   guardando,
   opcionesMaterialBalance = [],
   onCambiarFecha,
+  onCambiarSerie,
   onCambiarArchivo,
   onCambiarSolicitante,
   onCambiarObservacion,
@@ -65,13 +67,24 @@ function ValesBodegaModal({
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '160px minmax(180px, 1fr) auto', gap: '10px', alignItems: 'end', marginBottom: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '150px 150px minmax(180px, 1fr) auto', gap: '10px', alignItems: 'end', marginBottom: '10px' }}>
         <label style={{ display: 'grid', gap: '5px' }}>
           <strong>Fecha vale</strong>
           <input
             type="date"
             value={fecha}
             onChange={(e) => onCambiarFecha(e.target.value)}
+            style={{ padding: '9px', boxSizing: 'border-box' }}
+          />
+        </label>
+
+        <label style={{ display: 'grid', gap: '5px' }}>
+          <strong>Serie</strong>
+          <input
+            type="text"
+            value={serieVale}
+            onChange={(e) => onCambiarSerie(e.target.value)}
+            placeholder="Ej: 2020..."
             style={{ padding: '9px', boxSizing: 'border-box' }}
           />
         </label>
@@ -171,10 +184,11 @@ function ValesBodegaModal({
               <div style={{ display: 'grid', gap: '8px' }}>
                 {valesDia.map((vale) => {
                   const totalItems = (vale.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
+                  const serieMostrada = vale.serie || extraerSerieDesdeObservacion(vale.observacion)
                   return (
                     <details key={vale.id} style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}>
                       <summary style={{ padding: '9px 10px', background: '#333', cursor: 'pointer', fontWeight: 800 }}>
-                        {vale.tipo_ingreso === 'manual' ? 'Vale manual' : (vale.archivo_nombre || 'Vale sin archivo')}  | {vale.solicitante_nombre || 'Sin solicitante'}  | {vale.items?.length || 0} materiales  | total {totalItems}
+                        {vale.tipo_ingreso === 'manual' ? 'Vale manual' : (vale.archivo_nombre || 'Vale sin archivo')}  | Serie {serieMostrada || '-'}  | {vale.solicitante_nombre || 'Sin solicitante'}  | {vale.items?.length || 0} materiales  | total {totalItems}
                       </summary>
                       {vale.observacion && (
                         <div style={{ padding: '8px 10px', color: '#ffcc80', borderBottom: '1px solid #444' }}>
@@ -400,6 +414,12 @@ const botonPeligro = {
   cursor: 'pointer',
   fontWeight: 900,
   padding: 0,
+}
+
+function extraerSerieDesdeObservacion(observacion = '') {
+  const texto = String(observacion || '')
+  const match = texto.match(/(?:serie|ser\.?|modulo|m[oó]dulo)?\s*[:#-]?\s*(\d{5,})/i)
+  return match?.[1] || ''
 }
 
 export default ValesBodegaModal

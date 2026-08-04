@@ -524,6 +524,7 @@ const [sueldosBalanceMantencion, setSueldosBalanceMantencion] = useState('')
 const [fechaValeBodega, setFechaValeBodega] = useState(new Date().toISOString().slice(0, 10))
 const [archivoValeBodega, setArchivoValeBodega] = useState(null)
 const [filasValeBodega, setFilasValeBodega] = useState([])
+const [serieValeBodega, setSerieValeBodega] = useState('')
 const [solicitanteValeBodega, setSolicitanteValeBodega] = useState('')
 const [solicitantesValeBodega, setSolicitantesValeBodega] = useState([])
 const [observacionValeBodega, setObservacionValeBodega] = useState('')
@@ -1530,6 +1531,7 @@ async function abrirBalanceMateriales() {
   setMostrarBalanceMateriales(true)
   await Promise.all([
     cargarConfigBalanceMateriales(),
+    cargarSolicitantesValesBodega(),
     cargarBalanceMateriales(),
   ])
 }
@@ -1733,6 +1735,11 @@ async function guardarValeBodega() {
     return
   }
 
+  if (!serieValeBodega.trim()) {
+    mostrarNotificacion('Debes ingresar la serie asociada al vale')
+    return
+  }
+
   const items = prepararItemsValeBodega(filasValeBodega)
 
   if (items.length === 0) {
@@ -1747,6 +1754,7 @@ async function guardarValeBodega() {
     fecha: fechaValeBodega,
     archivoNombre: archivoValeBodega?.name || '',
     usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    serie: serieValeBodega.trim(),
     solicitanteId: solicitante.id,
     solicitanteNombre: solicitante.nombre,
     tipoIngreso: modoValeManual || !archivoValeBodega ? 'manual' : 'archivo',
@@ -1757,7 +1765,7 @@ async function guardarValeBodega() {
   setGuardandoValeBodega(false)
 
   if (error && etapa === 'vale') {
-    mostrarNotificacion('No se pudo guardar el vale. Si el error menciona solicitante/tipo_ingreso/observacion, ejecuta el SQL supabase_vales_solicitante.sql. Detalle: ' + error.message)
+    mostrarNotificacion('No se pudo guardar el vale. Si el error menciona serie/solicitante/tipo_ingreso/observacion, ejecuta el SQL supabase_vales_solicitante.sql. Detalle: ' + error.message)
     return
   }
 
@@ -1769,6 +1777,7 @@ async function guardarValeBodega() {
   mostrarNotificacion('Vale de bodega guardado')
   setFilasValeBodega([])
   setArchivoValeBodega(null)
+  setSerieValeBodega('')
   setSolicitanteValeBodega('')
   setObservacionValeBodega('')
   setModoValeManual(false)
@@ -1787,6 +1796,7 @@ async function abrirValesBodega() {
   setFechaValeBodega(new Date().toISOString().slice(0, 10))
   setArchivoValeBodega(null)
   setFilasValeBodega([])
+  setSerieValeBodega('')
   setSolicitanteValeBodega('')
   setObservacionValeBodega('')
   setModoValeManual(false)
@@ -4841,7 +4851,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     fecha={fechaBalanceMateriales}
     cargando={cargandoBalanceMateriales}
     filas={balanceMateriales}
+    registrosProtocolos={protocolosBalanceMateriales}
+    itemsVales={valesBalanceMateriales}
     trazabilidadSolicitantes={trazabilidadMaterialesSolicitante}
+    solicitantesDisponibles={solicitantesValeBodega}
     configMateriales={configBalanceMateriales}
     materialesCatalogados={catalogoPreciosMaterialesCompleto.flatMap((item) => [
       item.material,
@@ -4850,6 +4863,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     catalogoPrecios={catalogoPreciosMaterialesCompleto}
     preciosMateriales={preciosMateriales}
     preciosCompraMateriales={preciosCompraMateriales}
+    lineasDisponibles={LINEAS_TABLERO}
     formatearPrecio={formatearPrecioMaterial}
     onCambiarRango={(nuevoRango) => {
       setRangoBalanceMateriales(nuevoRango)
@@ -4890,6 +4904,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     archivo={archivoValeBodega}
     filas={filasValeBodega}
     valesDia={valesBodegaDia}
+    serieVale={serieValeBodega}
     solicitanteVale={solicitanteValeBodega}
     solicitantes={solicitantesValeBodega}
     observacionVale={observacionValeBodega}
@@ -4899,6 +4914,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     guardando={guardandoValeBodega}
     opcionesMaterialBalance={opcionesMaterialesBalance}
     onCambiarFecha={cambiarFechaValeBodega}
+    onCambiarSerie={setSerieValeBodega}
     onCambiarArchivo={setArchivoValeBodega}
     onCambiarSolicitante={setSolicitanteValeBodega}
     onCambiarObservacion={setObservacionValeBodega}

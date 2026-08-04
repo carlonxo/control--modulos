@@ -1,16 +1,21 @@
 import { useState } from 'react'
+import { compilarTrazabilidadMaterialesPorGrupo } from '../services/trazabilidadMaterialesService'
 
 function BalanceMaterialesModal({
   rango,
   fecha,
   cargando,
   filas,
+  registrosProtocolos = [],
+  itemsVales = [],
   trazabilidadSolicitantes = [],
+  solicitantesDisponibles = [],
   configMateriales = {},
   materialesCatalogados = [],
   catalogoPrecios = [],
   preciosMateriales = {},
   preciosCompraMateriales = {},
+  lineasDisponibles = [],
   formatearPrecio,
   onCambiarRango,
   onCambiarFecha,
@@ -21,6 +26,9 @@ function BalanceMaterialesModal({
 }) {
   const [mostrarReutilizados, setMostrarReutilizados] = useState(false)
   const [mostrarPorSolicitante, setMostrarPorSolicitante] = useState(false)
+  const [mostrarPorGrupo, setMostrarPorGrupo] = useState(false)
+  const [solicitantesGrupo, setSolicitantesGrupo] = useState([])
+  const [lineasGrupo, setLineasGrupo] = useState([])
   const clavesMaterialesCatalogados = new Set(materialesCatalogados.map(normalizarTextoBalance))
   materialesCatalogados.forEach((material) => clavesMaterialesCatalogados.add(normalizarTextoBalanceFlexible(material)))
   const preciosVentaPorMaterial = construirMapaPreciosBalance(catalogoPrecios, preciosMateriales, 'precio')
@@ -136,6 +144,17 @@ function BalanceMaterialesModal({
   const indicadorBalance = mostrarReutilizados ? totalValorReutilizados : balanceTotal
   const colorBalanceTotal = balanceTotal > 0 ? '#66bb6a' : balanceTotal < 0 ? '#ff5252' : 'white'
   const alertasCriticas = trazabilidadSolicitantes.filter((fila) => fila.estado === 'critico' && fila.diferencia > 0).length
+  const opcionesSolicitantesGrupo = obtenerOpcionesSolicitantesGrupo(itemsVales, solicitantesDisponibles)
+  const trazabilidadGrupo = compilarTrazabilidadMaterialesPorGrupo({
+    registros: registrosProtocolos,
+    vales: itemsVales,
+    catalogoPrecios,
+    solicitantesDisponibles,
+    solicitantesSeleccionados: solicitantesGrupo,
+    lineasSeleccionadas: lineasGrupo,
+    normalizarTextoComparacion: normalizarTextoBalance,
+  })
+  const alertasGrupo = trazabilidadGrupo.filter((fila) => fila.estado === 'critico' && fila.diferencia > 0).length
 
   return (
     <div
@@ -237,6 +256,7 @@ function BalanceMaterialesModal({
           onClick={() => {
             setMostrarReutilizados((actual) => !actual)
             setMostrarPorSolicitante(false)
+            setMostrarPorGrupo(false)
           }}
           style={{
             padding: '10px 14px',
@@ -255,6 +275,7 @@ function BalanceMaterialesModal({
           onClick={() => {
             setMostrarPorSolicitante((actual) => !actual)
             setMostrarReutilizados(false)
+            setMostrarPorGrupo(false)
           }}
           style={{
             padding: '10px 14px',
@@ -268,6 +289,25 @@ function BalanceMaterialesModal({
         >
           Por solicitante ({alertasCriticas} alertas)
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMostrarPorGrupo((actual) => !actual)
+            setMostrarReutilizados(false)
+            setMostrarPorSolicitante(false)
+          }}
+          style={{
+            padding: '10px 14px',
+            borderRadius: '10px',
+            background: mostrarPorGrupo ? '#4a148c' : '#263238',
+            border: '1px solid #ce93d8',
+            color: 'white',
+            fontWeight: 800,
+            cursor: 'pointer',
+          }}
+        >
+          Por grupo ({alertasGrupo} alertas)
+        </button>
         <div style={{ padding: '10px 14px', borderRadius: '10px', background: '#1b5e20', border: '1px solid #66bb6a', fontWeight: 800, color: mostrarReutilizados ? 'white' : colorBalanceTotal }}>
           Balance: {formatearPrecio(indicadorBalance)}
         </div>
@@ -276,7 +316,18 @@ function BalanceMaterialesModal({
       {filas.length === 0 && !cargando ? (
         <p style={{ color: '#ccc' }}>No hay materiales cobrados en el rango seleccionado.</p>
       ) : (
-        mostrarPorSolicitante ? (
+        mostrarPorGrupo ? (
+          <VistaTrazabilidadGrupo
+            filas={trazabilidadGrupo}
+            solicitantes={opcionesSolicitantesGrupo}
+            lineas={lineasDisponibles}
+            solicitantesSeleccionados={solicitantesGrupo}
+            lineasSeleccionadas={lineasGrupo}
+            onCambiarSolicitantes={setSolicitantesGrupo}
+            onCambiarLineas={setLineasGrupo}
+            formatearPrecio={formatearPrecio}
+          />
+        ) : mostrarPorSolicitante ? (
           <TablaTrazabilidadSolicitantes
             filas={trazabilidadSolicitantes}
             formatearPrecio={formatearPrecio}
@@ -290,6 +341,7 @@ function BalanceMaterialesModal({
         ) : (
           <TablaBalanceMateriales
             filas={filasBalance}
+            catalogoPrecios={catalogoPrecios}
             tituloVacio="No hay materiales cobrados en el rango seleccionado."
             formatearPrecio={formatearPrecio}
             onCambiarNombreMaterial={(clave, valor) => {
@@ -346,6 +398,7 @@ function TablaMaterialesReutilizados({
 
 function TablaBalanceMateriales({
   filas,
+  catalogoPrecios,
   tituloVacio,
   formatearPrecio,
   onCambiarNombreMaterial,
@@ -353,6 +406,8 @@ function TablaBalanceMateriales({
   if (filas.length === 0) {
     return <p style={{ color: '#ccc' }}>{tituloVacio}</p>
   }
+
+  const opcionesCatalogo = obtenerOpcionesCatalogoBalance(catalogoPrecios)
 
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -371,21 +426,10 @@ function TablaBalanceMateriales({
           {filas.map((fila) => (
             <tr key={fila.clave}>
               <td style={{ ...tdStyle, fontWeight: 700 }}>
-                <input
-                  type="text"
-                  value={fila.materialVisible}
-                  onChange={(e) => onCambiarNombreMaterial(fila.clave, e.target.value)}
-                  style={{
-                    width: '100%',
-                    minWidth: '220px',
-                    padding: '6px',
-                    boxSizing: 'border-box',
-                    background: '#fff',
-                    color: '#111',
-                    border: '1px solid #777',
-                    borderRadius: '6px',
-                    fontWeight: 800,
-                  }}
+                <SelectorMaterialBalance
+                  fila={fila}
+                  opcionesCatalogo={opcionesCatalogo}
+                  onCambiarNombreMaterial={onCambiarNombreMaterial}
                 />
                 {fila.noCatalogado && (
                   <span style={{ display: 'inline-block', marginTop: '5px', color: '#ffcc80', fontSize: '12px', fontWeight: 800 }}>
@@ -487,6 +531,322 @@ function TablaTrazabilidadSolicitantes({
   )
 }
 
+function VistaTrazabilidadGrupo({
+  filas,
+  solicitantes,
+  lineas,
+  solicitantesSeleccionados,
+  lineasSeleccionadas,
+  onCambiarSolicitantes,
+  onCambiarLineas,
+  formatearPrecio,
+}) {
+  const filtrosCompletos = solicitantesSeleccionados.length > 0 && lineasSeleccionadas.length > 0
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) minmax(220px, 1fr)', gap: '12px', marginBottom: '12px' }}>
+        <PanelSeleccionSolicitantesGrupo
+          titulo="Eléctricos / solicitantes"
+          opciones={solicitantes}
+          seleccionados={solicitantesSeleccionados}
+          onCambiar={onCambiarSolicitantes}
+        />
+        <PanelSeleccionGrupo
+          titulo="Líneas"
+          opciones={lineas.map(String)}
+          seleccionados={lineasSeleccionadas.map(String)}
+          onCambiar={onCambiarLineas}
+          prefijoOpcion="Línea "
+        />
+      </div>
+
+      {!filtrosCompletos ? (
+        <p style={{ color: '#ccc' }}>
+          Selecciona al menos un solicitante y una línea para cruzar material retirado versus material instalado.
+        </p>
+      ) : (
+        <TablaTrazabilidadGrupo filas={filas} formatearPrecio={formatearPrecio} />
+      )}
+    </div>
+  )
+}
+
+function PanelSeleccionGrupo({
+  titulo,
+  opciones,
+  seleccionados,
+  onCambiar,
+  prefijoOpcion = '',
+}) {
+  const seleccion = new Set(seleccionados.map(String))
+  const alternar = (opcion) => {
+    const valor = String(opcion)
+    const nuevaSeleccion = new Set(seleccion)
+    if (nuevaSeleccion.has(valor)) {
+      nuevaSeleccion.delete(valor)
+    } else {
+      nuevaSeleccion.add(valor)
+    }
+    onCambiar([...nuevaSeleccion])
+  }
+
+  return (
+    <div style={{ border: '1px solid #555', borderRadius: '8px', padding: '10px', background: '#252525' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+        <strong>{titulo}</strong>
+        <button
+          type="button"
+          onClick={() => onCambiar(seleccionados.length === opciones.length ? [] : opciones.map(String))}
+          style={{ ...botonMini, borderColor: '#777' }}
+        >
+          {seleccionados.length === opciones.length ? 'Limpiar' : 'Todos'}
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '145px', overflowY: 'auto' }}>
+        {opciones.length === 0 ? (
+          <span style={{ color: '#aaa' }}>Sin opciones en el rango</span>
+        ) : opciones.map((opcion) => {
+          const activo = seleccion.has(String(opcion))
+          return (
+            <button
+              key={opcion}
+              type="button"
+              onClick={() => alternar(opcion)}
+              style={{
+                ...botonMini,
+                background: activo ? '#1565c0' : '#333',
+                borderColor: activo ? '#64b5f6' : '#555',
+              }}
+            >
+              {prefijoOpcion}{opcion}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function PanelSeleccionSolicitantesGrupo({
+  titulo,
+  opciones,
+  seleccionados,
+  onCambiar,
+}) {
+  const seleccion = new Set(seleccionados.map(String))
+  const opcionesPendientes = opciones.filter((opcion) => !seleccion.has(String(opcion.valor)))
+  const etiquetasPorValor = Object.fromEntries(opciones.map((opcion) => [String(opcion.valor), opcion.etiqueta]))
+
+  const agregar = (valor) => {
+    if (!valor) return
+    onCambiar([...seleccionados.map(String), valor])
+  }
+
+  const quitar = (valor) => {
+    onCambiar(seleccionados.map(String).filter((item) => item !== String(valor)))
+  }
+
+  return (
+    <div style={{ border: '1px solid #555', borderRadius: '8px', padding: '10px', background: '#252525' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+        <strong>{titulo}</strong>
+        <button
+          type="button"
+          onClick={() => onCambiar([])}
+          style={{ ...botonMini, borderColor: '#777' }}
+        >
+          Limpiar
+        </button>
+      </div>
+
+      <select
+        value=""
+        onChange={(e) => agregar(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '8px',
+          boxSizing: 'border-box',
+          borderRadius: '6px',
+          border: '1px solid #777',
+          background: '#fff',
+          color: '#111',
+          fontWeight: 700,
+          marginBottom: '8px',
+        }}
+      >
+        <option value="">Seleccionar eléctrico...</option>
+        {opcionesPendientes.map((opcion) => (
+          <option key={opcion.valor} value={opcion.valor}>
+            {opcion.etiqueta}
+          </option>
+        ))}
+      </select>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '34px', maxHeight: '100px', overflowY: 'auto' }}>
+        {seleccionados.length === 0 ? (
+          <span style={{ color: '#aaa' }}>Sin eléctricos seleccionados</span>
+        ) : seleccionados.map((opcion) => (
+          <button
+            key={opcion}
+            type="button"
+            onClick={() => quitar(opcion)}
+            title="Quitar"
+            style={{
+              ...botonMini,
+              background: '#1565c0',
+              borderColor: '#64b5f6',
+            }}
+          >
+            {etiquetasPorValor[String(opcion)] || opcion} ×
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TablaTrazabilidadGrupo({
+  filas,
+  formatearPrecio,
+}) {
+  const filasConDiferencia = filas.filter((fila) => Number(fila.diferencia || 0) !== 0)
+
+  if (filasConDiferencia.length === 0) {
+    return <p style={{ color: '#ccc' }}>No hay diferencias para el grupo seleccionado.</p>
+  }
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
+        <thead>
+          <tr style={{ background: '#333' }}>
+            <th style={thStyle}>Estado</th>
+            <th style={thStyle}>Material</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Retirado grupo</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Instalado líneas</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Diferencia</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>% fuga</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Valor fuga</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filasConDiferencia.map((fila) => {
+            const color = fila.estado === 'critico'
+              ? '#ff5252'
+              : fila.estado === 'alerta'
+                ? '#ffb74d'
+                : '#66bb6a'
+            const etiqueta = fila.estado === 'critico'
+              ? 'Crítico'
+              : fila.estado === 'alerta'
+                ? 'Alerta'
+                : 'OK'
+
+            return (
+              <tr key={fila.clave}>
+                <td style={{ ...tdStyle, color, fontWeight: 900 }}>{etiqueta}</td>
+                <td style={{ ...tdStyle, fontWeight: 800 }}>{fila.material}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.retirado || '-'}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.instalado || '-'}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', color, fontWeight: 900 }}>{fila.diferencia}</td>
+                <td style={{ ...tdStyle, textAlign: 'right', color, fontWeight: 900 }}>
+                  {Number(fila.porcentajeDiferencia || 0).toFixed(1)}%
+                </td>
+                <td style={{ ...tdStyle, textAlign: 'right', color, fontWeight: 900 }}>
+                  {formatearPrecio(fila.valorDiferencia || 0)}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function SelectorMaterialBalance({
+  fila,
+  opcionesCatalogo,
+  onCambiarNombreMaterial,
+}) {
+  const materialCatalogo = opcionesCatalogo.find((opcion) => (
+    normalizarTextoBalance(opcion) === normalizarTextoBalance(fila.materialVisible) ||
+    normalizarTextoBalanceFlexible(opcion) === normalizarTextoBalanceFlexible(fila.materialVisible)
+  ))
+  const valorSelector = materialCatalogo || '__otro__'
+
+  return (
+    <div style={{ display: 'grid', gap: '6px', minWidth: '240px' }}>
+      <select
+        value={valorSelector}
+        onChange={(e) => {
+          const valor = e.target.value
+          if (valor === '__otro__') {
+            onCambiarNombreMaterial(fila.clave, fila.materialVisible || fila.material || '')
+            return
+          }
+          onCambiarNombreMaterial(fila.clave, valor)
+        }}
+        title="Vincular este material con un material del catálogo"
+        style={{
+          width: '100%',
+          padding: '6px',
+          boxSizing: 'border-box',
+          background: '#fff',
+          color: '#111',
+          border: '1px solid #777',
+          borderRadius: '6px',
+          fontWeight: 800,
+        }}
+      >
+        <option value="__otro__">Otro / no catalogado</option>
+        {opcionesCatalogo.map((material) => (
+          <option key={material} value={material}>
+            {material}
+          </option>
+        ))}
+      </select>
+
+      {valorSelector === '__otro__' && (
+        <input
+          type="text"
+          value={fila.materialVisible}
+          onChange={(e) => onCambiarNombreMaterial(fila.clave, e.target.value)}
+          title="Nombre visible para materiales que no están en catálogo"
+          style={{
+            width: '100%',
+            padding: '6px',
+            boxSizing: 'border-box',
+            background: '#fff',
+            color: '#111',
+            border: '1px solid #777',
+            borderRadius: '6px',
+            fontWeight: 800,
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function obtenerOpcionesCatalogoBalance(catalogoPrecios = []) {
+  const opciones = new Map()
+
+  catalogoPrecios
+    .filter((item) => item?.activo !== false && item?.material)
+    .forEach((item) => {
+      const clave = normalizarTextoBalance(item.material)
+      if (!clave || opciones.has(clave)) return
+      opciones.set(clave, item.material)
+    })
+
+  return [...opciones.values()].sort((a, b) => a.localeCompare(b, 'es', {
+    numeric: true,
+    sensitivity: 'base',
+  }))
+}
+
 const thStyle = {
   padding: '8px 10px',
   border: '1px solid #555',
@@ -499,11 +859,40 @@ const tdStyle = {
   border: '1px solid #444',
 }
 
+const botonMini = {
+  padding: '6px 9px',
+  borderRadius: '999px',
+  border: '1px solid #555',
+  background: '#333',
+  color: 'white',
+  cursor: 'pointer',
+  fontWeight: 800,
+}
+
 function normalizarPrecioManual(valor) {
   if (valor === null || valor === undefined || valor === '') return 0
   const limpio = String(valor).replace(/[^\d,-]/g, '').replace(',', '.')
   const numero = Number(limpio)
   return Number.isFinite(numero) ? numero : 0
+}
+
+function obtenerOpcionesSolicitantesGrupo(itemsVales = [], solicitantesDisponibles = []) {
+  const opciones = new Map()
+  solicitantesDisponibles.forEach((item) => {
+    const nombre = String(item?.nombre || item || '').trim()
+    const valor = String(item?.id || nombre).trim()
+    if (nombre && valor) opciones.set(valor, { valor, etiqueta: nombre })
+  })
+  itemsVales.forEach((item) => {
+    const nombre = String(item.solicitante_nombre || item.solicitante || item.responsable || '').trim()
+    const valor = String(item.solicitante_id || nombre).trim()
+    if (nombre && valor && !opciones.has(valor)) opciones.set(valor, { valor, etiqueta: nombre })
+  })
+
+  return [...opciones.values()].sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, 'es', {
+    numeric: true,
+    sensitivity: 'base',
+  }))
 }
 
 function normalizarTextoBalance(valor) {
