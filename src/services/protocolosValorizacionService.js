@@ -78,17 +78,18 @@ function calcularValoresProtocoloMensual({
   esEstadoGarantia,
 }) {
   const detalleMateriales = registro?.protocolo_entrega?.detalleMateriales || {}
+  const resolverPrecioCatalogo = (item) => resolverPrecioVentaProtocolo({
+    item,
+    precios,
+    normalizarPrecioMaterial,
+  })
   const preciosBase = Object.fromEntries(catalogoPreciosProtocolo.map((item) => [
     item.material,
-    normalizarPrecioMaterial(precios[item.material] ?? item.precio),
+    resolverPrecioCatalogo(item),
   ]))
   const preciosBaseNormalizados = {}
   catalogoPreciosProtocolo.forEach((item) => {
-    const precio = normalizarPrecioMaterial(
-      precios[item.material] ??
-      precios[item.materialOriginal] ??
-      item.precio
-    )
+    const precio = resolverPrecioCatalogo(item)
     preciosBaseNormalizados[normalizarTextoComparacion(item.material)] = precio
     if (item.materialOriginal) {
       preciosBaseNormalizados[normalizarTextoComparacion(item.materialOriginal)] = precio
@@ -98,12 +99,18 @@ function calcularValoresProtocoloMensual({
     preciosBaseNormalizados[normalizarTextoComparacion(material)] = normalizarPrecioMaterial(precio)
   })
 
-  const valores = camposMateriales.reduce((totales, [itemProtocolo]) => {
-    const detalle = detalleMateriales[itemProtocolo] || {}
+  const valores = camposMateriales.reduce((totales, [itemProtocolo, fuentes = []]) => {
     const materialPrecio = obtenerMaterialPrecioParaProtocolo({
       itemProtocolo,
       catalogoPreciosProtocolo,
       equivalenciasPrecioProtocolo,
+      normalizarTextoComparacion,
+    })
+    const detalle = obtenerDetalleMaterialProtocolo({
+      detalleMateriales,
+      materiales: registro?.materiales || {},
+      fuentes,
+      claves: [itemProtocolo, ...fuentes, materialPrecio],
       normalizarTextoComparacion,
     })
     const precioUnitario = preciosBase[materialPrecio] ?? preciosBaseNormalizados[normalizarTextoComparacion(materialPrecio)] ?? 0
@@ -210,6 +217,84 @@ function obtenerMaterialPrecioParaProtocolo({
     return itemEquivalente?.material || equivalente
   }
   return itemProtocolo
+}
+
+function resolverPrecioVentaProtocolo({
+  item = {},
+  precios = {},
+  normalizarPrecioMaterial,
+}) {
+  const precioGuardado = normalizarPrecioMaterial(
+    precios[item.material] ??
+    precios[item.materialOriginal]
+  )
+  const precioCatalogo = normalizarPrecioMaterial(item.precio)
+
+  if (precioGuardado > 0) return precioGuardado
+  if (precioCatalogo > 0) return precioCatalogo
+  return precioGuardado
+}
+
+function obtenerDetalleMaterialProtocolo({
+  detalleMateriales = {},
+  materiales = {},
+  fuentes = [],
+  claves = [],
+  normalizarTextoComparacion,
+}) {
+  const clavesValidas = [...new Set(claves.filter(Boolean))]
+
+  for (const clave of clavesValidas) {
+    const detalle = detalleMateriales[clave]
+    if (detalle?.mantencion || detalle?.modificacion) {
+      return detalle
+    }
+  }
+
+  const detallesPorClaveNormalizada = Object.entries(detalleMateriales).reduce((mapa, [clave, detalle]) => {
+    mapa[normalizarTextoComparacion(clave)] = detalle
+    return mapa
+  }, {})
+
+  for (const clave of clavesValidas) {
+    const detalle = detallesPorClaveNormalizada[normalizarTextoComparacion(clave)]
+    if (detalle?.mantencion || detalle?.modificacion) {
+      return detalle
+    }
+  }
+
+  const cantidadesMateriales = calcularCantidadesMaterialesVinculados(materiales, fuentes)
+  if (cantidadesMateriales.nuevo || cantidadesMateriales.reutilizado) {
+    return {
+      mantencion: formatearCantidadProtocolo(cantidadesMateriales.nuevo, cantidadesMateriales.reutilizado),
+      modificacion: '',
+    }
+  }
+
+  return {}
+}
+
+function calcularCantidadesMaterialesVinculados(materiales = {}, fuentes = []) {
+  return fuentes.reduce((suma, clave) => {
+    const valor = materiales?.[clave]
+    if (typeof valor === 'object' && valor !== null) {
+      return {
+        nuevo: suma.nuevo + Number(valor?.nuevo || 0),
+        reutilizado: suma.reutilizado + Number(valor?.reutilizado || 0),
+      }
+    }
+
+    return {
+      ...suma,
+      nuevo: suma.nuevo + Number(valor || 0),
+    }
+  }, { nuevo: 0, reutilizado: 0 })
+}
+
+function formatearCantidadProtocolo(nuevo, reutilizado) {
+  if (nuevo && reutilizado) return `${nuevo} / ${reutilizado} R`
+  if (reutilizado) return `${reutilizado} R`
+  return nuevo || ''
 }
 
 function calcularCobroCantidadProtocolo(valor, precioUnitario, parsearCantidadProtocolo) {
