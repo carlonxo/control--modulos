@@ -1,4 +1,6 @@
-﻿function ValesBodegaModal({
+import { useState } from 'react'
+
+function ValesBodegaModal({
   fecha,
   archivo,
   filas,
@@ -24,6 +26,8 @@
   onCerrar,
   onClickFondo,
 }) {
+  const [mostrarValesCargados, setMostrarValesCargados] = useState(false)
+
   return (
     <div
       onClick={(e) => {
@@ -134,45 +138,71 @@
       </label>
 
       <div style={{ marginBottom: '16px', padding: '12px', border: '1px solid #444', borderRadius: '8px', background: '#252525' }}>
-        <h3 style={{ margin: '0 0 8px' }}>Vales cargados para esta fecha</h3>
-        {cargandoValesDia ? (
-          <p style={{ color: '#ccc', margin: 0 }}>Cargando vales...</p>
-        ) : valesDia.length === 0 ? (
-          <p style={{ color: '#ccc', margin: 0 }}>No hay vales cargados para este día.</p>
-        ) : (
-          <div style={{ display: 'grid', gap: '8px' }}>
-            {valesDia.map((vale) => {
-              const totalItems = (vale.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
-              return (
-                <details key={vale.id} style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}>
-                  <summary style={{ padding: '9px 10px', background: '#333', cursor: 'pointer', fontWeight: 800 }}>
-                    {vale.tipo_ingreso === 'manual' ? 'Vale manual' : (vale.archivo_nombre || 'Vale sin archivo')}  | {vale.solicitante_nombre || 'Sin solicitante'}  | {vale.items?.length || 0} materiales  | total {totalItems}
-                  </summary>
-                  {vale.observacion && (
-                    <div style={{ padding: '8px 10px', color: '#ffcc80', borderBottom: '1px solid #444' }}>
-                      {vale.observacion}
-                    </div>
-                  )}
-                  <div style={{ padding: '8px 10px', display: 'grid', gap: '5px' }}>
-                    {(vale.items || []).map((item) => (
-                      <div
-                        key={item.id}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'minmax(0, 1fr) 80px',
-                          gap: '8px',
-                          borderBottom: '1px solid #444',
-                          paddingBottom: '5px',
-                        }}
-                      >
-                        <span>{item.material_balance || item.material_vale}</span>
-                        <strong style={{ textAlign: 'right' }}>{item.cantidad}</strong>
+        <button
+          type="button"
+          onClick={() => setMostrarValesCargados((actual) => !actual)}
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            borderRadius: '8px',
+            border: '1px solid #555',
+            background: '#333',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 900,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '10px',
+            textAlign: 'left',
+          }}
+        >
+          <span>Vales cargados para esta fecha ({cargandoValesDia ? '...' : valesDia.length})</span>
+          <span>{mostrarValesCargados ? '▲' : '▼'}</span>
+        </button>
+
+        {mostrarValesCargados && (
+          <div style={{ marginTop: '10px' }}>
+            {cargandoValesDia ? (
+              <p style={{ color: '#ccc', margin: 0 }}>Cargando vales...</p>
+            ) : valesDia.length === 0 ? (
+              <p style={{ color: '#ccc', margin: 0 }}>No hay vales cargados para este día.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: '8px' }}>
+                {valesDia.map((vale) => {
+                  const totalItems = (vale.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
+                  return (
+                    <details key={vale.id} style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}>
+                      <summary style={{ padding: '9px 10px', background: '#333', cursor: 'pointer', fontWeight: 800 }}>
+                        {vale.tipo_ingreso === 'manual' ? 'Vale manual' : (vale.archivo_nombre || 'Vale sin archivo')}  | {vale.solicitante_nombre || 'Sin solicitante'}  | {vale.items?.length || 0} materiales  | total {totalItems}
+                      </summary>
+                      {vale.observacion && (
+                        <div style={{ padding: '8px 10px', color: '#ffcc80', borderBottom: '1px solid #444' }}>
+                          {vale.observacion}
+                        </div>
+                      )}
+                      <div style={{ padding: '8px 10px', display: 'grid', gap: '5px' }}>
+                        {(vale.items || []).map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'minmax(0, 1fr) 80px',
+                              gap: '8px',
+                              borderBottom: '1px solid #444',
+                              paddingBottom: '5px',
+                            }}
+                          >
+                            <span>{item.material_balance || item.material_vale}</span>
+                            <strong style={{ textAlign: 'right' }}>{item.cantidad}</strong>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </details>
-              )
-            })}
+                    </details>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -373,4 +403,3 @@ const botonPeligro = {
 }
 
 export default ValesBodegaModal
-
