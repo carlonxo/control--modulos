@@ -2041,7 +2041,7 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
   mostrarNotificacion('Material recepcionado y sumado al inventario')
   await cargarInventariosBodega()
   await cargarRecepcionesBodega()
-  return true
+  return pedidoActualizado
 }
 
 function cambiarFechaValeBodega(fecha) {
@@ -2334,7 +2334,6 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
   }
 
   const observacionPedido = [
-    'Pedido generado desde app',
     pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
     pedido.tipoModulo ? `Tipo modulo: ${pedido.tipoModulo}` : '',
     pedido.serie ? `Serie: ${pedido.serie}` : '',
@@ -2662,6 +2661,7 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
 
   const items = (itemsEditados || [])
     .map((item) => ({
+      id: item.id,
       material_vale: String(item.material_vale || item.material_balance || '').trim(),
       material_balance: String(item.material_balance || item.material_vale || '').trim(),
       cantidad: Number(item.cantidad || 0),
@@ -2673,7 +2673,7 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
     return false
   }
 
-  const { error, etapa } = await actualizarItemsValeBodegaSupabase({
+  const { error, etapa, items: itemsGuardados } = await actualizarItemsValeBodegaSupabase({
     supabase,
     vale: alerta,
     items,
@@ -2684,7 +2684,7 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
     return false
   }
 
-  const pedidoActualizado = { ...alerta, items }
+  const pedidoActualizado = { ...alerta, items: itemsGuardados || items }
   setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
     vale.id === alerta.id ? pedidoActualizado : vale
   )))
@@ -2693,7 +2693,7 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
   )))
   mostrarNotificacion('Pedido actualizado correctamente')
   await cargarAlertasBodega()
-  return true
+  return pedidoActualizado
 }
 
 function fechaInicialProtocoloManual() {

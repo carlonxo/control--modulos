@@ -224,7 +224,7 @@ export async function cargarValesBodegaDia({
   return {
     vales: (vales || []).map((vale) => ({
       ...vale,
-      items: itemsPorVale[vale.id] || [],
+      items: deduplicarItemsValeBodega(itemsPorVale[vale.id] || []),
     })),
     error: null,
   }
@@ -292,6 +292,37 @@ export async function guardarValeBodega({
   }
 }
 
+function deduplicarItemsValeBodega(items = []) {
+  const vistos = new Set()
+  const resultado = []
+
+  for (const item of items) {
+    const materialVale = String(item.material_vale || '').trim()
+    const materialBalance = String(item.material_balance || materialVale).trim()
+    const cantidad = Number(item.cantidad || 0)
+    const clave = [
+      normalizarTextoValeBodega(materialVale),
+      normalizarTextoValeBodega(materialBalance),
+      cantidad,
+    ].join('|')
+
+    if (!materialBalance || cantidad <= 0 || vistos.has(clave)) continue
+    vistos.add(clave)
+    resultado.push(item)
+  }
+
+  return resultado
+}
+
+function normalizarTextoValeBodega(valor = '') {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
 export async function actualizarItemsValeBodega({
   supabase,
   vale,
@@ -299,17 +330,9 @@ export async function actualizarItemsValeBodega({
 }) {
   if (!vale?.id) return { error: new Error('Falta el pedido para editar'), etapa: 'vale' }
 
-  const { error: errorEliminar } = await supabase
-    .from('vales_bodega_items')
-    .delete()
-    .eq('vale_id', vale.id)
-
-  if (errorEliminar) {
-    return { error: errorEliminar, etapa: 'eliminar_items' }
-  }
-
-  const filas = items
+  const filas = deduplicarItemsValeBodega(items)
     .map((item) => ({
+      id: item.id || null,
       vale_id: vale.id,
       fecha: vale.fecha || item.fecha || '',
       serie: vale.serie || item.serie || '',
@@ -326,15 +349,43 @@ export async function actualizarItemsValeBodega({
     return { error: new Error('Debes dejar al menos un material con cantidad'), etapa: 'items' }
   }
 
-  const { error: errorInsertar } = await supabase
+  const { data: itemsActuales, error: errorConsultar } = await supabase
     .from('vales_bodega_items')
-    .insert(filas)
+    .select('id')
+    .eq('vale_id', vale.id)
+
+  if (errorConsultar) {
+    return { error: errorConsultar, etapa: 'consultar_items' }
+  }
+
+  const { data: itemsEliminados, error: errorEliminar } = await supabase
+    .from('vales_bodega_items')
+    .delete()
+    .eq('vale_id', vale.id)
+    .select('id')
+
+  if (errorEliminar) {
+    return { error: errorEliminar, etapa: 'eliminar_items' }
+  }
+
+  if ((itemsEliminados || []).length < (itemsActuales || []).length) {
+    return {
+      error: new Error('Supabase no eliminó los materiales anteriores del pedido. Revisa la política DELETE de vales_bodega_items para el rol bodega. No se insertaron filas nuevas para evitar duplicados.'),
+      etapa: 'eliminar_items',
+    }
+  }
+
+  const filasInsertar = filas.map(({ id, ...fila }) => fila)
+  const { data: itemsGuardados, error: errorInsertar } = await supabase
+    .from('vales_bodega_items')
+    .insert(filasInsertar)
+    .select('id, vale_id, fecha, serie, material_vale, material_balance, cantidad, solicitante_id, solicitante_nombre, tipo_ingreso')
 
   if (errorInsertar) {
     return { error: errorInsertar, etapa: 'insertar_items' }
   }
 
-  return { error: null, etapa: null, items: filas }
+  return { error: null, etapa: null, items: itemsGuardados || filasInsertar }
 }
 
 async function completarDatosValeEnItems({

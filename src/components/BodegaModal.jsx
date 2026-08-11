@@ -49,6 +49,7 @@ function BodegaModal({
   onClickFondo,
 }) {
   const [busqueda, setBusqueda] = useState('')
+  const [ocultarSinStock, setOcultarSinStock] = useState(false)
   const [mostrarCargaExcel, setMostrarCargaExcel] = useState(false)
   const [mostrarIngresoProveedor, setMostrarIngresoProveedor] = useState(false)
   const [mostrarSalidaMaterial, setMostrarSalidaMaterial] = useState(false)
@@ -105,13 +106,16 @@ function BodegaModal({
 
   const itemsFiltrados = useMemo(() => {
     const texto = normalizarBusqueda(busqueda)
-    if (!texto) return materialesInventario
-    return materialesInventario.filter((item) => (
-      normalizarBusqueda(item.codigo).includes(texto) ||
-      normalizarBusqueda(item.descripcion).includes(texto) ||
-      normalizarBusqueda(item.unidad).includes(texto)
-    ))
-  }, [busqueda, materialesInventario])
+    return materialesInventario.filter((item) => {
+      if (ocultarSinStock && Number(item.saldoFinal || 0) <= 0) return false
+      if (!texto) return true
+      return (
+        normalizarBusqueda(item.codigo).includes(texto) ||
+        normalizarBusqueda(item.descripcion).includes(texto) ||
+        normalizarBusqueda(item.unidad).includes(texto)
+      )
+    })
+  }, [busqueda, materialesInventario, ocultarSinStock])
 
   function cambiarFacturaIngreso(campo, valor) {
     setFacturaIngreso((actual) => ({ ...actual, [campo]: valor }))
@@ -326,9 +330,11 @@ function BodegaModal({
           entregando={entregandoSolicitudBodega}
           materialesInventario={materialesInventario}
           onEditar={async (itemsEditados) => {
-            const ok = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
-            if (!ok) return false
-            setAlertaBodegaSeleccionada((actual) => ({ ...actual, items: itemsEditados }))
+            const resultado = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
+            if (!resultado) return false
+            if (resultado?.items) {
+              setAlertaBodegaSeleccionada((actual) => ({ ...actual, items: resultado.items }))
+            }
             onActualizarAlertasBodega?.()
             return true
           }}
@@ -401,8 +407,8 @@ function BodegaModal({
         </p>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr)', gap: '10px', alignItems: 'end', marginBottom: '12px' }}>
-            <label style={{ display: 'grid', gap: '5px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'end', flexWrap: 'wrap', marginBottom: '12px' }}>
+            <label style={{ display: 'grid', gap: '5px', flex: '1 1 420px' }}>
               <strong>Buscar material</strong>
               <input
                 type="text"
@@ -412,6 +418,17 @@ function BodegaModal({
                 style={inputStyle}
               />
             </label>
+            <button
+              type="button"
+              onClick={() => setOcultarSinStock((valor) => !valor)}
+              style={{
+                ...botonFiltroStock,
+                background: ocultarSinStock ? '#0d47a1' : '#555',
+                borderColor: ocultarSinStock ? '#64b5f6' : '#777',
+              }}
+            >
+              {ocultarSinStock ? 'Mostrar material sin stock' : 'Ocultar material sin stock'}
+            </button>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'stretch', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
@@ -850,7 +867,7 @@ function CampanaBodega({
           ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
               {alertas.map((alerta) => {
-                const totalItems = (alerta.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
+                const totalItems = (alerta.items || []).length
                 return (
                   <button
                     key={alerta.id}
@@ -881,7 +898,7 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar }) {
       ) : (
         <div style={{ display: 'grid', gap: '8px' }}>
           {pedidos.map((pedido) => {
-            const total = (pedido.items || []).reduce((suma, item) => suma + Number(item.cantidad || 0), 0)
+            const total = (pedido.items || []).length
             const entregado = String(pedido.estado_bodega || '').toLowerCase() === 'entregado'
             const etiquetaEstado = entregado ? 'Entregado' : 'Pendiente'
             const solicitante = pedido.solicitante_nombre || pedido.usuario_nombre || 'Sin usuario'
@@ -1140,9 +1157,9 @@ function DetalleSolicitudBodega({
           </div>
         </div>
 
-        {alerta.observacion && (
+        {limpiarObservacionSolicitudBodega(alerta.observacion) && (
           <div style={{ padding: '10px', border: '1px solid #795548', borderRadius: '8px', background: '#2b211b', color: '#ffcc80', marginBottom: '12px' }}>
-            {alerta.observacion}
+            {limpiarObservacionSolicitudBodega(alerta.observacion)}
           </div>
         )}
 
@@ -1804,6 +1821,14 @@ function obtenerEtiquetaAlertaBodega(alerta = {}) {
   return 'Movimiento'
 }
 
+function limpiarObservacionSolicitudBodega(observacion = '') {
+  return String(observacion || '')
+    .split('|')
+    .map((parte) => parte.trim())
+    .filter((parte) => parte && normalizarBusqueda(parte) !== 'pedido generado desde app')
+    .join(' | ')
+}
+
 const labelStyle = {
   display: 'grid',
   gap: '5px',
@@ -1957,6 +1982,13 @@ const botonGris = {
 const botonMiniGris = {
   ...botonGris,
   padding: '7px 10px',
+}
+
+const botonFiltroStock = {
+  ...botonGris,
+  minHeight: '43px',
+  whiteSpace: 'nowrap',
+  padding: '9px 16px',
 }
 
 const botonAzul = {
