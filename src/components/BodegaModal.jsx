@@ -19,19 +19,30 @@ function BodegaModal({
   leyendo,
   guardandoPedido,
   guardandoDevolucion,
+  guardandoRecepcion,
   entregandoSolicitudBodega,
+  puedeExportarInventario,
   alertasBodega = [],
   mostrarAlertasBodega,
   pedidosBodegaHoy = [],
   mostrarPedidosBodegaHoy,
+  recepcionesBodega = [],
+  mostrarRecepcionesBodega,
+  rangoRecepcionesBodega = 'mes',
+  fechaRecepcionesBodega = '',
   onCambiarArchivo,
   onLeerArchivo,
   onGuardarPedido,
   onGuardarDevolucion,
+  onGuardarRecepcion,
   onEntregarSolicitudBodega,
   onExportarInventario,
   onToggleAlertasBodega,
   onTogglePedidosBodegaHoy,
+  onToggleRecepcionesBodega,
+  onCambiarRangoRecepcionesBodega,
+  onCambiarFechaRecepcionesBodega,
+  onActualizarRecepcionesBodega,
   onActualizarAlertasBodega,
   onCerrar,
   onClickFondo,
@@ -42,7 +53,9 @@ function BodegaModal({
   const [mostrarSalidaMaterial, setMostrarSalidaMaterial] = useState(false)
   const [mostrarCrearPedido, setMostrarCrearPedido] = useState(false)
   const [mostrarCrearDevolucion, setMostrarCrearDevolucion] = useState(false)
+  const [mostrarRecepcionarMaterial, setMostrarRecepcionarMaterial] = useState(false)
   const [alertaBodegaSeleccionada, setAlertaBodegaSeleccionada] = useState(null)
+  const [recepcionSeleccionada, setRecepcionSeleccionada] = useState(null)
   const [facturaIngreso, setFacturaIngreso] = useState({
     fecha: fechaActualInput(),
     factura: '',
@@ -70,10 +83,17 @@ function BodegaModal({
     bodega: 'bayona',
     motivo: '',
   })
+  const [recepcionMaterial, setRecepcionMaterial] = useState({
+    fecha: fechaActualInput(),
+    ordenCompra: '',
+    factura: '',
+    recepcion: '',
+  })
   const [materialesIngreso, setMaterialesIngreso] = useState([{ ...filaMovimientoVacia }])
   const [materialesSalida, setMaterialesSalida] = useState([{ ...filaMovimientoVacia }])
   const [materialesPedido, setMaterialesPedido] = useState([{ ...filaMovimientoVacia }])
   const [materialesDevolucion, setMaterialesDevolucion] = useState([{ ...filaMovimientoVacia }])
+  const [materialesRecepcion, setMaterialesRecepcion] = useState([{ ...filaMovimientoVacia }])
   const inventarioSeleccionado = inventarios.find((item) => item.id === inventarioSeleccionadoId) || inventarios[0]
   const materialesInventario = inventarioSeleccionado?.items || []
   const electricosDisponibles = useMemo(() => (
@@ -106,6 +126,10 @@ function BodegaModal({
 
   function cambiarDevolucionMaterial(campo, valor) {
     setDevolucionMaterial((actual) => ({ ...actual, [campo]: valor }))
+  }
+
+  function cambiarRecepcionMaterial(campo, valor) {
+    setRecepcionMaterial((actual) => ({ ...actual, [campo]: valor }))
   }
 
   function completarDatosMaterial(fila, campo, valor) {
@@ -147,6 +171,12 @@ function BodegaModal({
     )))
   }
 
+  function cambiarMaterialRecepcion(indice, campo, valor) {
+    setMaterialesRecepcion((actuales) => actuales.map((fila, i) => (
+      i === indice ? completarDatosMaterial(fila, campo, valor) : fila
+    )))
+  }
+
   function agregarMaterialIngreso() {
     setMaterialesIngreso((actuales) => [...actuales, { ...filaMovimientoVacia }])
   }
@@ -161,6 +191,10 @@ function BodegaModal({
 
   function agregarMaterialDevolucion() {
     setMaterialesDevolucion((actuales) => [...actuales, { ...filaMovimientoVacia }])
+  }
+
+  function agregarMaterialRecepcion() {
+    setMaterialesRecepcion((actuales) => [...actuales, { ...filaMovimientoVacia }])
   }
 
   function quitarMaterialIngreso(indice) {
@@ -183,6 +217,12 @@ function BodegaModal({
 
   function quitarMaterialDevolucion(indice) {
     setMaterialesDevolucion((actuales) => (
+      actuales.length <= 1 ? [{ ...filaMovimientoVacia }] : actuales.filter((_, i) => i !== indice)
+    ))
+  }
+
+  function quitarMaterialRecepcion(indice) {
+    setMaterialesRecepcion((actuales) => (
       actuales.length <= 1 ? [{ ...filaMovimientoVacia }] : actuales.filter((_, i) => i !== indice)
     ))
   }
@@ -214,6 +254,20 @@ function BodegaModal({
     })
     setMaterialesDevolucion([{ ...filaMovimientoVacia }])
     setMostrarCrearDevolucion(false)
+  }
+
+  async function guardarRecepcionActual() {
+    const guardado = await onGuardarRecepcion?.(recepcionMaterial, materialesRecepcion)
+    if (!guardado) return
+
+    setRecepcionMaterial({
+      fecha: fechaActualInput(),
+      ordenCompra: '',
+      factura: '',
+      recepcion: '',
+    })
+    setMaterialesRecepcion([{ ...filaMovimientoVacia }])
+    setMostrarRecepcionarMaterial(false)
   }
 
   return (
@@ -276,6 +330,13 @@ function BodegaModal({
             onActualizarAlertasBodega?.()
           }}
           onCerrar={() => setAlertaBodegaSeleccionada(null)}
+        />
+      )}
+
+      {recepcionSeleccionada && (
+        <DetalleRecepcionBodega
+          recepcion={recepcionSeleccionada}
+          onCerrar={() => setRecepcionSeleccionada(null)}
         />
       )}
 
@@ -363,20 +424,45 @@ function BodegaModal({
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
-              <button
-                type="button"
-                onClick={onExportarInventario}
-                disabled={!inventarioSeleccionado?.items?.length}
-                style={{
-                  ...botonAzul,
-                  opacity: !inventarioSeleccionado?.items?.length ? 0.7 : 1,
-                  cursor: !inventarioSeleccionado?.items?.length ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Exportar inventario
-              </button>
-            </div>
+            {modoSoloBodega && (
+              <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+                <Tarjeta
+                  titulo="Material recepcionado"
+                  valor={recepcionesBodega.length}
+                  onClick={onToggleRecepcionesBodega}
+                />
+              </div>
+            )}
+
+            {puedeExportarInventario && (
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrarRecepcionarMaterial((actual) => !actual)
+                    setMostrarCrearPedido(false)
+                    setMostrarCrearDevolucion(false)
+                    setMostrarIngresoProveedor(false)
+                    setMostrarSalidaMaterial(false)
+                  }}
+                  style={botonVerde}
+                >
+                  Recepcionar material
+                </button>
+                <button
+                  type="button"
+                  onClick={onExportarInventario}
+                  disabled={!inventarioSeleccionado?.items?.length}
+                  style={{
+                    ...botonAzul,
+                    opacity: !inventarioSeleccionado?.items?.length ? 0.7 : 1,
+                    cursor: !inventarioSeleccionado?.items?.length ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Exportar inventario
+                </button>
+              </div>
+            )}
 
             {puedeAdministrar && (
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
@@ -387,6 +473,7 @@ function BodegaModal({
                     setMostrarCrearDevolucion(false)
                     setMostrarIngresoProveedor(false)
                     setMostrarSalidaMaterial(false)
+                    setMostrarRecepcionarMaterial(false)
                   }}
                   style={botonAzul}
                 >
@@ -399,6 +486,7 @@ function BodegaModal({
                     setMostrarCrearPedido(false)
                     setMostrarIngresoProveedor(false)
                     setMostrarSalidaMaterial(false)
+                    setMostrarRecepcionarMaterial(false)
                   }}
                   style={botonAzul}
                 >
@@ -411,6 +499,7 @@ function BodegaModal({
                     setMostrarSalidaMaterial(false)
                     setMostrarCrearPedido(false)
                     setMostrarCrearDevolucion(false)
+                    setMostrarRecepcionarMaterial(false)
                   }}
                   style={botonVerde}
                 >
@@ -423,6 +512,7 @@ function BodegaModal({
                     setMostrarIngresoProveedor(false)
                     setMostrarCrearPedido(false)
                     setMostrarCrearDevolucion(false)
+                    setMostrarRecepcionarMaterial(false)
                   }}
                   style={botonRojo}
                 >
@@ -437,6 +527,7 @@ function BodegaModal({
                   onClick={() => {
                     setMostrarCrearPedido((actual) => !actual)
                     setMostrarCrearDevolucion(false)
+                    setMostrarRecepcionarMaterial(false)
                   }}
                   style={botonAzul}
                 >
@@ -447,6 +538,7 @@ function BodegaModal({
                   onClick={() => {
                     setMostrarCrearDevolucion((actual) => !actual)
                     setMostrarCrearPedido(false)
+                    setMostrarRecepcionarMaterial(false)
                   }}
                   style={botonAzul}
                 >
@@ -460,6 +552,33 @@ function BodegaModal({
             <PanelPedidosBodegaHoy
               pedidos={pedidosBodegaHoy}
               onSeleccionar={setAlertaBodegaSeleccionada}
+            />
+          )}
+
+          {modoSoloBodega && mostrarRecepcionesBodega && (
+            <PanelRecepcionesBodega
+              recepciones={recepcionesBodega}
+              rango={rangoRecepcionesBodega}
+              fecha={fechaRecepcionesBodega}
+              onCambiarRango={onCambiarRangoRecepcionesBodega}
+              onCambiarFecha={onCambiarFechaRecepcionesBodega}
+              onActualizar={onActualizarRecepcionesBodega}
+              onSeleccionar={setRecepcionSeleccionada}
+            />
+          )}
+
+          {mostrarRecepcionarMaterial && puedeExportarInventario && (
+            <PanelRecepcionarMaterial
+              recepcion={recepcionMaterial}
+              materialesRecepcion={materialesRecepcion}
+              materialesInventario={materialesInventario}
+              onCambiarRecepcion={cambiarRecepcionMaterial}
+              onCambiarMaterial={cambiarMaterialRecepcion}
+              onAgregarMaterial={agregarMaterialRecepcion}
+              onQuitarMaterial={quitarMaterialRecepcion}
+              onGuardar={guardarRecepcionActual}
+              guardando={guardandoRecepcion}
+              onCerrar={() => setMostrarRecepcionarMaterial(false)}
             />
           )}
 
@@ -568,6 +687,8 @@ function PanelIngresoProveedor({
   onCambiarMaterial,
   onAgregarMaterial,
   onQuitarMaterial,
+  onGuardar,
+  guardando,
   onCerrar,
 }) {
   return (
@@ -604,6 +725,88 @@ function PanelIngresoProveedor({
         </button>
         <button type="button" style={botonVerde}>
           Guardar ingreso
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PanelRecepcionarMaterial({
+  recepcion,
+  materialesRecepcion,
+  materialesInventario,
+  onCambiarRecepcion,
+  onCambiarMaterial,
+  onAgregarMaterial,
+  onQuitarMaterial,
+  onGuardar,
+  guardando,
+  onCerrar,
+}) {
+  return (
+    <div style={panelMovimientoStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0 }}>Recepcionar material</h3>
+        <button type="button" onClick={onCerrar} style={botonMiniGris}>
+          Cerrar
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+        <CampoTexto
+          label="Fecha"
+          type="date"
+          value={recepcion.fecha}
+          onChange={(valor) => onCambiarRecepcion('fecha', valor)}
+        />
+        <CampoTexto
+          label="Orden de compra"
+          value={recepcion.ordenCompra}
+          onChange={(valor) => onCambiarRecepcion('ordenCompra', valor)}
+          placeholder="N° orden de compra"
+        />
+        <CampoTexto
+          label="N° factura"
+          value={recepcion.factura}
+          onChange={(valor) => onCambiarRecepcion('factura', valor)}
+          placeholder="N° factura"
+        />
+        <CampoTexto
+          label="N° recepción"
+          value={recepcion.recepcion}
+          onChange={(valor) => onCambiarRecepcion('recepcion', valor)}
+          placeholder="N° recepción"
+        />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+        <button
+          type="button"
+          onClick={onGuardar}
+          disabled={guardando}
+          style={{
+            ...botonVerde,
+            opacity: guardando ? 0.7 : 1,
+            cursor: guardando ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {guardando ? 'Recepcionando...' : 'Recepcionar material'}
+        </button>
+      </div>
+
+      <h4 style={{ margin: '14px 0 8px' }}>Material recepcionado</h4>
+      <TablaMovimientoMateriales
+        datalistId="materiales-bodega-recepcion"
+        materialesInventario={materialesInventario}
+        filas={materialesRecepcion}
+        mostrarStock
+        onCambiarMaterial={onCambiarMaterial}
+        onQuitarMaterial={onQuitarMaterial}
+      />
+
+      <div style={accionesPanelStyle}>
+        <button type="button" onClick={onAgregarMaterial} style={botonGris}>
+          + Agregar material
         </button>
       </div>
     </div>
@@ -700,7 +903,7 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar }) {
         <div style={{ display: 'grid', gap: '8px' }}>
           {pedidos.map((pedido) => {
             const total = (pedido.items || []).reduce((suma, item) => suma + Number(item.cantidad || 0), 0)
-            const entregado = pedido.estado_bodega === 'entregado'
+            const entregado = String(pedido.estado_bodega || '').toLowerCase() === 'entregado'
             const etiquetaEstado = entregado ? 'Entregado' : 'Pendiente'
             const solicitante = pedido.solicitante_nombre || pedido.usuario_nombre || 'Sin usuario'
             const detalle = [
@@ -744,6 +947,137 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar }) {
   )
 }
 
+function PanelRecepcionesBodega({
+  recepciones,
+  rango,
+  fecha,
+  onCambiarRango,
+  onCambiarFecha,
+  onActualizar,
+  onSeleccionar,
+}) {
+  return (
+    <div style={{ ...panelMovimientoStyle, marginTop: '-2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0 }}>Material recepcionado</h3>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            value={rango}
+            onChange={(e) => onCambiarRango?.(e.target.value)}
+            style={{ ...inputStyle, width: '120px' }}
+          >
+            <option value="dia">Día</option>
+            <option value="semana">Semana</option>
+            <option value="mes">Mes</option>
+            <option value="anio">Año</option>
+          </select>
+          <input
+            type={tipoInputRangoRecepcion(rango)}
+            value={fecha}
+            onChange={(e) => onCambiarFecha?.(e.target.value)}
+            min={rango === 'anio' ? '2000' : undefined}
+            max={rango === 'anio' ? '2100' : undefined}
+            style={{ ...inputStyle, width: rango === 'anio' ? '110px' : '170px' }}
+          />
+          <button type="button" onClick={onActualizar} style={botonAzul}>
+            Actualizar
+          </button>
+        </div>
+      </div>
+      {recepciones.length === 0 ? (
+        <p style={{ color: '#bbb', margin: 0 }}>No hay recepciones registradas en este rango.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: '8px' }}>
+          {recepciones.map((recepcion) => (
+            <button
+              type="button"
+              key={recepcion.id}
+              onClick={() => onSeleccionar?.(recepcion)}
+              style={filaPedidoHoyStyle}
+            >
+              <span style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
+                <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {recepcion.fecha || '-'} | OC: {recepcion.orden_compra || '-'} | Factura: {recepcion.numero_factura || '-'} | Recepción: {recepcion.numero_recepcion || '-'}
+                </strong>
+                <small style={{ color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {recepcion.bodega || 'Sin bodega'} | {(recepcion.items || []).length} materiales
+                </small>
+              </span>
+              <strong style={{
+                color: '#66bb6a',
+                border: '1px solid #2e7d32',
+                borderRadius: '999px',
+                padding: '5px 10px',
+                whiteSpace: 'nowrap',
+                background: '#15351c',
+              }}>
+                Ver detalle
+              </strong>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetalleRecepcionBodega({ recepcion, onCerrar }) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={modalDetalleBodegaOverlayStyle}
+    >
+      <div style={modalDetalleBodegaStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '12px' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Recepción de material</h3>
+            <p style={{ margin: '6px 0 0', color: '#ccc' }}>
+              {recepcion.fecha || ''} | {recepcion.usuario_nombre || 'Sin usuario'}
+            </p>
+          </div>
+          <button type="button" onClick={onCerrar} style={botonMiniGris}>
+            Cerrar
+          </button>
+        </div>
+
+        <div style={{ padding: '10px', border: '1px solid #455a64', borderRadius: '8px', background: '#1f2529', color: '#cfd8dc', marginBottom: '12px' }}>
+          <div><strong>Orden de compra:</strong> {recepcion.orden_compra || '-'}</div>
+          <div><strong>N° factura:</strong> {recepcion.numero_factura || '-'}</div>
+          <div><strong>N° recepción:</strong> {recepcion.numero_recepcion || '-'}</div>
+          <div><strong>Bodega:</strong> {recepcion.bodega || '-'}</div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
+            <thead>
+              <tr style={{ background: '#333' }}>
+                <th style={thStyle}>Código</th>
+                <th style={thStyle}>Material</th>
+                <th style={thStyle}>Unidad</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(recepcion.items || []).map((item) => (
+                <tr key={item.id || `${item.codigo_bodega}-${item.descripcion}`}>
+                  <td style={tdStyle}>{item.codigo_bodega || '-'}</td>
+                  <td style={tdStyle}>{item.descripcion || '-'}</td>
+                  <td style={tdStyle}>{item.unidad || '-'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>{formatearNumero(item.cantidad)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {(recepcion.items || []).length === 0 && (
+          <p style={{ color: '#bbb' }}>Esta recepción no tiene materiales asociados.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function DetalleSolicitudBodega({
   alerta,
   entregando,
@@ -751,7 +1085,7 @@ function DetalleSolicitudBodega({
   onCerrar,
 }) {
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
-  const entregado = alerta?.estado_bodega === 'entregado'
+  const entregado = String(alerta?.estado_bodega || '').toLowerCase() === 'entregado'
   return (
     <div
       onClick={(e) => e.stopPropagation()}
@@ -818,6 +1152,13 @@ function DetalleSolicitudBodega({
       </div>
     </div>
   )
+}
+
+function tipoInputRangoRecepcion(rango) {
+  if (rango === 'semana') return 'week'
+  if (rango === 'mes') return 'month'
+  if (rango === 'anio') return 'number'
+  return 'date'
 }
 
 function PanelCrearPedido({

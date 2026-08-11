@@ -59,6 +59,10 @@ import {
   guardarValeBodega as guardarValeBodegaSupabase,
 } from './services/valesBodegaService'
 import {
+  cargarRecepcionesBodegaRango as cargarRecepcionesBodegaRangoSupabase,
+  guardarRecepcionBodega as guardarRecepcionBodegaSupabase,
+} from './services/bodegaRecepcionesService'
+import {
   cargarCatalogoMaterialesGuardado,
   cargarPreciosMateriales as cargarPreciosMaterialesSupabase,
   eliminarMaterialPrecio,
@@ -581,6 +585,10 @@ const [alertasBodega, setAlertasBodega] = useState([])
 const [mostrarAlertasBodega, setMostrarAlertasBodega] = useState(false)
 const [pedidosBodegaHoy, setPedidosBodegaHoy] = useState([])
 const [mostrarPedidosBodegaHoy, setMostrarPedidosBodegaHoy] = useState(false)
+const [recepcionesBodega, setRecepcionesBodega] = useState([])
+const [mostrarRecepcionesBodega, setMostrarRecepcionesBodega] = useState(false)
+const [rangoRecepcionesBodega, setRangoRecepcionesBodega] = useState('mes')
+const [fechaRecepcionesBodega, setFechaRecepcionesBodega] = useState(new Date().toISOString().slice(0, 7))
 const [cargandoValesBodegaDia, setCargandoValesBodegaDia] = useState(false)
 const [leyendoValeBodega, setLeyendoValeBodega] = useState(false)
 const [guardandoValeBodega, setGuardandoValeBodega] = useState(false)
@@ -591,6 +599,7 @@ const [cargandoInventariosBodega, setCargandoInventariosBodega] = useState(false
 const [leyendoInventarioBodega, setLeyendoInventarioBodega] = useState(false)
 const [guardandoPedidoBodega, setGuardandoPedidoBodega] = useState(false)
 const [guardandoDevolucionBodega, setGuardandoDevolucionBodega] = useState(false)
+const [guardandoRecepcionBodega, setGuardandoRecepcionBodega] = useState(false)
 const [entregandoSolicitudBodega, setEntregandoSolicitudBodega] = useState(false)
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [idsOtEnEdicion, setIdsOtEnEdicion] = useState(['', '', ''])
@@ -631,6 +640,7 @@ const puedeVerBalanceMateriales = tienePermiso(perfil?.rol, 'verBalanceMateriale
 const puedeVerBalanceMantencion = tienePermiso(perfil?.rol, 'verBalanceMantencion')
 const puedeVerValesBodega = tienePermiso(perfil?.rol, 'verValesBodega')
 const puedeVerBodega = tienePermiso(perfil?.rol, 'verBodega')
+const puedeExportarInventarioBodega = tienePermiso(perfil?.rol, 'exportarInventarioBodega')
 const puedeAdministrarBodega = tienePermiso(perfil?.rol, 'administrarBodega')
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
@@ -1088,9 +1098,11 @@ useEffect(() => {
   setMostrarBodega(true)
   cargarInventariosBodega()
   cargarAlertasBodega()
+  cargarRecepcionesBodega()
 
   const intervalo = setInterval(() => {
     cargarAlertasBodega()
+    cargarRecepcionesBodega()
   }, 7000)
 
   return () => clearInterval(intervalo)
@@ -1755,6 +1767,149 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
   setAlertasBodega(solicitudesApp.filter((vale) => vale.estado_bodega !== 'entregado'))
 }
 
+async function cargarRecepcionesBodega(valor = fechaRecepcionesBodega, rango = rangoRecepcionesBodega) {
+  if (!valor || !puedeVerBodega) return
+
+  const { inicio, fin } = obtenerRangoFechasProtocolos(rango, valor)
+
+  const { recepciones, error } = await cargarRecepcionesBodegaRangoSupabase({
+    supabase,
+    fechaInicio: inicio.slice(0, 10),
+    fechaFin: fin.slice(0, 10),
+  })
+
+  if (error) {
+    console.error(error)
+    setRecepcionesBodega([])
+    return
+  }
+
+  setRecepcionesBodega(recepciones || [])
+}
+
+function cambiarRangoRecepcionesBodega(rango) {
+  const valor = obtenerValorInicialRangoProtocolo(rango)
+  setRangoRecepcionesBodega(rango)
+  setFechaRecepcionesBodega(valor)
+  cargarRecepcionesBodega(valor, rango)
+}
+
+function cambiarFechaRecepcionesBodega(valor) {
+  setFechaRecepcionesBodega(valor)
+  cargarRecepcionesBodega(valor, rangoRecepcionesBodega)
+}
+
+async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
+  if (!puedeExportarInventarioBodega) return false
+
+  const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+  if (!inventarioActual?.id) {
+    mostrarNotificacion('No hay inventario seleccionado para recepcionar material')
+    return false
+  }
+
+  const fecha = datosRecepcion?.fecha || new Date().toISOString().slice(0, 10)
+  const ordenCompra = String(datosRecepcion?.ordenCompra || '').trim()
+  const numeroFactura = String(datosRecepcion?.factura || '').trim()
+  const numeroRecepcion = String(datosRecepcion?.recepcion || '').trim()
+  const bodega = inventarioActual.nombre || inventarioActual.bodega || inventarioActual.fecha || ''
+
+  const items = (materialesRecepcion || [])
+    .map((item) => ({
+      codigo: String(item.codigo || '').trim(),
+      descripcion: String(item.descripcion || '').trim(),
+      unidad: String(item.unidad || '').trim(),
+      cantidad: Number(item.cantidad || 0),
+    }))
+    .filter((item) => (item.codigo || item.descripcion) && item.cantidad > 0)
+
+  if (!fecha) {
+    mostrarNotificacion('Debes ingresar la fecha de recepción')
+    return false
+  }
+
+  if (!ordenCompra && !numeroFactura && !numeroRecepcion) {
+    mostrarNotificacion('Debes ingresar orden de compra, factura o número de recepción')
+    return false
+  }
+
+  if (items.length === 0) {
+    mostrarNotificacion('Debes ingresar al menos un material recepcionado con cantidad')
+    return false
+  }
+
+  const actualizaciones = []
+  const noEncontrados = []
+
+  for (const itemRecepcion of items) {
+    const itemInventario = (inventarioActual.items || []).find((item) => (
+      normalizarTextoComparacion(item.codigo) === normalizarTextoComparacion(itemRecepcion.codigo) ||
+      normalizarTextoComparacion(item.descripcion) === normalizarTextoComparacion(itemRecepcion.descripcion)
+    ))
+
+    if (!itemInventario?.id) {
+      noEncontrados.push(itemRecepcion.descripcion || itemRecepcion.codigo)
+      continue
+    }
+
+    actualizaciones.push({
+      itemInventario,
+      cantidad: itemRecepcion.cantidad,
+      nuevasEntradas: Number(itemInventario.entradas || 0) + itemRecepcion.cantidad,
+      nuevoSaldoFinal: Number(itemInventario.saldoFinal || 0) + itemRecepcion.cantidad,
+    })
+  }
+
+  if (noEncontrados.length > 0) {
+    mostrarNotificacion('No se encontraron en el inventario: ' + noEncontrados.join(', '))
+    return false
+  }
+
+  setGuardandoRecepcionBodega(true)
+
+  const { error, etapa } = await guardarRecepcionBodegaSupabase({
+    supabase,
+    fecha,
+    ordenCompra,
+    numeroFactura,
+    numeroRecepcion,
+    bodega,
+    usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    items,
+  })
+
+  if (error) {
+    setGuardandoRecepcionBodega(false)
+    mostrarNotificacion(
+      `No se pudo guardar la recepción${etapa ? ` (${etapa})` : ''}. Detalle: ${error.message}`
+    )
+    return false
+  }
+
+  for (const actualizacion of actualizaciones) {
+    const { error: errorInventario } = await supabase
+      .from('bodega_inventario_items')
+      .update({
+        entradas: actualizacion.nuevasEntradas,
+        saldo_final: actualizacion.nuevoSaldoFinal,
+      })
+      .eq('id', actualizacion.itemInventario.id)
+
+    if (errorInventario) {
+      setGuardandoRecepcionBodega(false)
+      mostrarNotificacion('La recepción se guardó, pero no se pudo actualizar inventario: ' + errorInventario.message)
+      await cargarRecepcionesBodega()
+      return false
+    }
+  }
+
+  setGuardandoRecepcionBodega(false)
+  mostrarNotificacion('Material recepcionado y sumado al inventario')
+  await cargarInventariosBodega()
+  await cargarRecepcionesBodega()
+  return true
+}
+
 function cambiarFechaValeBodega(fecha) {
   setFechaValeBodega(fecha)
   cargarValesBodegaDia(fecha)
@@ -1999,6 +2154,7 @@ async function leerInventarioBodega() {
 }
 
 function exportarInventarioBodegaActual() {
+  if (!puedeExportarInventarioBodega) return
   const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
   exportarInventarioBodegaExcel(inventarioActual)
 }
@@ -2216,6 +2372,10 @@ async function guardarDevolucionBodegaConMateriales(datosDevolucion, materialesD
 
 async function entregarSolicitudBodega(alerta) {
   if (!esRolBodega || !alerta?.id) return false
+  if (String(alerta.estado_bodega || '').toLowerCase() === 'entregado') {
+    mostrarNotificacion('Este pedido ya fue marcado como entregado')
+    return true
+  }
 
   const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
   if (!inventarioActual?.id) {
@@ -2269,6 +2429,30 @@ async function entregarSolicitudBodega(alerta) {
 
   setEntregandoSolicitudBodega(true)
 
+  const datosEntrega = {
+    estado_bodega: 'entregado',
+    fecha_entrega_bodega: new Date().toISOString(),
+    entregado_por: perfil?.nombre || perfil?.email || session?.user?.email || '',
+  }
+
+  const { data: valeActualizado, error: errorVale } = await supabase
+    .from('vales_bodega')
+    .update(datosEntrega)
+    .eq('id', alerta.id)
+    .select('id, estado_bodega, fecha_entrega_bodega, entregado_por')
+    .single()
+
+  if (errorVale || valeActualizado?.estado_bodega !== 'entregado') {
+    setEntregandoSolicitudBodega(false)
+    mostrarNotificacion(
+      'No se pudo marcar el pedido como entregado, por lo que no se descontó inventario. ' +
+      'Revisa permisos de actualización en vales_bodega. Detalle: ' +
+      (errorVale?.message || 'Supabase no confirmó el cambio de estado')
+    )
+    await cargarAlertasBodega()
+    return false
+  }
+
   for (const actualizacion of actualizaciones) {
     const { error } = await supabase
       .from('bodega_inventario_items')
@@ -2279,13 +2463,22 @@ async function entregarSolicitudBodega(alerta) {
       .eq('id', actualizacion.itemInventario.id)
 
     if (error) {
+      await supabase
+        .from('vales_bodega')
+        .update({
+          estado_bodega: 'pendiente',
+          fecha_entrega_bodega: null,
+          entregado_por: '',
+        })
+        .eq('id', alerta.id)
       setEntregandoSolicitudBodega(false)
       mostrarNotificacion('No se pudo descontar inventario: ' + error.message)
+      await cargarAlertasBodega()
       return false
     }
   }
 
-  const { error: errorVale } = await supabase
+  /*
     .from('vales_bodega')
     .update({
       estado_bodega: 'entregado',
@@ -2303,7 +2496,17 @@ async function entregarSolicitudBodega(alerta) {
     return false
   }
 
+  */
+
+  setEntregandoSolicitudBodega(false)
+
   mostrarNotificacion('Pedido entregado y descontado del inventario')
+  setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
+    vale.id === alerta.id
+      ? { ...vale, ...datosEntrega }
+      : vale
+  )))
+  setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== alerta.id))
   await cargarInventariosBodega()
   await cargarAlertasBodega()
   return true
@@ -5475,19 +5678,30 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     leyendo={leyendoInventarioBodega}
     guardandoPedido={guardandoPedidoBodega}
     guardandoDevolucion={guardandoDevolucionBodega}
+    guardandoRecepcion={guardandoRecepcionBodega}
     entregandoSolicitudBodega={entregandoSolicitudBodega}
+    puedeExportarInventario={puedeExportarInventarioBodega}
     alertasBodega={alertasBodega}
     mostrarAlertasBodega={mostrarAlertasBodega}
     pedidosBodegaHoy={pedidosBodegaHoy}
     mostrarPedidosBodegaHoy={mostrarPedidosBodegaHoy}
+    recepcionesBodega={recepcionesBodega}
+    mostrarRecepcionesBodega={mostrarRecepcionesBodega}
+    rangoRecepcionesBodega={rangoRecepcionesBodega}
+    fechaRecepcionesBodega={fechaRecepcionesBodega}
     onCambiarArchivo={setArchivoInventarioBodega}
     onLeerArchivo={leerInventarioBodega}
     onGuardarPedido={guardarPedidoBodega}
     onGuardarDevolucion={guardarDevolucionBodegaConMateriales}
+    onGuardarRecepcion={guardarRecepcionBodega}
     onEntregarSolicitudBodega={entregarSolicitudBodega}
     onExportarInventario={exportarInventarioBodegaActual}
     onToggleAlertasBodega={() => setMostrarAlertasBodega((actual) => !actual)}
     onTogglePedidosBodegaHoy={() => setMostrarPedidosBodegaHoy((actual) => !actual)}
+    onToggleRecepcionesBodega={() => setMostrarRecepcionesBodega((actual) => !actual)}
+    onCambiarRangoRecepcionesBodega={cambiarRangoRecepcionesBodega}
+    onCambiarFechaRecepcionesBodega={cambiarFechaRecepcionesBodega}
+    onActualizarRecepcionesBodega={() => cargarRecepcionesBodega()}
     onActualizarAlertasBodega={cargarAlertasBodega}
     onSeleccionarInventario={setInventarioBodegaSeleccionadoId}
     onCerrar={() => {

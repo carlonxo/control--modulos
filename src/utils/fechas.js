@@ -41,6 +41,11 @@ export function obtenerRangoFechasProtocolos(rango, valor) {
     return { inicio: `${formatearFechaInput(inicio)}T00:00:00`, fin: `${formatearFechaInput(fin)}T00:00:00` }
   }
 
+  if (rango === 'anio') {
+    const ano = Number(valor) || new Date().getFullYear()
+    return { inicio: `${ano}-01-01T00:00:00`, fin: `${ano + 1}-01-01T00:00:00` }
+  }
+
   const inicio = `${valor}-01T00:00:00`
   const fin = new Date(`${valor}-01T00:00:00`)
   fin.setMonth(fin.getMonth() + 1)
@@ -69,6 +74,7 @@ export function obtenerValorInicialRangoProtocolo(rango) {
     const semana = Math.ceil((((fecha - inicioAnoSemana) / 86400000) + 1) / 7)
     return `${anoSemana}-W${String(semana).padStart(2, '0')}`
   }
+  if (rango === 'anio') return String(hoy.getFullYear())
   return formatearFechaInput(hoy).slice(0, 7)
 }
 
