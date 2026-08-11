@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from './services/supabase'
-import { exportarHistorialExcel } from './services/exportarExcel'
+import { exportarHistorialExcel, exportarInventarioBodegaExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
 import Login from './components/Login'
 import RegistroAcciones from './components/RegistroAcciones'
@@ -1996,6 +1996,11 @@ async function leerInventarioBodega() {
   } finally {
     setLeyendoInventarioBodega(false)
   }
+}
+
+function exportarInventarioBodegaActual() {
+  const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+  exportarInventarioBodegaExcel(inventarioActual)
 }
 
 async function guardarPedidoBodega(datosPedido, materialesPedido) {
@@ -5480,6 +5485,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarPedido={guardarPedidoBodega}
     onGuardarDevolucion={guardarDevolucionBodegaConMateriales}
     onEntregarSolicitudBodega={entregarSolicitudBodega}
+    onExportarInventario={exportarInventarioBodegaActual}
     onToggleAlertasBodega={() => setMostrarAlertasBodega((actual) => !actual)}
     onTogglePedidosBodegaHoy={() => setMostrarPedidosBodegaHoy((actual) => !actual)}
     onActualizarAlertasBodega={cargarAlertasBodega}

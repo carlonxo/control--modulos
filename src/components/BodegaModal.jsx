@@ -29,6 +29,7 @@ function BodegaModal({
   onGuardarPedido,
   onGuardarDevolucion,
   onEntregarSolicitudBodega,
+  onExportarInventario,
   onToggleAlertasBodega,
   onTogglePedidosBodegaHoy,
   onActualizarAlertasBodega,
@@ -347,7 +348,7 @@ function BodegaModal({
             </label>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'stretch', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'stretch', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
             <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
               <Tarjeta titulo="Materiales" valor={inventarioSeleccionado?.totalItems || 0} />
             </div>
@@ -361,6 +362,21 @@ function BodegaModal({
                 />
               </div>
             )}
+
+            <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
+              <button
+                type="button"
+                onClick={onExportarInventario}
+                disabled={!inventarioSeleccionado?.items?.length}
+                style={{
+                  ...botonAzul,
+                  opacity: !inventarioSeleccionado?.items?.length ? 0.7 : 1,
+                  cursor: !inventarioSeleccionado?.items?.length ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Exportar inventario
+              </button>
+            </div>
 
             {puedeAdministrar && (
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
