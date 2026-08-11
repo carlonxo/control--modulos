@@ -23,6 +23,7 @@ import DescargaProtocolosDiariosModal from './components/DescargaProtocolosDiari
 import BalanceMaterialesModal from './components/BalanceMaterialesModal'
 import BalanceMantencionModal from './components/BalanceMantencionModal'
 import ValesBodegaModal from './components/ValesBodegaModal'
+import BodegaModal from './components/BodegaModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
 import {
@@ -41,6 +42,11 @@ import {
   registrarRegistroAccionModulo,
 } from './services/registroAccionesService'
 import { leerFilasValeBodegaDesdeArchivo } from './services/valesBodegaArchivoService'
+import { leerInventariosBodegaDesdeExcel } from './services/bodegaInventarioArchivoService'
+import {
+  cargarInventariosBodega as cargarInventariosBodegaSupabase,
+  guardarInventariosBodega as guardarInventariosBodegaSupabase,
+} from './services/bodegaInventarioService'
 import { compilarBalanceMateriales } from './services/balanceMaterialesService'
 import { compilarTrazabilidadMaterialesPorSolicitante } from './services/trazabilidadMaterialesService'
 import {
@@ -438,6 +444,45 @@ const equivalenciasValeBodega = {
   [normalizarTextoComparacion('RETENEDOR 20MM')]: 'Retenedor 20mm',
 }
 
+const coloresCableBodega = [
+  'Rojo',
+  'Negro',
+  'Azul',
+  'Blanco',
+  'Verde',
+  'Amarillo',
+  'Café',
+  'Gris',
+]
+
+const variantesCableBodega = [
+  {
+    base: 'Cable RZ1 2,5mm (Alum + Ench)',
+    nombres: coloresCableBodega.map((color) => `Cable RZ1 2,5mm ${color}`),
+  },
+  {
+    base: 'Cable RZ1 4mm (Termo)',
+    nombres: coloresCableBodega.map((color) => `Cable RZ1 4mm ${color}`),
+  },
+  {
+    base: 'Cable RZ1 6mm (Alimentación)',
+    nombres: coloresCableBodega.map((color) => `Cable RZ1 6mm ${color}`),
+  },
+]
+
+variantesCableBodega.forEach(({ base, nombres }) => {
+  nombres.forEach((nombre) => {
+    equivalenciasValeBodega[normalizarTextoComparacion(nombre)] = base
+  })
+})
+
+coloresCableBodega.forEach((color) => {
+  equivalenciasValeBodega[normalizarTextoComparacion(`CABLE EVA RZ-1 ${color} 2.5 MM`)] = 'Cable RZ1 2,5mm (Alum + Ench)'
+  equivalenciasValeBodega[normalizarTextoComparacion(`CABLE EVA RZ-1 ${color} 2,5 MM`)] = 'Cable RZ1 2,5mm (Alum + Ench)'
+  equivalenciasValeBodega[normalizarTextoComparacion(`CABLE EVA RZ-1 ${color} 4 MM`)] = 'Cable RZ1 4mm (Termo)'
+  equivalenciasValeBodega[normalizarTextoComparacion(`CABLE EVA RZ-1 ${color} 6 MM`)] = 'Cable RZ1 6mm (Alimentación)'
+})
+
 function App() {
   const [datos, setDatos] = useState([])
 const [moduloSeleccionado, setModuloSeleccionado] = useState(null)
@@ -495,8 +540,10 @@ const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(fal
 const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
 const [mostrarBalanceMantencion, setMostrarBalanceMantencion] = useState(false)
 const [mostrarValesBodega, setMostrarValesBodega] = useState(false)
+const [mostrarBodega, setMostrarBodega] = useState(false)
 const [preciosMateriales, setPreciosMateriales] = useState({})
 const [preciosCompraMateriales, setPreciosCompraMateriales] = useState({})
+const [codigosBodegaMateriales, setCodigosBodegaMateriales] = useState({})
 const [catalogoMaterialesGuardado, setCatalogoMaterialesGuardado] = useState([])
 const [cargandoPreciosMateriales, setCargandoPreciosMateriales] = useState(false)
 const [guardandoPreciosMateriales, setGuardandoPreciosMateriales] = useState(false)
@@ -533,6 +580,11 @@ const [valesBodegaDia, setValesBodegaDia] = useState([])
 const [cargandoValesBodegaDia, setCargandoValesBodegaDia] = useState(false)
 const [leyendoValeBodega, setLeyendoValeBodega] = useState(false)
 const [guardandoValeBodega, setGuardandoValeBodega] = useState(false)
+const [archivoInventarioBodega, setArchivoInventarioBodega] = useState(null)
+const [inventariosBodega, setInventariosBodega] = useState([])
+const [inventarioBodegaSeleccionadoId, setInventarioBodegaSeleccionadoId] = useState('')
+const [cargandoInventariosBodega, setCargandoInventariosBodega] = useState(false)
+const [leyendoInventarioBodega, setLeyendoInventarioBodega] = useState(false)
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [idsOtEnEdicion, setIdsOtEnEdicion] = useState(['', '', ''])
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
@@ -571,6 +623,8 @@ const puedeVerProtocolosMensuales = tienePermiso(perfil?.rol, 'verProtocolosMens
 const puedeVerBalanceMateriales = tienePermiso(perfil?.rol, 'verBalanceMateriales')
 const puedeVerBalanceMantencion = tienePermiso(perfil?.rol, 'verBalanceMantencion')
 const puedeVerValesBodega = tienePermiso(perfil?.rol, 'verValesBodega')
+const puedeVerBodega = tienePermiso(perfil?.rol, 'verBodega')
+const puedeAdministrarBodega = tienePermiso(perfil?.rol, 'administrarBodega')
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
@@ -644,6 +698,7 @@ const catalogoPreciosBaseYGuardado = [
           idArtInterno: itemGuardado.idArtInterno || itemBase.idArtInterno || '',
           material: itemGuardado.material || itemBase.material,
           seccion: seccionCatalogoPrecios(itemGuardado),
+          codigoBodega: itemGuardado.codigoBodega || itemBase.codigoBodega || '',
           precio: primerPrecioDisponible(itemGuardado.precio, itemBase.precio),
           precioCompra: primerPrecioDisponible(itemGuardado.precioCompra, itemBase.precioCompra),
         }
@@ -695,7 +750,8 @@ const seccionesCatalogoPreciosCompleto = [
 const opcionesMaterialesBalance = [...new Set(catalogoPreciosMaterialesCompleto
   .filter((item) => item.activo !== false)
   .map((item) => item.material)
-  .filter(Boolean))]
+  .filter(Boolean)
+  .concat(variantesCableBodega.flatMap((grupo) => grupo.nombres)))]
   .sort((a, b) => a.localeCompare(b, 'es', {
     numeric: true,
     sensitivity: 'base',
@@ -901,7 +957,9 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
     setMostrarDescargaProtocolos,
     setMostrarPreciosMateriales,
     setMostrarBalanceMateriales,
+    setMostrarBalanceMantencion,
     setMostrarValesBodega,
+    setMostrarBodega,
   ])
   setPrecioMaterialEnEdicion(null)
   setDetalleCobroSeleccionado(null)
@@ -1222,6 +1280,7 @@ async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompl
             idArtInterno: itemGuardado.idArtInterno || itemBase.idArtInterno || '',
             material: itemGuardado.material || itemBase.material,
             seccion: itemGuardado.seccion || itemBase.seccion,
+            codigoBodega: itemGuardado.codigoBodega || itemBase.codigoBodega || '',
             precio: primerPrecioDisponible(itemGuardado.precio, itemBase.precio),
             precioCompra: primerPrecioDisponible(itemGuardado.precioCompra, itemBase.precioCompra),
           }
@@ -1233,7 +1292,7 @@ async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompl
     ))),
   ]
 
-  const { precios, preciosCompra, error } = await cargarPreciosMaterialesSupabase({
+  const { precios, preciosCompra, codigosBodega, error } = await cargarPreciosMaterialesSupabase({
     supabase,
     catalogo: catalogoConGuardado,
   })
@@ -1243,12 +1302,14 @@ async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompl
     mostrarNotificacion('No se pudieron cargar los precios: ' + error.message)
     setPreciosMateriales(precios)
     setPreciosCompraMateriales(preciosCompra || {})
-    return { precios, preciosCompra: preciosCompra || {}, catalogo: catalogoConGuardado }
+    setCodigosBodegaMateriales(codigosBodega || {})
+    return { precios, preciosCompra: preciosCompra || {}, codigosBodega: codigosBodega || {}, catalogo: catalogoConGuardado }
   }
 
   setPreciosMateriales(precios)
   setPreciosCompraMateriales(preciosCompra || {})
-  return { precios, preciosCompra: preciosCompra || {}, catalogo: catalogoConGuardado }
+  setCodigosBodegaMateriales(codigosBodega || {})
+  return { precios, preciosCompra: preciosCompra || {}, codigosBodega: codigosBodega || {}, catalogo: catalogoConGuardado }
 }
 
 async function abrirPreciosMateriales() {
@@ -1806,6 +1867,87 @@ async function abrirValesBodega() {
   await cargarValesBodegaDia(new Date().toISOString().slice(0, 10))
 }
 
+function cargarInventariosBodegaLocalesRespaldo() {
+  try {
+    const guardado = localStorage.getItem('inventariosBodega')
+    if (!guardado) return
+    const inventarios = JSON.parse(guardado)
+    if (!Array.isArray(inventarios)) return
+    setInventariosBodega(inventarios)
+    setInventarioBodegaSeleccionadoId((actual) => actual || inventarios[0]?.id || '')
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+async function cargarInventariosBodega() {
+  if (!puedeVerBodega) return
+
+  setCargandoInventariosBodega(true)
+  const { inventarios, error } = await cargarInventariosBodegaSupabase({
+    supabase,
+  })
+  setCargandoInventariosBodega(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudieron cargar los inventarios de bodega: ' + error.message)
+    cargarInventariosBodegaLocalesRespaldo()
+    return
+  }
+
+  setInventariosBodega(inventarios)
+  setInventarioBodegaSeleccionadoId((actual) => (
+    inventarios.some((item) => item.id === actual) ? actual : inventarios[0]?.id || ''
+  ))
+
+  if (inventarios.length === 0) {
+    cargarInventariosBodegaLocalesRespaldo()
+  }
+}
+
+async function abrirBodega() {
+  if (!puedeVerBodega) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setMostrarBodega(true)
+  await cargarInventariosBodega()
+}
+
+async function leerInventarioBodega() {
+  if (!puedeAdministrarBodega || !archivoInventarioBodega) return
+
+  setLeyendoInventarioBodega(true)
+  try {
+    const inventarios = await leerInventariosBodegaDesdeExcel(archivoInventarioBodega)
+    if (inventarios.length === 0) {
+      mostrarNotificacion('No se detectaron hojas de inventario con fecha en el nombre')
+      return
+    }
+
+    const { error, etapa } = await guardarInventariosBodegaSupabase({
+      supabase,
+      inventarios,
+      archivoNombre: archivoInventarioBodega?.name || '',
+      cargadoPor: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    })
+
+    if (error) {
+      mostrarNotificacion(`No se pudo guardar inventario de bodega (${etapa}): ${error.message}`)
+      return
+    }
+
+    localStorage.setItem('inventariosBodega', JSON.stringify(inventarios))
+    mostrarNotificacion(`Se guardaron ${inventarios.length} inventarios de bodega`)
+    setArchivoInventarioBodega(null)
+    await cargarInventariosBodega()
+  } catch (error) {
+    console.error(error)
+    mostrarNotificacion(error.message || 'No se pudo leer el inventario de bodega')
+  } finally {
+    setLeyendoInventarioBodega(false)
+  }
+}
+
 function fechaInicialProtocoloManual() {
   return obtenerFechaInicialProtocoloManual({
     fechaProtocolosMensuales,
@@ -2063,6 +2205,13 @@ function actualizarPrecioMaterial(material, tipo, valor) {
   setter((actuales) => ({
     ...actuales,
     [material]: limpiarPrecioMaterial(valor),
+  }))
+}
+
+function actualizarCodigoBodegaMaterial(material, valor) {
+  setCodigosBodegaMateriales((actuales) => ({
+    ...actuales,
+    [material]: valor,
   }))
 }
 
@@ -2360,6 +2509,7 @@ async function guardarPreciosMateriales() {
     catalogo: catalogoPreciosMaterialesCompleto,
     precios: preciosMateriales,
     preciosCompra: preciosCompraMateriales,
+    codigosBodega: codigosBodegaMateriales,
     normalizarPrecioMaterial,
   })
 
@@ -2373,6 +2523,10 @@ async function guardarPreciosMateriales() {
   setPrecioMaterialEnEdicion(null)
   if (catalogoConfirmado) {
     setCatalogoMaterialesGuardado(catalogoConfirmado)
+    setCodigosBodegaMateriales(Object.fromEntries(catalogoConfirmado.map((item) => [
+      item.material,
+      item.codigoBodega || '',
+    ])))
   }
   mostrarNotificacion('Precios de materiales guardados correctamente')
 }
@@ -3778,6 +3932,24 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       Vales bodega
     </button>
   )}
+  {puedeVerBodega && (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        abrirBodega()
+      }}
+      style={{
+        padding: '10px 20px',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        background: '#263238',
+        color: 'white',
+        border: '1px solid #607d8b',
+      }}
+    >
+      Bodega
+    </button>
+  )}
 </div>
 
 {mostrarKPI && (
@@ -4929,6 +5101,22 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   />
 )}
 
+{mostrarBodega && puedeVerBodega && (
+  <BodegaModal
+    puedeAdministrar={puedeAdministrarBodega}
+    archivo={archivoInventarioBodega}
+    inventarios={inventariosBodega}
+    inventarioSeleccionadoId={inventarioBodegaSeleccionadoId}
+    cargandoInventarios={cargandoInventariosBodega}
+    leyendo={leyendoInventarioBodega}
+    onCambiarArchivo={setArchivoInventarioBodega}
+    onLeerArchivo={leerInventarioBodega}
+    onSeleccionarInventario={setInventarioBodegaSeleccionadoId}
+    onCerrar={() => setMostrarBodega(false)}
+    onClickFondo={cerrarPanelesFlotantes}
+  />
+)}
+
 {mostrarPreciosMateriales && puedeVerPreciosMateriales && (
   <PreciosMaterialesModal
     puedeEditar={puedeEditarPreciosMateriales}
@@ -4938,9 +5126,11 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     catalogo={catalogoPreciosMaterialesCompleto}
     precios={preciosMateriales}
     preciosCompra={preciosCompraMateriales}
+    codigosBodega={codigosBodegaMateriales}
     precioEnEdicion={precioMaterialEnEdicion}
     formatearPrecio={formatearPrecioMaterial}
     onActualizarPrecio={actualizarPrecioMaterial}
+    onActualizarCodigoBodega={actualizarCodigoBodegaMaterial}
     onCambiarEdicion={setPrecioMaterialEnEdicion}
     onRenombrarMaterial={renombrarMaterialCatalogoPrecios}
     onAgregarMaterial={agregarMaterialCatalogoPrecios}

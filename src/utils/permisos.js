@@ -15,6 +15,8 @@ const permisosPorAccion = {
   verBalanceMateriales: ['analista', 'admin'],
   verBalanceMantencion: ['analista', 'admin'],
   verValesBodega: ['analista', 'admin'],
+  verBodega: ['admin', 'analista', 'operador'],
+  administrarBodega: ['admin'],
   eliminarProtocolosMensuales: ['admin', 'analista'],
   ajustarValoresProtocolos: ['admin', 'analista'],
   verMenuModulo: ['admin', 'operador'],

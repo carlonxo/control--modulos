@@ -1,0 +1,76 @@
+{
+  "registros": 249,
+  "valorProtocolosActual": 30013414,
+  "valorProtocolosSimulado": 31849244,
+  "materialUsado": 14798793,
+  "sueldos": 20000000,
+  "balanceActual": -4785379,
+  "mejora": 1835830,
+  "balanceSimulado": -2949549,
+  "detalle": [
+    {
+      "item": "Tapa ciega - Pasac.",
+      "precioActual": 480,
+      "precioSugerido": 600,
+      "cantidadNueva": 630,
+      "cantidadReutilizada": 0,
+      "adicional": 75600
+    },
+    {
+      "item": "Cable RZ1 2,5mm",
+      "precioActual": 353,
+      "precioSugerido": 500,
+      "cantidadNueva": 9337,
+      "cantidadReutilizada": 0,
+      "adicional": 1372539
+    },
+    {
+      "item": "Cable RZ1 4mm",
+      "precioActual": 493,
+      "precioSugerido": 626,
+      "cantidadNueva": 94,
+      "cantidadReutilizada": 0,
+      "adicional": 12502
+    },
+    {
+      "item": "Cable RZ1 6mm",
+      "precioActual": 710,
+      "precioSugerido": 900,
+      "cantidadNueva": 1069,
+      "cantidadReutilizada": 0,
+      "adicional": 203110
+    },
+    {
+      "item": "Plafón",
+      "precioActual": 6702,
+      "precioSugerido": 8000,
+      "cantidadNueva": 5,
+      "cantidadReutilizada": 0,
+      "adicional": 6490
+    },
+    {
+      "item": "Aut. monof. 10-16-20A",
+      "precioActual": 2578,
+      "precioSugerido": 3000,
+      "cantidadNueva": 19,
+      "cantidadReutilizada": 26,
+      "adicional": 13504
+    },
+    {
+      "item": "Artefacto simple",
+      "precioActual": 1856,
+      "precioSugerido": 2130,
+      "cantidadNueva": 108,
+      "cantidadReutilizada": 8,
+      "adicional": 30688
+    },
+    {
+      "item": "Artefacto doble",
+      "precioActual": 2578,
+      "precioSugerido": 2964,
+      "cantidadNueva": 304,
+      "cantidadReutilizada": 21,
+      "adicional": 121397
+    }
+  ]
+}

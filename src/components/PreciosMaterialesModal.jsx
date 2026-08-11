@@ -8,9 +8,11 @@ function PreciosMaterialesModal({
   catalogo,
   precios,
   preciosCompra,
+  codigosBodega = {},
   precioEnEdicion,
   formatearPrecio,
   onActualizarPrecio,
+  onActualizarCodigoBodega,
   onCambiarEdicion,
   onRenombrarMaterial,
   onAgregarMaterial,
@@ -25,8 +27,8 @@ function PreciosMaterialesModal({
   const claveEdicion = (material, tipo) => `${tipo}::${material}`
   const estaEditando = (material, tipo) => precioEnEdicion === claveEdicion(material, tipo)
   const columnasPrecio = puedeEditar
-    ? (puedeVerCompra ? '56px minmax(190px, 340px) 96px 96px 30px' : '56px minmax(190px, 340px) 96px 30px')
-    : '56px minmax(190px, 340px) 112px'
+    ? (puedeVerCompra ? '56px 92px minmax(180px, 320px) 96px 96px 30px' : '56px 92px minmax(180px, 320px) 96px 30px')
+    : '56px 92px minmax(180px, 320px) 112px'
   const precioWrapStyle = {
     display: 'grid',
     gridTemplateColumns: '16px max-content',
@@ -106,7 +108,7 @@ function PreciosMaterialesModal({
         left: '50%',
         transform: 'translate(-50%, -50%)',
         width: 'calc(100vw - 32px)',
-        maxWidth: puedeEditar ? '720px' : '560px',
+        maxWidth: puedeEditar ? '820px' : '660px',
         maxHeight: 'calc(100vh - 32px)',
         overflowY: 'auto',
         boxSizing: 'border-box',
@@ -214,6 +216,7 @@ function PreciosMaterialesModal({
                   }}
                 >
                   <span style={{ whiteSpace: 'nowrap' }}>ID</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>Cod. bodega</span>
                   <span style={{ whiteSpace: 'nowrap' }}>Material</span>
                   <span style={{ paddingLeft: '20px', whiteSpace: 'nowrap' }}>Venta</span>
                   {puedeVerCompra && <span style={{ paddingLeft: '20px', whiteSpace: 'nowrap' }}>Compra</span>}
@@ -236,6 +239,12 @@ function PreciosMaterialesModal({
                       <strong style={{ color: '#bbb', fontSize: '13px' }}>
                         {item.idArtVisible || item.idArt}
                       </strong>
+                      <CodigoBodegaCelda
+                        puedeEditar={puedeEditar}
+                        material={item.material}
+                        valor={codigosBodega[item.material] ?? codigosBodega[item.materialOriginal] ?? item.codigoBodega ?? ''}
+                        onCambiar={onActualizarCodigoBodega}
+                      />
                       {materialEnEdicion === item.material ? (
                         <input
                           type="text"
@@ -404,6 +413,51 @@ function PreciosMaterialesModal({
         </button>
       </div>
     </div>
+  )
+}
+
+function CodigoBodegaCelda({ puedeEditar, material, valor, onCambiar }) {
+  if (!puedeEditar) {
+    return (
+      <span
+        title={valor || 'Sin código bodega'}
+        style={{
+          color: valor ? '#ddd' : '#777',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          fontSize: '13px',
+          fontWeight: 700,
+        }}
+      >
+        {valor || '-'}
+      </span>
+    )
+  }
+
+  return (
+    <input
+      type="text"
+      value={valor}
+      onChange={(e) => onCambiar?.(material, e.target.value)}
+      placeholder="Cod."
+      style={{
+        width: '100%',
+        minWidth: 0,
+        boxSizing: 'border-box',
+        padding: '2px 5px',
+        lineHeight: 1.2,
+        font: 'inherit',
+        fontSize: '13px',
+        fontWeight: 700,
+        color: 'white',
+        background: '#263238',
+        border: '1px solid #607d8b',
+        borderRadius: '4px',
+        outline: 'none',
+      }}
+      title="Código interno de bodega"
+    />
   )
 }
 

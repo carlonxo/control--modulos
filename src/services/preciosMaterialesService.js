@@ -4,24 +4,36 @@ export async function cargarPreciosMateriales({
 }) {
   const respuesta = await supabase
     .from('material_precios')
-    .select('material, material_original, id_art_interno, id_art, precio, precio_compra')
+    .select('material, material_original, id_art_interno, id_art, codigo_bodega, precio, precio_compra')
 
-  const respuestaSinMaterialOriginal = respuesta.error?.message?.includes('material_original')
+  const respuestaSinCodigoBodega = respuesta.error?.message?.includes('codigo_bodega')
+    ? await supabase
+      .from('material_precios')
+      .select('material, material_original, id_art_interno, id_art, precio, precio_compra')
+    : respuesta
+
+  const respuestaSinMaterialOriginal = respuestaSinCodigoBodega.error?.message?.includes('material_original')
+    ? await supabase
+      .from('material_precios')
+      .select('material, id_art_interno, id_art, codigo_bodega, precio, precio_compra')
+    : respuestaSinCodigoBodega
+
+  const respuestaSinCodigoBodegaPosterior = respuestaSinMaterialOriginal.error?.message?.includes('codigo_bodega')
     ? await supabase
       .from('material_precios')
       .select('material, id_art_interno, id_art, precio, precio_compra')
-    : respuesta
+    : respuestaSinMaterialOriginal
 
-  const respuestaSinIdInterno = respuestaSinMaterialOriginal.error?.message?.includes('id_art_interno')
+  const respuestaSinIdInterno = respuestaSinCodigoBodegaPosterior.error?.message?.includes('id_art_interno')
     ? await supabase
       .from('material_precios')
-      .select('material, material_original, id_art, precio, precio_compra')
-    : respuestaSinMaterialOriginal
+      .select('material, material_original, id_art, codigo_bodega, precio, precio_compra')
+    : respuestaSinCodigoBodegaPosterior
 
   const { data, error } = respuestaSinIdInterno.error?.message?.includes('precio_compra')
     ? await supabase
       .from('material_precios')
-      .select('material, id_art, precio')
+      .select('material, id_art, codigo_bodega, precio')
     : respuestaSinIdInterno
 
   const preciosPorDefecto = Object.fromEntries(catalogo.map((item) => [
@@ -32,11 +44,16 @@ export async function cargarPreciosMateriales({
     item.material,
     item.precioCompra ?? '',
   ]))
+  const codigosBodegaPorDefecto = Object.fromEntries(catalogo.map((item) => [
+    item.material,
+    item.codigoBodega ?? '',
+  ]))
 
   if (error) {
     return {
       precios: preciosPorDefecto,
       preciosCompra: preciosCompraPorDefecto,
+      codigosBodega: codigosBodegaPorDefecto,
       error,
     }
   }
@@ -69,6 +86,20 @@ export async function cargarPreciosMateriales({
       String(item.id_art),
       item.precio_compra ?? '',
     ]))
+  const codigosBodegaGuardados = Object.fromEntries((data || []).map((item) => [
+    item.material,
+    item.codigo_bodega ?? '',
+  ]))
+  ;(data || []).forEach((item) => {
+    if (!item.material_original) return
+    codigosBodegaGuardados[item.material_original] = item.codigo_bodega ?? ''
+  })
+  const codigosBodegaGuardadosPorId = Object.fromEntries((data || [])
+    .filter((item) => item.id_art)
+    .map((item) => [
+      String(item.id_art),
+      item.codigo_bodega ?? '',
+    ]))
   const resolverPrecioCompra = (item) => {
     const guardado = preciosCompraGuardados[item.material] ?? (
       item.idArt ? preciosCompraGuardadosPorId[String(item.idArt)] : undefined
@@ -80,22 +111,29 @@ export async function cargarPreciosMateriales({
 
   const precios = {}
   const preciosCompra = {}
+  const codigosBodega = {}
   catalogo.forEach((item) => {
     const precioVenta = preciosGuardados[item.material] ?? (
       item.idArt ? preciosGuardadosPorId[String(item.idArt)] : undefined
     ) ?? item.precio
     const precioCompra = resolverPrecioCompra(item)
+    const codigoBodega = codigosBodegaGuardados[item.material] ?? (
+      item.idArt ? codigosBodegaGuardadosPorId[String(item.idArt)] : undefined
+    ) ?? item.codigoBodega ?? ''
     precios[item.material] = precioVenta
     preciosCompra[item.material] = precioCompra
+    codigosBodega[item.material] = codigoBodega
     if (item.materialOriginal) {
       precios[item.materialOriginal] = precioVenta
       preciosCompra[item.materialOriginal] = precioCompra
+      codigosBodega[item.materialOriginal] = codigoBodega
     }
   })
 
   return {
     precios,
     preciosCompra,
+    codigosBodega,
     error: null,
   }
 }
@@ -105,34 +143,48 @@ export async function cargarCatalogoMaterialesGuardado({
 }) {
   const respuesta = await supabase
     .from('material_precios')
-    .select('material, material_original, id_art_interno, id_art, seccion, precio, precio_compra, activo, updated_at')
+    .select('material, material_original, id_art_interno, id_art, codigo_bodega, seccion, precio, precio_compra, activo, updated_at')
     .order('updated_at', { ascending: false })
 
-  const respuestaSinMaterialOriginal = respuesta.error?.message?.includes('material_original')
+  const respuestaSinCodigoBodega = respuesta.error?.message?.includes('codigo_bodega')
+    ? await supabase
+      .from('material_precios')
+      .select('material, material_original, id_art_interno, id_art, seccion, precio, precio_compra, activo, updated_at')
+      .order('updated_at', { ascending: false })
+    : respuesta
+
+  const respuestaSinMaterialOriginal = respuestaSinCodigoBodega.error?.message?.includes('material_original')
+    ? await supabase
+      .from('material_precios')
+      .select('material, id_art_interno, id_art, codigo_bodega, seccion, precio, precio_compra, activo, updated_at')
+      .order('updated_at', { ascending: false })
+    : respuestaSinCodigoBodega
+
+  const respuestaSinCodigoBodegaPosterior = respuestaSinMaterialOriginal.error?.message?.includes('codigo_bodega')
     ? await supabase
       .from('material_precios')
       .select('material, id_art_interno, id_art, seccion, precio, precio_compra, activo, updated_at')
       .order('updated_at', { ascending: false })
-    : respuesta
+    : respuestaSinMaterialOriginal
 
-  const respuestaSinIdInterno = respuestaSinMaterialOriginal.error?.message?.includes('id_art_interno')
+  const respuestaSinIdInterno = respuestaSinCodigoBodegaPosterior.error?.message?.includes('id_art_interno')
     ? await supabase
       .from('material_precios')
-      .select('material, material_original, id_art, seccion, precio, precio_compra, activo, updated_at')
+      .select('material, material_original, id_art, codigo_bodega, seccion, precio, precio_compra, activo, updated_at')
       .order('updated_at', { ascending: false })
-    : respuestaSinMaterialOriginal
+    : respuestaSinCodigoBodegaPosterior
 
   const respuestaSinActivo = respuestaSinIdInterno.error?.message?.includes('activo')
     ? await supabase
       .from('material_precios')
-      .select('material, id_art, seccion, precio, precio_compra, updated_at')
+      .select('material, id_art, codigo_bodega, seccion, precio, precio_compra, updated_at')
       .order('updated_at', { ascending: false })
     : respuestaSinIdInterno
 
   const { data, error } = respuestaSinActivo.error?.message?.includes('precio_compra')
     ? await supabase
       .from('material_precios')
-      .select('material, id_art, seccion, precio')
+      .select('material, id_art, codigo_bodega, seccion, precio')
     : respuestaSinActivo
 
   if (error) {
@@ -152,6 +204,7 @@ export async function cargarCatalogoMaterialesGuardado({
       idArtInterno: item.id_art_interno || '',
       idArtVisible: item.id_art || item.id_art_interno || '',
       idArt: item.id_art || '',
+      codigoBodega: item.codigo_bodega || '',
       seccion: item.seccion || 'Consumibles',
       precio: item.precio ?? 0,
       precioCompra: item.precio_compra ?? 0,
@@ -170,6 +223,7 @@ export async function guardarPreciosMateriales({
   catalogo,
   precios,
   preciosCompra = {},
+  codigosBodega = {},
   normalizarPrecioMaterial,
 }) {
   const resolverPrecio = (item, mapa, campoCatalogo) => normalizarPrecioMaterial(
@@ -183,6 +237,7 @@ export async function guardarPreciosMateriales({
     material_original: item.materialOriginal || null,
     id_art_interno: item.idArtInterno || null,
     id_art: item.idArt || null,
+    codigo_bodega: codigosBodega[item.material] ?? codigosBodega[item.materialOriginal] ?? item.codigoBodega ?? null,
     seccion: item.seccion,
     precio: resolverPrecio(item, precios, 'precio'),
     precio_compra: resolverPrecio(item, preciosCompra, 'precioCompra'),
@@ -228,6 +283,7 @@ export async function guardarPreciosMateriales({
       p_seccion: fila.seccion,
       p_precio: fila.precio,
       p_precio_compra: fila.precio_compra,
+      p_codigo_bodega: fila.codigo_bodega,
       p_activo: fila.activo,
     })
 
@@ -278,6 +334,14 @@ export async function guardarPreciosMateriales({
     const respuesta = await supabase
       .from('material_precios')
       .upsert(filasSinCompra, { onConflict: 'material' })
+    error = respuesta.error
+  }
+
+  if (error?.message?.includes('codigo_bodega')) {
+    const filasSinCodigoBodega = filas.map(({ codigo_bodega, ...fila }) => fila)
+    const respuesta = await supabase
+      .from('material_precios')
+      .upsert(filasSinCodigoBodega, { onConflict: 'material' })
     error = respuesta.error
   }
 
