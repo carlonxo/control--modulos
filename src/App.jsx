@@ -58,6 +58,7 @@ import {
   cargarItemsValesBodegaPorRango,
   cargarValesBodegaDia as cargarValesBodegaDiaSupabase,
   guardarValeBodega as guardarValeBodegaSupabase,
+  actualizarItemsValeBodega as actualizarItemsValeBodegaSupabase,
 } from './services/valesBodegaService'
 import {
   cargarRecepcionesBodegaRango as cargarRecepcionesBodegaRangoSupabase,
@@ -2298,7 +2299,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     fecha: datosPedido?.fecha || new Date().toISOString().slice(0, 10),
     proyecto: String(datosPedido?.proyecto || '').trim(),
     tipoModulo: String(datosPedido?.tipoModulo || '').trim(),
-    linea: String(datosPedido?.linea || '').trim(),
+    serie: String(datosPedido?.serie || datosPedido?.linea || '').trim(),
     bodega: String(datosPedido?.bodega || '').trim(),
   }
 
@@ -2311,7 +2312,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
 
   const items = (materialesPedido || [])
     .map((item) => ({
-      material_vale: String(item.descripcion || item.codigo || '').trim(),
+      material_vale: String(item.codigo || item.descripcion || '').trim(),
       material_balance: String(item.descripcion || item.codigo || '').trim(),
       cantidad: Number(item.cantidad || 0),
     }))
@@ -2336,7 +2337,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     'Pedido generado desde app',
     pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
     pedido.tipoModulo ? `Tipo modulo: ${pedido.tipoModulo}` : '',
-    pedido.linea ? `Linea: ${pedido.linea}` : '',
+    pedido.serie ? `Serie: ${pedido.serie}` : '',
     pedido.bodega ? `Bodega: ${pedido.bodega}` : '',
   ].filter(Boolean).join(' | ')
 
@@ -2346,7 +2347,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     fecha: pedido.fecha,
     archivoNombre: '',
     usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
-    serie: '',
+    serie: pedido.serie,
     solicitanteId: pedido.retiraId,
     solicitanteNombre: pedido.retiraNombre,
     tipoIngreso: 'pedido_app',
@@ -2648,6 +2649,49 @@ async function entregarSolicitudBodega(alerta) {
   )))
   setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== alerta.id))
   await cargarInventariosBodega()
+  await cargarAlertasBodega()
+  return true
+}
+
+async function editarSolicitudBodega(alerta, itemsEditados) {
+  if (!esRolBodega || !alerta?.id) return false
+  if (String(alerta.estado_bodega || '').toLowerCase() === 'entregado') {
+    mostrarNotificacion('No se puede editar un pedido ya entregado')
+    return false
+  }
+
+  const items = (itemsEditados || [])
+    .map((item) => ({
+      material_vale: String(item.material_vale || item.material_balance || '').trim(),
+      material_balance: String(item.material_balance || item.material_vale || '').trim(),
+      cantidad: Number(item.cantidad || 0),
+    }))
+    .filter((item) => item.material_balance && item.cantidad > 0)
+
+  if (items.length === 0) {
+    mostrarNotificacion('Debes dejar al menos un material con cantidad')
+    return false
+  }
+
+  const { error, etapa } = await actualizarItemsValeBodegaSupabase({
+    supabase,
+    vale: alerta,
+    items,
+  })
+
+  if (error) {
+    mostrarNotificacion(`No se pudo editar el pedido${etapa ? ` (${etapa})` : ''}: ${error.message}`)
+    return false
+  }
+
+  const pedidoActualizado = { ...alerta, items }
+  setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
+    vale.id === alerta.id ? pedidoActualizado : vale
+  )))
+  setAlertasBodega((actuales) => actuales.map((vale) => (
+    vale.id === alerta.id ? pedidoActualizado : vale
+  )))
+  mostrarNotificacion('Pedido actualizado correctamente')
   await cargarAlertasBodega()
   return true
 }
@@ -5854,6 +5898,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarDevolucion={guardarDevolucionBodegaConMateriales}
     onGuardarRecepcion={guardarRecepcionBodega}
     onEntregarSolicitudBodega={entregarSolicitudBodega}
+    onEditarSolicitudBodega={editarSolicitudBodega}
     onExportarInventario={exportarInventarioBodegaActual}
     onToggleAlertasBodega={() => setMostrarAlertasBodega((actual) => !actual)}
     onTogglePedidosBodegaHoy={() => setMostrarPedidosBodegaHoy((actual) => !actual)}

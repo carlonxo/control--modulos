@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 const filaMovimientoVacia = {
   codigo: '',
@@ -36,6 +36,7 @@ function BodegaModal({
   onGuardarDevolucion,
   onGuardarRecepcion,
   onEntregarSolicitudBodega,
+  onEditarSolicitudBodega,
   onExportarInventario,
   onToggleAlertasBodega,
   onTogglePedidosBodegaHoy,
@@ -74,7 +75,7 @@ function BodegaModal({
     fecha: fechaActualInput(),
     proyecto: '',
     tipoModulo: '',
-    linea: '',
+    serie: '',
     bodega: 'bayona',
     retira: '',
   })
@@ -235,7 +236,7 @@ function BodegaModal({
       fecha: fechaActualInput(),
       proyecto: '',
       tipoModulo: '',
-      linea: '',
+      serie: '',
       bodega: 'bayona',
       retira: '',
     })
@@ -323,6 +324,14 @@ function BodegaModal({
         <DetalleSolicitudBodega
           alerta={alertaBodegaSeleccionada}
           entregando={entregandoSolicitudBodega}
+          materialesInventario={materialesInventario}
+          onEditar={async (itemsEditados) => {
+            const ok = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
+            if (!ok) return false
+            setAlertaBodegaSeleccionada((actual) => ({ ...actual, items: itemsEditados }))
+            onActualizarAlertasBodega?.()
+            return true
+          }}
           onEntregar={async () => {
             const ok = await onEntregarSolicitudBodega?.(alertaBodegaSeleccionada)
             if (!ok) return
@@ -879,7 +888,7 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar }) {
             const detalle = [
               pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
               pedido.tipo_modulo ? `Tipo: ${pedido.tipo_modulo}` : '',
-              pedido.linea ? `Línea: ${pedido.linea}` : '',
+              pedido.serie ? `Serie: ${pedido.serie}` : '',
               `Total: ${formatearNumero(total)}`,
             ].filter(Boolean).join(' | ')
 
@@ -1051,11 +1060,47 @@ function DetalleRecepcionBodega({ recepcion, onCerrar }) {
 function DetalleSolicitudBodega({
   alerta,
   entregando,
+  materialesInventario = [],
+  onEditar,
   onEntregar,
   onCerrar,
 }) {
+  const [editando, setEditando] = useState(false)
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
+  const [itemsEditados, setItemsEditados] = useState([])
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
   const entregado = String(alerta?.estado_bodega || '').toLowerCase() === 'entregado'
+
+  useEffect(() => {
+    setItemsEditados((alerta?.items || []).map((item) => ({
+      id: item.id,
+      material_vale: item.material_vale || item.material_balance || '',
+      material_balance: item.material_balance || item.material_vale || '',
+      cantidad: item.cantidad || '',
+    })))
+  }, [alerta?.id])
+
+  function cambiarItem(indice, campo, valor) {
+    setItemsEditados((actuales) => actuales.map((item, i) => (
+      i === indice ? { ...item, [campo]: valor } : item
+    )))
+  }
+
+  function agregarItem() {
+    setItemsEditados((actuales) => [...actuales, { material_vale: '', material_balance: '', cantidad: '' }])
+  }
+
+  function quitarItem(indice) {
+    setItemsEditados((actuales) => actuales.length <= 1 ? actuales : actuales.filter((_, i) => i !== indice))
+  }
+
+  async function guardarEdicion() {
+    setGuardandoEdicion(true)
+    const ok = await onEditar?.(itemsEditados)
+    setGuardandoEdicion(false)
+    if (ok) setEditando(false)
+  }
+
   return (
     <div
       onClick={(e) => e.stopPropagation()}
@@ -1069,9 +1114,16 @@ function DetalleSolicitudBodega({
               {alerta.solicitante_nombre || alerta.usuario_nombre || 'Sin usuario'} | {alerta.fecha || ''}
             </p>
           </div>
-          <button type="button" onClick={onCerrar} style={botonMiniGris}>
-            Cerrar
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {esPedido && !entregado && !editando && (
+              <button type="button" onClick={() => setEditando(true)} style={botonMiniAzul}>
+                Editar
+              </button>
+            )}
+            <button type="button" onClick={onCerrar} style={botonMiniGris}>
+              Cerrar
+            </button>
+          </div>
         </div>
 
         {alerta.observacion && (
@@ -1084,17 +1136,68 @@ function DetalleSolicitudBodega({
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
             <thead>
               <tr style={{ background: '#333' }}>
+                <th style={thStyle}>Código</th>
                 <th style={thStyle}>Material</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Cantidad</th>
+                {editando && <th style={{ ...thStyle, textAlign: 'center' }}>Quitar</th>}
               </tr>
             </thead>
             <tbody>
-              {(alerta.items || []).map((item) => (
-                <tr key={item.id || `${item.material_balance}-${item.cantidad}`}>
-                  <td style={tdStyle}>{item.material_balance || item.material_vale}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>{formatearNumero(item.cantidad)}</td>
-                </tr>
-              ))}
+              {(editando ? itemsEditados : (alerta.items || [])).map((item, indice) => {
+                const codigo = obtenerCodigoMaterialPedido(item, materialesInventario)
+                return (
+                  <tr key={item.id || `${item.material_balance}-${item.cantidad}-${indice}`}>
+                    <td style={tdStyle}>
+                      {editando ? (
+                        <input
+                          type="text"
+                          value={codigo}
+                          onChange={(e) => cambiarItem(indice, 'material_vale', e.target.value)}
+                          style={inputTablaStyle}
+                        />
+                      ) : (
+                        codigo || '-'
+                      )}
+                    </td>
+                    <td style={tdStyle}>
+                      {editando ? (
+                        <input
+                          type="text"
+                          value={item.material_balance || item.material_vale || ''}
+                          onChange={(e) => {
+                            cambiarItem(indice, 'material_balance', e.target.value)
+                            cambiarItem(indice, 'material_vale', e.target.value)
+                          }}
+                          style={inputTablaStyle}
+                        />
+                      ) : (
+                        item.material_balance || item.material_vale
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>
+                      {editando ? (
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.cantidad}
+                          onChange={(e) => cambiarItem(indice, 'cantidad', e.target.value)}
+                          style={{ ...inputTablaStyle, textAlign: 'right' }}
+                        />
+                      ) : (
+                        formatearNumero(item.cantidad)
+                      )}
+                    </td>
+                    {editando && (
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <button type="button" onClick={() => quitarItem(indice)} style={botonIconoRojo}>
+                          ×
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -1104,15 +1207,37 @@ function DetalleSolicitudBodega({
         )}
 
         <div style={accionesPanelStyle}>
+          {editando && (
+            <>
+              <button type="button" onClick={agregarItem} style={botonGris}>
+                + Agregar material
+              </button>
+              <button type="button" onClick={() => setEditando(false)} style={botonMiniGris}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={guardandoEdicion}
+                onClick={guardarEdicion}
+                style={{
+                  ...botonAzul,
+                  opacity: guardandoEdicion ? 0.7 : 1,
+                  cursor: guardandoEdicion ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {guardandoEdicion ? 'Guardando...' : 'Guardar edición'}
+              </button>
+            </>
+          )}
           {esPedido && (
             <button
               type="button"
-              disabled={entregando || entregado}
+              disabled={entregando || entregado || editando}
               onClick={entregado ? undefined : onEntregar}
               style={{
                 ...botonVerde,
-                opacity: entregando || entregado ? 0.7 : 1,
-                cursor: entregando || entregado ? 'not-allowed' : 'pointer',
+                opacity: entregando || entregado || editando ? 0.7 : 1,
+                cursor: entregando || entregado || editando ? 'not-allowed' : 'pointer',
               }}
             >
               {entregado ? 'Pedido ya entregado' : entregando ? 'Descontando...' : 'Pedido entregado'}
@@ -1122,6 +1247,18 @@ function DetalleSolicitudBodega({
       </div>
     </div>
   )
+}
+
+function obtenerCodigoMaterialPedido(item = {}, materialesInventario = []) {
+  const textoCodigo = String(item.material_vale || '').trim()
+  const textoMaterial = String(item.material_balance || item.material_vale || '').trim()
+  const encontrado = materialesInventario.find((material) => (
+    normalizarBusqueda(material.codigo) === normalizarBusqueda(textoCodigo)
+    || normalizarBusqueda(material.descripcion) === normalizarBusqueda(textoMaterial)
+    || normalizarBusqueda(material.codigo) === normalizarBusqueda(textoMaterial)
+  ))
+
+  return encontrado?.codigo || (textoCodigo !== textoMaterial ? textoCodigo : '')
 }
 
 function tipoInputRangoRecepcion(rango) {
@@ -1173,10 +1310,10 @@ function PanelCrearPedido({
           placeholder="Tipo módulo"
         />
         <CampoTexto
-          label="Línea"
-          value={pedido.linea}
-          onChange={(valor) => onCambiarPedido('linea', valor)}
-          placeholder="Ej: 7"
+          label="Serie"
+          value={pedido.serie || ''}
+          onChange={(valor) => onCambiarPedido('serie', valor)}
+          placeholder="Ej: 2020xxxx"
         />
         <label style={labelStyle}>
           Bodega
@@ -1441,7 +1578,10 @@ function TablaMovimientoMateriales({
   }
 
   function seleccionarMaterial(indice, item) {
+    onCambiarMaterial(indice, 'codigo', item.codigo || '')
     onCambiarMaterial(indice, 'descripcion', item.descripcion || '')
+    onCambiarMaterial(indice, 'unidad', item.unidad || '')
+    onCambiarMaterial(indice, 'stock', item.saldoFinal || 0)
     setFilaSugerenciasActiva(null)
   }
 
@@ -1759,6 +1899,11 @@ const botonAzul = {
   color: 'white',
   cursor: 'pointer',
   fontWeight: 700,
+}
+
+const botonMiniAzul = {
+  ...botonAzul,
+  padding: '7px 10px',
 }
 
 const botonVerde = {

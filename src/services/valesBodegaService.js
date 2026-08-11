@@ -292,6 +292,51 @@ export async function guardarValeBodega({
   }
 }
 
+export async function actualizarItemsValeBodega({
+  supabase,
+  vale,
+  items = [],
+}) {
+  if (!vale?.id) return { error: new Error('Falta el pedido para editar'), etapa: 'vale' }
+
+  const { error: errorEliminar } = await supabase
+    .from('vales_bodega_items')
+    .delete()
+    .eq('vale_id', vale.id)
+
+  if (errorEliminar) {
+    return { error: errorEliminar, etapa: 'eliminar_items' }
+  }
+
+  const filas = items
+    .map((item) => ({
+      vale_id: vale.id,
+      fecha: vale.fecha || item.fecha || '',
+      serie: vale.serie || item.serie || '',
+      solicitante_id: vale.solicitante_id || item.solicitante_id || null,
+      solicitante_nombre: vale.solicitante_nombre || item.solicitante_nombre || '',
+      tipo_ingreso: vale.tipo_ingreso || item.tipo_ingreso || 'pedido_app',
+      material_vale: String(item.material_vale || item.material_balance || '').trim(),
+      material_balance: String(item.material_balance || item.material_vale || '').trim(),
+      cantidad: Number(item.cantidad || 0),
+    }))
+    .filter((item) => item.material_balance && item.cantidad > 0)
+
+  if (filas.length === 0) {
+    return { error: new Error('Debes dejar al menos un material con cantidad'), etapa: 'items' }
+  }
+
+  const { error: errorInsertar } = await supabase
+    .from('vales_bodega_items')
+    .insert(filas)
+
+  if (errorInsertar) {
+    return { error: errorInsertar, etapa: 'insertar_items' }
+  }
+
+  return { error: null, etapa: null, items: filas }
+}
+
 async function completarDatosValeEnItems({
   supabase,
   items = [],
