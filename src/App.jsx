@@ -24,6 +24,7 @@ import BalanceMaterialesModal from './components/BalanceMaterialesModal'
 import BalanceMantencionModal from './components/BalanceMantencionModal'
 import ValesBodegaModal from './components/ValesBodegaModal'
 import BodegaModal from './components/BodegaModal'
+import UsuariosBodegaModal from './components/UsuariosBodegaModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
 import {
@@ -135,6 +136,9 @@ import {
 } from './services/materialesModuloService'
 import {
   cargarSolicitantePrueba,
+  cargarUsuariosBodega as cargarUsuariosBodegaSupabase,
+  actualizarBodegaAsignadaUsuario,
+  actualizarPlantaAsignadaUsuario,
   obtenerNombrePerfilPorId,
 } from './services/perfilesService'
 import {
@@ -299,6 +303,46 @@ function normalizarTextoComparacion(valor) {
     .toLowerCase()
     .replace(/°/g, '')
     .replace(/[^a-z0-9]+/g, '')
+}
+
+function normalizarBodega(valor) {
+  const texto = String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+  if (texto.includes('bayona')) return 'bayona'
+  if (texto.includes('rental')) return 'rental'
+  if (texto.includes('montana')) return 'montaña'
+  return ''
+}
+
+function obtenerBodegaDesdeObservacion(observacion = '') {
+  const partes = String(observacion || '').split('|')
+  const parteBodega = partes.find((parte) => normalizarTextoComparacion(parte).startsWith('bodega'))
+  if (!parteBodega) return ''
+  return normalizarBodega(parteBodega.split(':').slice(1).join(':'))
+}
+
+function obtenerBodegaInventario(inventario = {}) {
+  return normalizarBodega([
+    inventario.bodega,
+    inventario.archivoNombre,
+    inventario.hoja,
+    inventario.fecha,
+  ].filter(Boolean).join(' '))
+}
+
+function filtrarInventariosPorBodegaAsignada(inventarios = [], perfilActual = {}) {
+  const bodegaAsignada = normalizarBodega(perfilActual?.bodega_asignada)
+  if (perfilActual?.rol !== 'bodega' || !bodegaAsignada) return inventarios
+  return inventarios.filter((inventario) => obtenerBodegaInventario(inventario) === bodegaAsignada)
+}
+
+function filtrarSolicitudesPorBodegaAsignada(solicitudes = [], perfilActual = {}) {
+  const bodegaAsignada = normalizarBodega(perfilActual?.bodega_asignada)
+  if (perfilActual?.rol !== 'bodega' || !bodegaAsignada) return solicitudes
+  return solicitudes.filter((solicitud) => obtenerBodegaDesdeObservacion(solicitud.observacion) === bodegaAsignada)
 }
 
 function construirCatalogoPreciosMaterialesCompleto({
@@ -540,6 +584,7 @@ const [mostrarMenuModulo, setMostrarMenuModulo] = useState(false)
 const [mostrarReintegrar, setMostrarReintegrar] = useState(false)
 const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false)
 const [mostrarPreciosMateriales, setMostrarPreciosMateriales] = useState(false)
+const [mostrarUsuariosBodega, setMostrarUsuariosBodega] = useState(false)
 const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(false)
 const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
 const [mostrarBalanceMantencion, setMostrarBalanceMantencion] = useState(false)
@@ -601,6 +646,10 @@ const [guardandoPedidoBodega, setGuardandoPedidoBodega] = useState(false)
 const [guardandoDevolucionBodega, setGuardandoDevolucionBodega] = useState(false)
 const [guardandoRecepcionBodega, setGuardandoRecepcionBodega] = useState(false)
 const [entregandoSolicitudBodega, setEntregandoSolicitudBodega] = useState(false)
+const [usuariosBodega, setUsuariosBodega] = useState([])
+const [cargandoUsuariosBodega, setCargandoUsuariosBodega] = useState(false)
+const [guardandoUsuarioBodegaId, setGuardandoUsuarioBodegaId] = useState(null)
+const [guardandoUsuariosBodega, setGuardandoUsuariosBodega] = useState(false)
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [idsOtEnEdicion, setIdsOtEnEdicion] = useState(['', '', ''])
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
@@ -647,6 +696,7 @@ const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresP
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
 const puedeVerMenuModulo = tienePermiso(perfil?.rol, 'verMenuModulo')
 const esRolBodega = perfil?.rol === 'bodega'
+const puedeAdministrarUsuariosBodega = perfil?.rol === 'admin'
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
 const normalizarProyectoFiltro = (proyecto) => String(proyecto || '')
   .replace(/\s*\([^)]*\)\s*$/g, '')
@@ -980,6 +1030,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
     setMostrarReintegrar,
     setMostrarDescargaProtocolos,
     setMostrarPreciosMateriales,
+    setMostrarUsuariosBodega,
     setMostrarBalanceMateriales,
     setMostrarBalanceMantencion,
     setMostrarValesBodega,
@@ -1358,6 +1409,87 @@ async function abrirPreciosMateriales() {
   setMostrarMenuAcciones(false)
   setMostrarPreciosMateriales(true)
   await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
+}
+
+async function abrirUsuariosBodega() {
+  if (!puedeAdministrarUsuariosBodega) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setMostrarUsuariosBodega(true)
+  await cargarUsuariosBodega()
+}
+
+async function cargarUsuariosBodega() {
+  if (!puedeAdministrarUsuariosBodega) return
+
+  setCargandoUsuariosBodega(true)
+  const { data, error } = await cargarUsuariosBodegaSupabase({ supabase })
+  setCargandoUsuariosBodega(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudieron cargar usuarios: ' + error.message)
+    setUsuariosBodega([])
+    return
+  }
+
+  setUsuariosBodega(data || [])
+}
+
+async function guardarAsignacionesUsuarios(cambios = []) {
+  if (!puedeAdministrarUsuariosBodega || cambios.length === 0) return
+
+  setGuardandoUsuariosBodega(true)
+
+  for (const cambio of cambios) {
+    const usuario = cambio.usuario
+    const asignaciones = cambio.asignaciones || {}
+    if (!usuario?.id) continue
+
+    const bodegaAsignada = asignaciones.bodega_asignada || ''
+    const plantaAsignada = asignaciones.planta_asignada || ''
+
+    setGuardandoUsuarioBodegaId(usuario.id)
+    const resultadoBodega = await actualizarBodegaAsignadaUsuario({
+      supabase,
+      usuarioId: usuario.id,
+      bodegaAsignada,
+    })
+
+    if (resultadoBodega.error) {
+      setGuardandoUsuarioBodegaId(null)
+      setGuardandoUsuariosBodega(false)
+      mostrarNotificacion(`No se pudo guardar bodega de ${usuario.nombre || 'usuario'}: ${resultadoBodega.error.message}`)
+      return
+    }
+
+    const resultadoPlanta = await actualizarPlantaAsignadaUsuario({
+      supabase,
+      usuarioId: usuario.id,
+      plantaAsignada,
+    })
+
+    if (resultadoPlanta.error) {
+      setGuardandoUsuarioBodegaId(null)
+      setGuardandoUsuariosBodega(false)
+      mostrarNotificacion(`No se pudo guardar planta de ${usuario.nombre || 'usuario'}: ${resultadoPlanta.error.message}`)
+      return
+    }
+  }
+
+  setGuardandoUsuarioBodegaId(null)
+  setGuardandoUsuariosBodega(false)
+  setUsuariosBodega((actuales) => actuales.map((item) => (
+    cambios.reduce((usuarioActualizado, cambio) => (
+      cambio.usuario?.id === usuarioActualizado.id
+        ? {
+            ...usuarioActualizado,
+            bodega_asignada: cambio.asignaciones?.bodega_asignada || null,
+            planta_asignada: cambio.asignaciones?.planta_asignada || null,
+          }
+        : usuarioActualizado
+    ), item)
+  )))
+  mostrarNotificacion(`Usuarios actualizados correctamente (${cambios.length})`)
 }
 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
@@ -1762,9 +1894,10 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
   const solicitudesApp = (vales || []).filter((vale) => (
     vale.tipo_ingreso === 'pedido_app' || vale.tipo_ingreso === 'devolucion_app'
   ))
+  const solicitudesFiltradas = filtrarSolicitudesPorBodegaAsignada(solicitudesApp, perfil)
 
-  setPedidosBodegaHoy(solicitudesApp.filter((vale) => vale.tipo_ingreso === 'pedido_app'))
-  setAlertasBodega(solicitudesApp.filter((vale) => vale.estado_bodega !== 'entregado'))
+  setPedidosBodegaHoy(solicitudesFiltradas.filter((vale) => vale.tipo_ingreso === 'pedido_app'))
+  setAlertasBodega(solicitudesFiltradas.filter((vale) => vale.estado_bodega !== 'entregado'))
 }
 
 async function cargarRecepcionesBodega(valor = fechaRecepcionesBodega, rango = rangoRecepcionesBodega) {
@@ -1812,7 +1945,7 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
   const ordenCompra = String(datosRecepcion?.ordenCompra || '').trim()
   const numeroFactura = String(datosRecepcion?.factura || '').trim()
   const numeroRecepcion = String(datosRecepcion?.recepcion || '').trim()
-  const bodega = inventarioActual.nombre || inventarioActual.bodega || inventarioActual.fecha || ''
+  const bodega = obtenerBodegaInventario(inventarioActual) || 'bayona'
 
   const items = (materialesRecepcion || [])
     .map((item) => ({
@@ -2099,12 +2232,13 @@ async function cargarInventariosBodega() {
     return
   }
 
-  setInventariosBodega(inventarios)
+  const inventariosFiltrados = filtrarInventariosPorBodegaAsignada(inventarios, perfil)
+  setInventariosBodega(inventariosFiltrados)
   setInventarioBodegaSeleccionadoId((actual) => (
-    inventarios.some((item) => item.id === actual) ? actual : inventarios[0]?.id || ''
+    inventariosFiltrados.some((item) => item.id === actual) ? actual : inventariosFiltrados[0]?.id || ''
   ))
 
-  if (inventarios.length === 0) {
+  if (inventariosFiltrados.length === 0) {
     cargarInventariosBodegaLocalesRespaldo()
   }
 }
@@ -2377,9 +2511,17 @@ async function entregarSolicitudBodega(alerta) {
     return true
   }
 
-  const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+  const bodegaSolicitud = obtenerBodegaDesdeObservacion(alerta.observacion)
+  const inventarioActual = bodegaSolicitud
+    ? inventariosBodega.find((item) => obtenerBodegaInventario(item) === bodegaSolicitud)
+    : inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+
   if (!inventarioActual?.id) {
-    mostrarNotificacion('No hay inventario seleccionado para descontar material')
+    mostrarNotificacion(
+      bodegaSolicitud
+        ? `No hay inventario cargado para bodega ${bodegaSolicitud}`
+        : 'No hay inventario seleccionado para descontar material'
+    )
     return false
   }
 
@@ -4128,7 +4270,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           margin: '0 auto',
         }}
       >
-        <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Control de Módulos</h1>
+        <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Planta Bayona</h1>
 
         <Notificacion mensaje={notificacion} />
 
@@ -4379,6 +4521,25 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     }}
                   >
                     Precios materiales
+                  </button>
+                )}
+                {puedeAdministrarUsuariosBodega && (
+                  <button
+                    type="button"
+                    onClick={abrirUsuariosBodega}
+                    style={{
+                      width: '100%',
+                      marginTop: '8px',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #555',
+                      background: '#455a64',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Usuarios
                   </button>
                 )}
               </div>
@@ -5806,6 +5967,17 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onCambiarFecha={setFechaProtocolosDiarios}
     onDescargar={generarDescargaProtocolosDiarios}
     onCerrar={() => setMostrarDescargaProtocolos(false)}
+  />
+)}
+
+{mostrarUsuariosBodega && puedeAdministrarUsuariosBodega && (
+  <UsuariosBodegaModal
+    usuarios={usuariosBodega}
+    cargando={cargandoUsuariosBodega}
+    guardando={guardandoUsuariosBodega}
+    guardandoId={guardandoUsuarioBodegaId}
+    onGuardarCambios={guardarAsignacionesUsuarios}
+    onCerrar={() => setMostrarUsuariosBodega(false)}
   />
 )}
 

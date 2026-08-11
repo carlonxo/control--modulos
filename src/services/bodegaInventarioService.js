@@ -43,6 +43,7 @@ export async function cargarInventariosBodega({ supabase, limite = 30 }) {
         id: inventario.id,
         fecha: inventario.fecha,
         hoja: inventario.hoja_nombre,
+        bodega: normalizarBodegaInventario(inventario.bodega || inventario.archivo_nombre || inventario.hoja_nombre),
         archivoNombre: inventario.archivo_nombre || '',
         cargadoPor: inventario.cargado_por || '',
         creadoEn: inventario.creado_en,
@@ -227,6 +228,21 @@ function normalizarItemBodegaDesdeSupabase(item) {
     saldoFinal: Number(item.saldo_final || 0),
     movimientos: [],
   }
+}
+
+function normalizarBodegaInventario(valor) {
+  const texto = normalizarTextoSimple(valor)
+  if (texto.includes('bayona')) return 'bayona'
+  if (texto.includes('rental')) return 'rental'
+  if (texto.includes('montana')) return 'montaña'
+  return ''
+}
+
+function normalizarTextoSimple(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
 }
 
 function calcularResumenItemsBodega(items = []) {

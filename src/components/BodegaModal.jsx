@@ -382,11 +382,7 @@ function BodegaModal({
             </div>
           )}
         </>
-      ) : (
-        <div style={{ padding: '10px 12px', border: '1px solid #455a64', borderRadius: '8px', background: '#263238', marginBottom: '14px', color: '#cfd8dc' }}>
-          Vista solo lectura. Solo admin puede cargar o editar inventarios.
-        </div>
-      )}
+      ) : null}
 
       {cargandoInventarios ? (
         <p style={{ color: '#ccc' }}>Cargando inventarios guardados...</p>
