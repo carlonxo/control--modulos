@@ -1030,7 +1030,7 @@ function DetalleRecepcionBodega({ recepcion, onCerrar }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
             <thead>
               <tr style={{ background: '#333' }}>
-                <th style={thStyle}>Código</th>
+                <th style={{ ...thStyle, width: '190px' }}>Código</th>
                 <th style={thStyle}>Material</th>
                 <th style={thStyle}>Unidad</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Cantidad</th>
@@ -1068,6 +1068,7 @@ function DetalleSolicitudBodega({
   const [editando, setEditando] = useState(false)
   const [guardandoEdicion, setGuardandoEdicion] = useState(false)
   const [itemsEditados, setItemsEditados] = useState([])
+  const [filaSugerenciasEdicion, setFilaSugerenciasEdicion] = useState(null)
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
   const entregado = String(alerta?.estado_bodega || '').toLowerCase() === 'entregado'
 
@@ -1084,6 +1085,19 @@ function DetalleSolicitudBodega({
     setItemsEditados((actuales) => actuales.map((item, i) => (
       i === indice ? { ...item, [campo]: valor } : item
     )))
+  }
+
+  function seleccionarMaterialEdicion(indice, material) {
+    setItemsEditados((actuales) => actuales.map((item, i) => (
+      i === indice
+        ? {
+            ...item,
+            material_vale: material.codigo || material.descripcion || '',
+            material_balance: material.descripcion || material.codigo || '',
+          }
+        : item
+    )))
+    setFilaSugerenciasEdicion(null)
   }
 
   function agregarItem() {
@@ -1133,13 +1147,19 @@ function DetalleSolicitudBodega({
         )}
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '190px' }} />
+              <col />
+              <col style={{ width: '130px' }} />
+              {editando && <col style={{ width: '82px' }} />}
+            </colgroup>
             <thead>
               <tr style={{ background: '#333' }}>
                 <th style={thStyle}>Código</th>
                 <th style={thStyle}>Material</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Cantidad</th>
-                {editando && <th style={{ ...thStyle, textAlign: 'center' }}>Quitar</th>}
+                <th style={{ ...thStyle, width: '130px', textAlign: 'right' }}>Cantidad</th>
+                {editando && <th style={{ ...thStyle, width: '82px', textAlign: 'center' }}>Quitar</th>}
               </tr>
             </thead>
             <tbody>
@@ -1147,7 +1167,7 @@ function DetalleSolicitudBodega({
                 const codigo = obtenerCodigoMaterialPedido(item, materialesInventario)
                 return (
                   <tr key={item.id || `${item.material_balance}-${item.cantidad}-${indice}`}>
-                    <td style={tdStyle}>
+                    <td style={{ ...tdStyle, width: '190px' }}>
                       {editando ? (
                         <input
                           type="text"
@@ -1161,20 +1181,51 @@ function DetalleSolicitudBodega({
                     </td>
                     <td style={tdStyle}>
                       {editando ? (
-                        <input
-                          type="text"
-                          value={item.material_balance || item.material_vale || ''}
-                          onChange={(e) => {
-                            cambiarItem(indice, 'material_balance', e.target.value)
-                            cambiarItem(indice, 'material_vale', e.target.value)
-                          }}
-                          style={inputTablaStyle}
-                        />
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type="text"
+                            value={item.material_balance || item.material_vale || ''}
+                            onFocus={() => setFilaSugerenciasEdicion(indice)}
+                            onBlur={() => setTimeout(() => setFilaSugerenciasEdicion(null), 160)}
+                            onChange={(e) => {
+                              cambiarItem(indice, 'material_balance', e.target.value)
+                              setFilaSugerenciasEdicion(indice)
+                            }}
+                            style={inputTablaStyle}
+                          />
+                          {filaSugerenciasEdicion === indice && obtenerSugerenciasMateriales(
+                            item.material_balance || item.material_vale,
+                            materialesInventario,
+                          ).length > 0 && (
+                            <div style={{ ...sugerenciasMaterialStyle, position: 'absolute', zIndex: 3300 }}>
+                              {obtenerSugerenciasMateriales(item.material_balance || item.material_vale, materialesInventario).map((material) => (
+                                <button
+                                  key={`editar-pedido-${indice}-${material.codigo}-${material.descripcion}`}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault()
+                                    seleccionarMaterialEdicion(indice, material)
+                                  }}
+                                  style={botonSugerenciaMaterialStyle}
+                                  title={material.descripcion}
+                                >
+                                  <span>{material.descripcion}</span>
+                                  <span style={{ display: 'grid', gap: '2px', justifyItems: 'end', fontSize: '12px' }}>
+                                    {material.codigo && <small style={{ color: '#9fb3c8' }}>{material.codigo}</small>}
+                                    <small style={{ color: Number(material.saldoFinal || 0) > 0 ? '#81c784' : '#ff8a80', fontWeight: 900 }}>
+                                      Stock: {formatearNumero(material.saldoFinal || 0)}
+                                    </small>
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         item.material_balance || item.material_vale
                       )}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>
+                    <td style={{ ...tdStyle, width: '130px', textAlign: 'right', fontWeight: 900 }}>
                       {editando ? (
                         <input
                           type="number"
@@ -1189,7 +1240,7 @@ function DetalleSolicitudBodega({
                       )}
                     </td>
                     {editando && (
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <td style={{ ...tdStyle, width: '82px', textAlign: 'center' }}>
                         <button type="button" onClick={() => quitarItem(indice)} style={botonIconoRojo}>
                           ×
                         </button>
@@ -1259,6 +1310,26 @@ function obtenerCodigoMaterialPedido(item = {}, materialesInventario = []) {
   ))
 
   return encontrado?.codigo || (textoCodigo !== textoMaterial ? textoCodigo : '')
+}
+
+function obtenerSugerenciasMateriales(texto, materialesInventario = []) {
+  const busqueda = normalizarBusqueda(texto)
+  if (!busqueda) return []
+
+  return materialesInventario
+    .filter((item) => (
+      normalizarBusqueda(item.descripcion).includes(busqueda) ||
+      normalizarBusqueda(item.codigo).includes(busqueda)
+    ))
+    .sort((a, b) => {
+      const stockA = Number(a.saldoFinal || 0)
+      const stockB = Number(b.saldoFinal || 0)
+      const disponibleA = stockA > 0 ? 1 : 0
+      const disponibleB = stockB > 0 ? 1 : 0
+      if (disponibleA !== disponibleB) return disponibleB - disponibleA
+      return stockB - stockA
+    })
+    .slice(0, 8)
 }
 
 function tipoInputRangoRecepcion(rango) {
@@ -1566,15 +1637,7 @@ function TablaMovimientoMateriales({
   const [filaSugerenciasActiva, setFilaSugerenciasActiva] = useState(null)
 
   function obtenerSugerencias(texto) {
-    const busqueda = normalizarBusqueda(texto)
-    if (!busqueda) return []
-
-    return materialesInventario
-      .filter((item) => (
-        normalizarBusqueda(item.descripcion).includes(busqueda) ||
-        normalizarBusqueda(item.codigo).includes(busqueda)
-      ))
-      .slice(0, 8)
+    return obtenerSugerenciasMateriales(texto, materialesInventario)
   }
 
   function seleccionarMaterial(indice, item) {
@@ -1636,7 +1699,12 @@ function TablaMovimientoMateriales({
                             title={item.descripcion}
                           >
                             <span>{item.descripcion}</span>
-                            {item.codigo && <small style={{ color: '#9fb3c8' }}>{item.codigo}</small>}
+                            <span style={{ display: 'grid', gap: '2px', justifyItems: 'end', fontSize: '12px' }}>
+                              {item.codigo && <small style={{ color: '#9fb3c8' }}>{item.codigo}</small>}
+                              <small style={{ color: Number(item.saldoFinal || 0) > 0 ? '#81c784' : '#ff8a80', fontWeight: 900 }}>
+                                Stock: {formatearNumero(item.saldoFinal || 0)}
+                              </small>
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -1772,7 +1840,7 @@ const sugerenciasMaterialStyle = {
 
 const botonSugerenciaMaterialStyle = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  gridTemplateColumns: 'minmax(0, 1fr) minmax(90px, auto)',
   gap: '12px',
   width: '100%',
   padding: '9px 10px',
@@ -1865,7 +1933,7 @@ const modalDetalleBodegaOverlayStyle = {
 }
 
 const modalDetalleBodegaStyle = {
-  width: 'min(720px, 100%)',
+  width: 'min(980px, 100%)',
   maxHeight: '86vh',
   overflowY: 'auto',
   padding: '18px',
