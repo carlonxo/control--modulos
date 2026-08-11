@@ -4,18 +4,34 @@ const filaMovimientoVacia = {
   codigo: '',
   descripcion: '',
   unidad: '',
+  stock: '',
   cantidad: '',
 }
 
 function BodegaModal({
+  modoSoloBodega,
   puedeAdministrar,
   archivo,
   inventarios = [],
+  solicitantes = [],
   inventarioSeleccionadoId,
   cargandoInventarios,
   leyendo,
+  guardandoPedido,
+  guardandoDevolucion,
+  entregandoSolicitudBodega,
+  alertasBodega = [],
+  mostrarAlertasBodega,
+  pedidosBodegaHoy = [],
+  mostrarPedidosBodegaHoy,
   onCambiarArchivo,
   onLeerArchivo,
+  onGuardarPedido,
+  onGuardarDevolucion,
+  onEntregarSolicitudBodega,
+  onToggleAlertasBodega,
+  onTogglePedidosBodegaHoy,
+  onActualizarAlertasBodega,
   onCerrar,
   onClickFondo,
 }) {
@@ -23,24 +39,47 @@ function BodegaModal({
   const [mostrarCargaExcel, setMostrarCargaExcel] = useState(false)
   const [mostrarIngresoProveedor, setMostrarIngresoProveedor] = useState(false)
   const [mostrarSalidaMaterial, setMostrarSalidaMaterial] = useState(false)
+  const [mostrarCrearPedido, setMostrarCrearPedido] = useState(false)
+  const [mostrarCrearDevolucion, setMostrarCrearDevolucion] = useState(false)
+  const [alertaBodegaSeleccionada, setAlertaBodegaSeleccionada] = useState(null)
   const [facturaIngreso, setFacturaIngreso] = useState({
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: fechaActualInput(),
     factura: '',
     proveedor: '',
     observacion: '',
   })
   const [salidaMaterial, setSalidaMaterial] = useState({
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: fechaActualInput(),
     tipoDocumento: 'vale',
     documento: '',
     solicitante: '',
     destino: '',
     observacion: '',
   })
+  const [pedidoMaterial, setPedidoMaterial] = useState({
+    fecha: fechaActualInput(),
+    proyecto: '',
+    tipoModulo: '',
+    linea: '',
+    bodega: 'bayona',
+    retira: '',
+  })
+  const [devolucionMaterial, setDevolucionMaterial] = useState({
+    fecha: fechaActualInput(),
+    bodega: 'bayona',
+    motivo: '',
+  })
   const [materialesIngreso, setMaterialesIngreso] = useState([{ ...filaMovimientoVacia }])
   const [materialesSalida, setMaterialesSalida] = useState([{ ...filaMovimientoVacia }])
+  const [materialesPedido, setMaterialesPedido] = useState([{ ...filaMovimientoVacia }])
+  const [materialesDevolucion, setMaterialesDevolucion] = useState([{ ...filaMovimientoVacia }])
   const inventarioSeleccionado = inventarios.find((item) => item.id === inventarioSeleccionadoId) || inventarios[0]
   const materialesInventario = inventarioSeleccionado?.items || []
+  const electricosDisponibles = useMemo(() => (
+    (solicitantes || [])
+      .filter((item) => normalizarBusqueda(item.rol).includes('electrico'))
+      .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'))
+  ), [solicitantes])
 
   const itemsFiltrados = useMemo(() => {
     const texto = normalizarBusqueda(busqueda)
@@ -60,6 +99,14 @@ function BodegaModal({
     setSalidaMaterial((actual) => ({ ...actual, [campo]: valor }))
   }
 
+  function cambiarPedidoMaterial(campo, valor) {
+    setPedidoMaterial((actual) => ({ ...actual, [campo]: valor }))
+  }
+
+  function cambiarDevolucionMaterial(campo, valor) {
+    setDevolucionMaterial((actual) => ({ ...actual, [campo]: valor }))
+  }
+
   function completarDatosMaterial(fila, campo, valor) {
     const actualizada = { ...fila, [campo]: valor }
     if (campo === 'descripcion') {
@@ -69,6 +116,7 @@ function BodegaModal({
       if (material) {
         actualizada.codigo = material.codigo || actualizada.codigo
         actualizada.unidad = material.unidad || actualizada.unidad
+        actualizada.stock = material.saldoFinal ?? actualizada.stock
       }
     }
     return actualizada
@@ -86,12 +134,32 @@ function BodegaModal({
     )))
   }
 
+  function cambiarMaterialPedido(indice, campo, valor) {
+    setMaterialesPedido((actuales) => actuales.map((fila, i) => (
+      i === indice ? completarDatosMaterial(fila, campo, valor) : fila
+    )))
+  }
+
+  function cambiarMaterialDevolucion(indice, campo, valor) {
+    setMaterialesDevolucion((actuales) => actuales.map((fila, i) => (
+      i === indice ? completarDatosMaterial(fila, campo, valor) : fila
+    )))
+  }
+
   function agregarMaterialIngreso() {
     setMaterialesIngreso((actuales) => [...actuales, { ...filaMovimientoVacia }])
   }
 
   function agregarMaterialSalida() {
     setMaterialesSalida((actuales) => [...actuales, { ...filaMovimientoVacia }])
+  }
+
+  function agregarMaterialPedido() {
+    setMaterialesPedido((actuales) => [...actuales, { ...filaMovimientoVacia }])
+  }
+
+  function agregarMaterialDevolucion() {
+    setMaterialesDevolucion((actuales) => [...actuales, { ...filaMovimientoVacia }])
   }
 
   function quitarMaterialIngreso(indice) {
@@ -104,6 +172,47 @@ function BodegaModal({
     setMaterialesSalida((actuales) => (
       actuales.length <= 1 ? [{ ...filaMovimientoVacia }] : actuales.filter((_, i) => i !== indice)
     ))
+  }
+
+  function quitarMaterialPedido(indice) {
+    setMaterialesPedido((actuales) => (
+      actuales.length <= 1 ? [{ ...filaMovimientoVacia }] : actuales.filter((_, i) => i !== indice)
+    ))
+  }
+
+  function quitarMaterialDevolucion(indice) {
+    setMaterialesDevolucion((actuales) => (
+      actuales.length <= 1 ? [{ ...filaMovimientoVacia }] : actuales.filter((_, i) => i !== indice)
+    ))
+  }
+
+  async function guardarPedidoActual() {
+    const guardado = await onGuardarPedido?.(pedidoMaterial, materialesPedido)
+    if (!guardado) return
+
+    setPedidoMaterial({
+      fecha: fechaActualInput(),
+      proyecto: '',
+      tipoModulo: '',
+      linea: '',
+      bodega: 'bayona',
+      retira: '',
+    })
+    setMaterialesPedido([{ ...filaMovimientoVacia }])
+    setMostrarCrearPedido(false)
+  }
+
+  async function guardarDevolucionActual() {
+    const guardado = await onGuardarDevolucion?.(devolucionMaterial, materialesDevolucion)
+    if (!guardado) return
+
+    setDevolucionMaterial({
+      fecha: fechaActualInput(),
+      bodega: 'bayona',
+      motivo: '',
+    })
+    setMaterialesDevolucion([{ ...filaMovimientoVacia }])
+    setMostrarCrearDevolucion(false)
   }
 
   return (
@@ -135,10 +244,39 @@ function BodegaModal({
             Inventario informado por bodega, separado del catálogo de precios de mantención.
           </p>
         </div>
-        <button type="button" onClick={onCerrar} style={botonGris}>
+        {modoSoloBodega && (
+          <button type="button" onClick={onCerrar} style={botonGris}>
+            Cerrar sesión
+          </button>
+        )}
+        <button type="button" onClick={onCerrar} style={{ ...botonGris, display: modoSoloBodega ? 'none' : undefined }}>
           Volver a módulos
         </button>
       </div>
+
+      {modoSoloBodega && (
+        <CampanaBodega
+          alertas={alertasBodega}
+          visible={mostrarAlertasBodega}
+          onToggle={onToggleAlertasBodega}
+          onActualizar={onActualizarAlertasBodega}
+          onSeleccionar={setAlertaBodegaSeleccionada}
+        />
+      )}
+
+      {alertaBodegaSeleccionada && (
+        <DetalleSolicitudBodega
+          alerta={alertaBodegaSeleccionada}
+          entregando={entregandoSolicitudBodega}
+          onEntregar={async () => {
+            const ok = await onEntregarSolicitudBodega?.(alertaBodegaSeleccionada)
+            if (!ok) return
+            setAlertaBodegaSeleccionada(null)
+            onActualizarAlertasBodega?.()
+          }}
+          onCerrar={() => setAlertaBodegaSeleccionada(null)}
+        />
+      )}
 
       {puedeAdministrar ? (
         <>
@@ -214,13 +352,49 @@ function BodegaModal({
               <Tarjeta titulo="Materiales" valor={inventarioSeleccionado?.totalItems || 0} />
             </div>
 
+            {modoSoloBodega && (
+              <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+                <Tarjeta
+                  titulo="Pedidos hoy"
+                  valor={pedidosBodegaHoy.length}
+                  onClick={onTogglePedidosBodegaHoy}
+                />
+              </div>
+            )}
+
             {puedeAdministrar && (
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
                 <button
                   type="button"
                   onClick={() => {
+                    setMostrarCrearPedido((actual) => !actual)
+                    setMostrarCrearDevolucion(false)
+                    setMostrarIngresoProveedor(false)
+                    setMostrarSalidaMaterial(false)
+                  }}
+                  style={botonAzul}
+                >
+                  Crear pedido
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrarCrearDevolucion((actual) => !actual)
+                    setMostrarCrearPedido(false)
+                    setMostrarIngresoProveedor(false)
+                    setMostrarSalidaMaterial(false)
+                  }}
+                  style={botonAzul}
+                >
+                  Crear devolución
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     setMostrarIngresoProveedor((actual) => !actual)
                     setMostrarSalidaMaterial(false)
+                    setMostrarCrearPedido(false)
+                    setMostrarCrearDevolucion(false)
                   }}
                   style={botonVerde}
                 >
@@ -231,6 +405,8 @@ function BodegaModal({
                   onClick={() => {
                     setMostrarSalidaMaterial((actual) => !actual)
                     setMostrarIngresoProveedor(false)
+                    setMostrarCrearPedido(false)
+                    setMostrarCrearDevolucion(false)
                   }}
                   style={botonRojo}
                 >
@@ -238,7 +414,69 @@ function BodegaModal({
                 </button>
               </div>
             )}
+            {!puedeAdministrar && !modoSoloBodega && (
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrarCrearPedido((actual) => !actual)
+                    setMostrarCrearDevolucion(false)
+                  }}
+                  style={botonAzul}
+                >
+                  Crear pedido
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMostrarCrearDevolucion((actual) => !actual)
+                    setMostrarCrearPedido(false)
+                  }}
+                  style={botonAzul}
+                >
+                  Crear devolución
+                </button>
+              </div>
+            )}
           </div>
+
+          {modoSoloBodega && mostrarPedidosBodegaHoy && (
+            <PanelPedidosBodegaHoy
+              pedidos={pedidosBodegaHoy}
+              onSeleccionar={setAlertaBodegaSeleccionada}
+            />
+          )}
+
+          {mostrarCrearPedido && (
+            <PanelCrearPedido
+              pedido={pedidoMaterial}
+              electricos={electricosDisponibles}
+              materialesPedido={materialesPedido}
+              materialesInventario={materialesInventario}
+              guardando={guardandoPedido}
+              onCambiarPedido={cambiarPedidoMaterial}
+              onCambiarMaterial={cambiarMaterialPedido}
+              onAgregarMaterial={agregarMaterialPedido}
+              onQuitarMaterial={quitarMaterialPedido}
+              onGuardar={guardarPedidoActual}
+              onCerrar={() => setMostrarCrearPedido(false)}
+            />
+          )}
+
+          {mostrarCrearDevolucion && (
+            <PanelCrearDevolucion
+              devolucion={devolucionMaterial}
+              materialesDevolucion={materialesDevolucion}
+              materialesInventario={materialesInventario}
+              guardando={guardandoDevolucion}
+              onCambiarDevolucion={cambiarDevolucionMaterial}
+              onCambiarMaterial={cambiarMaterialDevolucion}
+              onAgregarMaterial={agregarMaterialDevolucion}
+              onQuitarMaterial={quitarMaterialDevolucion}
+              onGuardar={guardarDevolucionActual}
+              onCerrar={() => setMostrarCrearDevolucion(false)}
+            />
+          )}
 
           {mostrarIngresoProveedor && puedeAdministrar && (
             <PanelIngresoProveedor
@@ -356,6 +594,412 @@ function PanelIngresoProveedor({
   )
 }
 
+function CampanaBodega({
+  alertas,
+  visible,
+  onToggle,
+  onActualizar,
+  onSeleccionar,
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Ver pedidos y devoluciones de bodega"
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle?.()
+          onActualizar?.()
+        }}
+        style={{
+          position: 'fixed',
+          left: '12px',
+          bottom: '20px',
+          width: '52px',
+          height: '52px',
+          borderRadius: '50%',
+          border: '2px solid white',
+          background: '#1976d2',
+          color: 'white',
+          fontSize: '24px',
+          zIndex: 2600,
+          cursor: 'pointer',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+        }}
+      >
+        {'\u{1F514}'}
+        {alertas.length > 0 && (
+          <span style={contadorCampanaStyle}>
+            {alertas.length}
+          </span>
+        )}
+      </button>
+
+      {visible && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={panelCampanaBodegaStyle}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ margin: 0 }}>Solicitudes bodega</h3>
+            <button type="button" onClick={onActualizar} style={botonMiniGris}>
+              Actualizar
+            </button>
+          </div>
+
+          {alertas.length === 0 ? (
+            <p style={{ margin: 0, color: '#ccc' }}>No hay pedidos o devoluciones registrados hoy.</p>
+          ) : (
+            <div style={{ display: 'grid', gap: '8px' }}>
+              {alertas.map((alerta) => {
+                const totalItems = (alerta.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
+                return (
+                  <button
+                    key={alerta.id}
+                    type="button"
+                    onClick={() => onSeleccionar?.(alerta)}
+                    style={botonAlertaBodegaStyle}
+                  >
+                    <strong>{obtenerEtiquetaAlertaBodega(alerta)}</strong>
+                    <span>{alerta.solicitante_nombre || alerta.usuario_nombre || 'Sin usuario'}</span>
+                    <strong>total {formatearNumero(totalItems)}</strong>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
+function PanelPedidosBodegaHoy({ pedidos, onSeleccionar }) {
+  return (
+    <div style={{ ...panelMovimientoStyle, marginTop: '-2px' }}>
+      <h3 style={{ margin: '0 0 10px' }}>Pedidos de hoy</h3>
+      {pedidos.length === 0 ? (
+        <p style={{ color: '#bbb', margin: 0 }}>No hay pedidos registrados hoy.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: '8px' }}>
+          {pedidos.map((pedido) => {
+            const total = (pedido.items || []).reduce((suma, item) => suma + Number(item.cantidad || 0), 0)
+            const entregado = pedido.estado_bodega === 'entregado'
+            const etiquetaEstado = entregado ? 'Entregado' : 'Pendiente'
+            const solicitante = pedido.solicitante_nombre || pedido.usuario_nombre || 'Sin usuario'
+            const detalle = [
+              pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
+              pedido.tipo_modulo ? `Tipo: ${pedido.tipo_modulo}` : '',
+              pedido.linea ? `Línea: ${pedido.linea}` : '',
+              `Total: ${formatearNumero(total)}`,
+            ].filter(Boolean).join(' | ')
+
+            return (
+              <button
+                type="button"
+                key={pedido.id || `${pedido.fecha}-${solicitante}-${total}`}
+                onClick={() => onSeleccionar?.(pedido)}
+                style={filaPedidoHoyStyle}
+              >
+                <span style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
+                  <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Pedido | {solicitante}
+                  </strong>
+                  <small style={{ color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {detalle}
+                  </small>
+                </span>
+                <strong style={{
+                  color: entregado ? '#66bb6a' : '#ffcc80',
+                  border: `1px solid ${entregado ? '#2e7d32' : '#f9a825'}`,
+                  borderRadius: '999px',
+                  padding: '5px 10px',
+                  whiteSpace: 'nowrap',
+                  background: entregado ? '#15351c' : '#3a2b10',
+                }}>
+                  {etiquetaEstado}
+                </strong>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetalleSolicitudBodega({
+  alerta,
+  entregando,
+  onEntregar,
+  onCerrar,
+}) {
+  const esPedido = alerta?.tipo_ingreso === 'pedido_app'
+  const entregado = alerta?.estado_bodega === 'entregado'
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={modalDetalleBodegaOverlayStyle}
+    >
+      <div style={modalDetalleBodegaStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '12px' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>{obtenerEtiquetaAlertaBodega(alerta)} de bodega</h3>
+            <p style={{ margin: '6px 0 0', color: '#ccc' }}>
+              {alerta.solicitante_nombre || alerta.usuario_nombre || 'Sin usuario'} | {alerta.fecha || ''}
+            </p>
+          </div>
+          <button type="button" onClick={onCerrar} style={botonMiniGris}>
+            Cerrar
+          </button>
+        </div>
+
+        {alerta.observacion && (
+          <div style={{ padding: '10px', border: '1px solid #795548', borderRadius: '8px', background: '#2b211b', color: '#ffcc80', marginBottom: '12px' }}>
+            {alerta.observacion}
+          </div>
+        )}
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
+            <thead>
+              <tr style={{ background: '#333' }}>
+                <th style={thStyle}>Material</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(alerta.items || []).map((item) => (
+                <tr key={item.id || `${item.material_balance}-${item.cantidad}`}>
+                  <td style={tdStyle}>{item.material_balance || item.material_vale}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>{formatearNumero(item.cantidad)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {(alerta.items || []).length === 0 && (
+          <p style={{ color: '#bbb' }}>Esta solicitud no tiene materiales asociados.</p>
+        )}
+
+        <div style={accionesPanelStyle}>
+          {esPedido && (
+            <button
+              type="button"
+              disabled={entregando || entregado}
+              onClick={entregado ? undefined : onEntregar}
+              style={{
+                ...botonVerde,
+                opacity: entregando || entregado ? 0.7 : 1,
+                cursor: entregando || entregado ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {entregado ? 'Pedido ya entregado' : entregando ? 'Descontando...' : 'Pedido entregado'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PanelCrearPedido({
+  pedido,
+  electricos,
+  materialesPedido,
+  materialesInventario,
+  guardando,
+  onCambiarPedido,
+  onCambiarMaterial,
+  onAgregarMaterial,
+  onQuitarMaterial,
+  onGuardar,
+  onCerrar,
+}) {
+  return (
+    <div style={panelMovimientoStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0 }}>Crear pedido de material</h3>
+        <button type="button" onClick={onCerrar} style={botonMiniGris}>
+          Cerrar
+        </button>
+      </div>
+
+      <div style={gridPedidoStyle}>
+        <CampoTexto
+          label="Fecha"
+          type="date"
+          value={pedido.fecha}
+          onChange={(valor) => onCambiarPedido('fecha', valor)}
+        />
+        <CampoTexto
+          label="Proyecto"
+          value={pedido.proyecto}
+          onChange={(valor) => onCambiarPedido('proyecto', valor)}
+          placeholder="Proyecto"
+        />
+        <CampoTexto
+          label="Tipo módulo"
+          value={pedido.tipoModulo}
+          onChange={(valor) => onCambiarPedido('tipoModulo', valor)}
+          placeholder="Tipo módulo"
+        />
+        <CampoTexto
+          label="Línea"
+          value={pedido.linea}
+          onChange={(valor) => onCambiarPedido('linea', valor)}
+          placeholder="Ej: 7"
+        />
+        <label style={labelStyle}>
+          Bodega
+          <select
+            value={pedido.bodega}
+            onChange={(e) => onCambiarPedido('bodega', e.target.value)}
+            style={inputStyle}
+          >
+            <option value="bayona">Bayona</option>
+            <option value="rental">Rental</option>
+            <option value="montaña">Montaña</option>
+          </select>
+        </label>
+        <label style={labelStyle}>
+          Retira
+          <select
+            value={pedido.retira}
+            onChange={(e) => onCambiarPedido('retira', e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">Seleccionar eléctrico...</option>
+            {electricos.map((item) => (
+              <option key={item.id || item.nombre} value={item.id || item.nombre}>
+                {item.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <h4 style={{ margin: '14px 0 8px' }}>Material solicitado</h4>
+      <TablaMovimientoMateriales
+        datalistId="materiales-bodega-pedido"
+        materialesInventario={materialesInventario}
+        filas={materialesPedido}
+        mostrarStock
+        onCambiarMaterial={onCambiarMaterial}
+        onQuitarMaterial={onQuitarMaterial}
+      />
+
+      {electricos.length === 0 && (
+        <p style={{ color: '#ffcc80', margin: '8px 0 0', fontSize: '13px' }}>
+          No se encontraron eléctricos cargados para seleccionar.
+        </p>
+      )}
+
+      <div style={accionesPanelStyle}>
+        <button type="button" onClick={onAgregarMaterial} style={botonGris}>
+          + Agregar material
+        </button>
+        <button
+          type="button"
+          disabled={guardando}
+          onClick={onGuardar}
+          style={{
+            ...botonAzul,
+            opacity: guardando ? 0.7 : 1,
+            cursor: guardando ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {guardando ? 'Solicitando...' : 'Solicitar a bodega'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PanelCrearDevolucion({
+  devolucion,
+  materialesDevolucion,
+  materialesInventario,
+  guardando,
+  onCambiarDevolucion,
+  onCambiarMaterial,
+  onAgregarMaterial,
+  onQuitarMaterial,
+  onGuardar,
+  onCerrar,
+}) {
+  return (
+    <div style={panelMovimientoStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0 }}>Crear devolución</h3>
+        <button type="button" onClick={onCerrar} style={botonMiniGris}>
+          Cerrar
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+        <CampoTexto
+          label="Fecha"
+          type="date"
+          value={devolucion.fecha}
+          onChange={(valor) => onCambiarDevolucion('fecha', valor)}
+        />
+        <label style={labelStyle}>
+          Bodega
+          <select
+            value={devolucion.bodega}
+            onChange={(e) => onCambiarDevolucion('bodega', e.target.value)}
+            style={inputStyle}
+          >
+            <option value="bayona">Bayona</option>
+            <option value="rental">Rental</option>
+            <option value="montaña">Montaña</option>
+          </select>
+        </label>
+      </div>
+
+      <label style={labelStyle}>
+        Motivo de la devolución
+        <textarea
+          value={devolucion.motivo}
+          onChange={(e) => onCambiarDevolucion('motivo', e.target.value)}
+          placeholder="Escribe el motivo de la devolución"
+          style={{ ...inputStyle, minHeight: '90px', resize: 'vertical' }}
+        />
+      </label>
+
+      <h4 style={{ margin: '14px 0 8px' }}>Material devuelto</h4>
+      <TablaMovimientoMateriales
+        datalistId="materiales-bodega-devolucion"
+        materialesInventario={materialesInventario}
+        filas={materialesDevolucion}
+        mostrarStock
+        onCambiarMaterial={onCambiarMaterial}
+        onQuitarMaterial={onQuitarMaterial}
+      />
+
+      <div style={accionesPanelStyle}>
+        <button type="button" onClick={onAgregarMaterial} style={botonGris}>
+          + Agregar material
+        </button>
+        <button
+          type="button"
+          disabled={guardando}
+          onClick={onGuardar}
+          style={{
+            ...botonAzul,
+            opacity: guardando ? 0.7 : 1,
+            cursor: guardando ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {guardando ? 'Registrando...' : 'Devolución a bodega'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function PanelSalidaMaterial({
   salidaMaterial,
   materialesSalida,
@@ -451,24 +1095,38 @@ function TablaMovimientoMateriales({
   datalistId,
   materialesInventario,
   filas,
+  mostrarStock = false,
   onCambiarMaterial,
   onQuitarMaterial,
 }) {
+  const [filaSugerenciasActiva, setFilaSugerenciasActiva] = useState(null)
+
+  function obtenerSugerencias(texto) {
+    const busqueda = normalizarBusqueda(texto)
+    if (!busqueda) return []
+
+    return materialesInventario
+      .filter((item) => (
+        normalizarBusqueda(item.descripcion).includes(busqueda) ||
+        normalizarBusqueda(item.codigo).includes(busqueda)
+      ))
+      .slice(0, 8)
+  }
+
+  function seleccionarMaterial(indice, item) {
+    onCambiarMaterial(indice, 'descripcion', item.descripcion || '')
+    setFilaSugerenciasActiva(null)
+  }
+
   return (
     <>
-      <datalist id={datalistId}>
-        {materialesInventario.map((item) => (
-          <option key={`${datalistId}-${item.codigo}-${item.descripcion}`} value={item.descripcion} />
-        ))}
-      </datalist>
-
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#333' }}>
               <th style={thStyle}>Código</th>
               <th style={thStyle}>Material</th>
-              <th style={thStyle}>Unidad</th>
+              <th style={thStyle}>{mostrarStock ? 'Stock' : 'Unidad'}</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Cantidad</th>
               <th style={{ ...thStyle, textAlign: 'center' }}>Quitar</th>
             </tr>
@@ -485,20 +1143,53 @@ function TablaMovimientoMateriales({
                   />
                 </td>
                 <td style={tdStyle}>
-                  <input
-                    type="text"
-                    list={datalistId}
-                    value={fila.descripcion}
-                    onChange={(e) => onCambiarMaterial(indice, 'descripcion', e.target.value)}
-                    style={inputTablaStyle}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={fila.descripcion}
+                      onFocus={() => setFilaSugerenciasActiva(indice)}
+                      onBlur={() => setTimeout(() => setFilaSugerenciasActiva(null), 160)}
+                      onChange={(e) => {
+                        onCambiarMaterial(indice, 'descripcion', e.target.value)
+                        setFilaSugerenciasActiva(indice)
+                      }}
+                      style={inputTablaStyle}
+                    />
+                    {filaSugerenciasActiva === indice && obtenerSugerencias(fila.descripcion).length > 0 && (
+                      <div style={sugerenciasMaterialStyle}>
+                        {obtenerSugerencias(fila.descripcion).map((item) => (
+                          <button
+                            key={`${datalistId}-${indice}-${item.codigo}-${item.descripcion}`}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              seleccionarMaterial(indice, item)
+                            }}
+                            style={botonSugerenciaMaterialStyle}
+                            title={item.descripcion}
+                          >
+                            <span>{item.descripcion}</span>
+                            {item.codigo && <small style={{ color: '#9fb3c8' }}>{item.codigo}</small>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td style={tdStyle}>
                   <input
                     type="text"
-                    value={fila.unidad}
-                    onChange={(e) => onCambiarMaterial(indice, 'unidad', e.target.value)}
-                    style={inputTablaStyle}
+                    value={mostrarStock ? formatearNumero(fila.stock) : fila.unidad}
+                    onChange={(e) => {
+                      if (!mostrarStock) onCambiarMaterial(indice, 'unidad', e.target.value)
+                    }}
+                    readOnly={mostrarStock}
+                    style={{
+                      ...inputTablaStyle,
+                      textAlign: mostrarStock ? 'right' : 'left',
+                      background: mostrarStock ? '#e8f5e9' : inputTablaStyle.background,
+                      fontWeight: mostrarStock ? 900 : inputTablaStyle.fontWeight,
+                    }}
                   />
                 </td>
                 <td style={{ ...tdStyle, textAlign: 'right' }}>
@@ -525,9 +1216,30 @@ function TablaMovimientoMateriales({
   )
 }
 
-function Tarjeta({ titulo, valor }) {
+function Tarjeta({ titulo, valor, onClick }) {
+  function activarConTeclado(evento) {
+    if (!onClick) return
+    if (evento.key !== 'Enter' && evento.key !== ' ') return
+    evento.preventDefault()
+    onClick()
+  }
+
   return (
-    <div style={{ padding: '12px', border: '1px solid #455a64', borderRadius: '10px', background: '#263238' }}>
+    <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={activarConTeclado}
+      style={{
+        padding: '12px',
+        border: '1px solid #455a64',
+        borderRadius: '10px',
+        background: '#263238',
+        cursor: onClick ? 'pointer' : 'default',
+        minHeight: '72px',
+        boxSizing: 'border-box',
+      }}
+    >
       <div style={{ color: '#ccc', fontWeight: 700 }}>{titulo}</div>
       <div style={{ color: '#66bb6a', fontSize: '20px', fontWeight: 900 }}>{valor}</div>
     </div>
@@ -543,6 +1255,18 @@ function normalizarBusqueda(valor) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+}
+
+function fechaActualInput() {
+  const fecha = new Date()
+  const zonaLocal = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000)
+  return zonaLocal.toISOString().slice(0, 10)
+}
+
+function obtenerEtiquetaAlertaBodega(alerta = {}) {
+  if (alerta.tipo_ingreso === 'devolucion_app') return 'Devolución'
+  if (alerta.tipo_ingreso === 'pedido_app') return 'Pedido'
+  return 'Movimiento'
 }
 
 const labelStyle = {
@@ -564,6 +1288,125 @@ const inputTablaStyle = {
   width: '100%',
   background: '#f4f4f4',
   color: '#111',
+}
+
+const sugerenciasMaterialStyle = {
+  position: 'static',
+  width: '100%',
+  maxHeight: '260px',
+  overflowY: 'auto',
+  marginTop: '6px',
+  padding: '6px',
+  border: '1px solid #555',
+  borderRadius: '8px',
+  background: '#1f1f1f',
+  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.03)',
+}
+
+const botonSugerenciaMaterialStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  gap: '12px',
+  width: '100%',
+  padding: '9px 10px',
+  border: 'none',
+  borderRadius: '6px',
+  background: 'transparent',
+  color: 'white',
+  cursor: 'pointer',
+  textAlign: 'left',
+  fontWeight: 700,
+  whiteSpace: 'normal',
+}
+
+const contadorCampanaStyle = {
+  position: 'absolute',
+  top: '-6px',
+  right: '-6px',
+  minWidth: '20px',
+  height: '20px',
+  padding: '0 4px',
+  boxSizing: 'border-box',
+  borderRadius: '10px',
+  background: '#d32f2f',
+  color: 'white',
+  fontSize: '12px',
+  lineHeight: '20px',
+  fontWeight: 700,
+}
+
+const panelCampanaBodegaStyle = {
+  position: 'fixed',
+  left: '12px',
+  bottom: '82px',
+  width: 'calc(100vw - 24px)',
+  maxWidth: '430px',
+  maxHeight: '62vh',
+  overflowY: 'auto',
+  padding: '16px',
+  boxSizing: 'border-box',
+  border: '1px solid white',
+  borderRadius: '10px',
+  background: '#222',
+  color: 'white',
+  textAlign: 'left',
+  zIndex: 2599,
+  boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+}
+
+const botonAlertaBodegaStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+  gap: '8px',
+  alignItems: 'center',
+  width: '100%',
+  padding: '10px',
+  border: '1px solid #555',
+  borderRadius: '8px',
+  background: '#333',
+  color: 'white',
+  cursor: 'pointer',
+  textAlign: 'left',
+  fontWeight: 800,
+}
+
+const filaPedidoHoyStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  gap: '12px',
+  alignItems: 'center',
+  width: '100%',
+  padding: '11px 12px',
+  border: '1px solid #555',
+  borderRadius: '8px',
+  background: '#303030',
+  color: 'white',
+  cursor: 'pointer',
+  textAlign: 'left',
+}
+
+const modalDetalleBodegaOverlayStyle = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 3000,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '18px',
+  background: 'rgba(0,0,0,0.55)',
+  boxSizing: 'border-box',
+}
+
+const modalDetalleBodegaStyle = {
+  width: 'min(720px, 100%)',
+  maxHeight: '86vh',
+  overflowY: 'auto',
+  padding: '18px',
+  border: '1px solid #888',
+  borderRadius: '12px',
+  background: '#202020',
+  color: 'white',
+  boxShadow: '0 10px 28px rgba(0,0,0,0.55)',
 }
 
 const botonGris = {
@@ -630,6 +1473,13 @@ const panelMovimientoStyle = {
   borderRadius: '10px',
   background: '#1f2529',
   marginBottom: '14px',
+}
+
+const gridPedidoStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+  gap: '10px',
+  marginBottom: '12px',
 }
 
 const accionesPanelStyle = {

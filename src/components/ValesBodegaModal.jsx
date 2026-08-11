@@ -185,10 +185,11 @@ function ValesBodegaModal({
                 {valesDia.map((vale) => {
                   const totalItems = (vale.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
                   const serieMostrada = vale.serie || extraerSerieDesdeObservacion(vale.observacion)
+                  const etiquetaVale = obtenerEtiquetaValeBodega(vale)
                   return (
                     <details key={vale.id} style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}>
                       <summary style={{ padding: '9px 10px', background: '#333', cursor: 'pointer', fontWeight: 800 }}>
-                        {vale.tipo_ingreso === 'manual' ? 'Vale manual' : (vale.archivo_nombre || 'Vale sin archivo')}  | Serie {serieMostrada || '-'}  | {vale.solicitante_nombre || 'Sin solicitante'}  | {vale.items?.length || 0} materiales  | total {totalItems}
+                        {etiquetaVale}  | Serie {serieMostrada || '-'}  | {vale.solicitante_nombre || 'Sin solicitante'}  | {vale.items?.length || 0} materiales  | total {totalItems}
                       </summary>
                       {vale.observacion && (
                         <div style={{ padding: '8px 10px', color: '#ffcc80', borderBottom: '1px solid #444' }}>
@@ -420,6 +421,13 @@ function extraerSerieDesdeObservacion(observacion = '') {
   const texto = String(observacion || '')
   const match = texto.match(/(?:serie|ser\.?|modulo|m[oó]dulo)?\s*[:#-]?\s*(\d{5,})/i)
   return match?.[1] || ''
+}
+
+function obtenerEtiquetaValeBodega(vale = {}) {
+  if (vale.tipo_ingreso === 'devolucion_app') return 'Devolución app'
+  if (vale.tipo_ingreso === 'pedido_app') return 'Pedido app'
+  if (vale.tipo_ingreso === 'manual') return 'Vale manual'
+  return vale.archivo_nombre || 'Vale sin archivo'
 }
 
 export default ValesBodegaModal

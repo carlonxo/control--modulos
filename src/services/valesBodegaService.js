@@ -139,9 +139,17 @@ export async function cargarValesBodegaDia({
 }) {
   let { data: vales, error: errorVales } = await supabase
     .from('vales_bodega')
-    .select('id, fecha, serie, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, created_at')
+    .select('id, fecha, serie, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
     .eq('fecha', fecha)
     .order('created_at', { ascending: false })
+
+  if (errorVales?.message?.includes('estado_bodega') || errorVales?.message?.includes('fecha_entrega_bodega') || errorVales?.message?.includes('entregado_por')) {
+    ;({ data: vales, error: errorVales } = await supabase
+      .from('vales_bodega')
+      .select('id, fecha, serie, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, created_at')
+      .eq('fecha', fecha)
+      .order('created_at', { ascending: false }))
+  }
 
   if (errorVales?.message?.includes('serie')) {
     ;({ data: vales, error: errorVales } = await supabase

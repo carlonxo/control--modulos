@@ -577,6 +577,10 @@ const [solicitantesValeBodega, setSolicitantesValeBodega] = useState([])
 const [observacionValeBodega, setObservacionValeBodega] = useState('')
 const [modoValeManual, setModoValeManual] = useState(false)
 const [valesBodegaDia, setValesBodegaDia] = useState([])
+const [alertasBodega, setAlertasBodega] = useState([])
+const [mostrarAlertasBodega, setMostrarAlertasBodega] = useState(false)
+const [pedidosBodegaHoy, setPedidosBodegaHoy] = useState([])
+const [mostrarPedidosBodegaHoy, setMostrarPedidosBodegaHoy] = useState(false)
 const [cargandoValesBodegaDia, setCargandoValesBodegaDia] = useState(false)
 const [leyendoValeBodega, setLeyendoValeBodega] = useState(false)
 const [guardandoValeBodega, setGuardandoValeBodega] = useState(false)
@@ -585,6 +589,9 @@ const [inventariosBodega, setInventariosBodega] = useState([])
 const [inventarioBodegaSeleccionadoId, setInventarioBodegaSeleccionadoId] = useState('')
 const [cargandoInventariosBodega, setCargandoInventariosBodega] = useState(false)
 const [leyendoInventarioBodega, setLeyendoInventarioBodega] = useState(false)
+const [guardandoPedidoBodega, setGuardandoPedidoBodega] = useState(false)
+const [guardandoDevolucionBodega, setGuardandoDevolucionBodega] = useState(false)
+const [entregandoSolicitudBodega, setEntregandoSolicitudBodega] = useState(false)
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [idsOtEnEdicion, setIdsOtEnEdicion] = useState(['', '', ''])
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
@@ -629,6 +636,7 @@ const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProt
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
 const puedeVerMenuModulo = tienePermiso(perfil?.rol, 'verMenuModulo')
+const esRolBodega = perfil?.rol === 'bodega'
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
 const normalizarProyectoFiltro = (proyecto) => String(proyecto || '')
   .replace(/\s*\([^)]*\)\s*$/g, '')
@@ -784,6 +792,12 @@ useEffect(() => {
 
 function mostrarNotificacion(mensaje) {
   setNotificacion(mensaje)
+}
+
+function fechaActualLocalInput() {
+  const fecha = new Date()
+  const zonaLocal = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000)
+  return zonaLocal.toISOString().slice(0, 10)
 }
 
 function nombreTipoAccion(tipo) {
@@ -1067,6 +1081,20 @@ useEffect(() => {
 
   cargarSolicitantesPendientes()
 }, [datos, recibeAvisosPrueba])
+
+useEffect(() => {
+  if (!esRolBodega || !puedeVerBodega) return
+
+  setMostrarBodega(true)
+  cargarInventariosBodega()
+  cargarAlertasBodega()
+
+  const intervalo = setInterval(() => {
+    cargarAlertasBodega()
+  }, 7000)
+
+  return () => clearInterval(intervalo)
+}, [esRolBodega, puedeVerBodega])
 
 if (!session) {
   return <Login supabase={supabase} />
@@ -1706,6 +1734,27 @@ async function cargarValesBodegaDia(fecha = fechaValeBodega) {
   setValesBodegaDia(vales)
 }
 
+async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
+  if (!fecha || !esRolBodega) return
+
+  const { vales, error } = await cargarValesBodegaDiaSupabase({
+    supabase,
+    fecha,
+  })
+
+  if (error) {
+    console.error(error)
+    return
+  }
+
+  const solicitudesApp = (vales || []).filter((vale) => (
+    vale.tipo_ingreso === 'pedido_app' || vale.tipo_ingreso === 'devolucion_app'
+  ))
+
+  setPedidosBodegaHoy(solicitudesApp.filter((vale) => vale.tipo_ingreso === 'pedido_app'))
+  setAlertasBodega(solicitudesApp.filter((vale) => vale.estado_bodega !== 'entregado'))
+}
+
 function cambiarFechaValeBodega(fecha) {
   setFechaValeBodega(fecha)
   cargarValesBodegaDia(fecha)
@@ -1910,6 +1959,7 @@ async function abrirBodega() {
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarBodega(true)
+  await cargarSolicitantesValesBodega()
   await cargarInventariosBodega()
 }
 
@@ -1946,6 +1996,312 @@ async function leerInventarioBodega() {
   } finally {
     setLeyendoInventarioBodega(false)
   }
+}
+
+async function guardarPedidoBodega(datosPedido, materialesPedido) {
+  if (!puedeVerBodega) return false
+
+  const pedido = {
+    fecha: datosPedido?.fecha || new Date().toISOString().slice(0, 10),
+    proyecto: String(datosPedido?.proyecto || '').trim(),
+    tipoModulo: String(datosPedido?.tipoModulo || '').trim(),
+    linea: String(datosPedido?.linea || '').trim(),
+    bodega: String(datosPedido?.bodega || '').trim(),
+  }
+
+  const retiraSeleccionado = solicitantesValeBodega.find((item) => (
+    String(item.id || item.nombre) === String(datosPedido?.retira)
+  ))
+
+  pedido.retiraId = retiraSeleccionado?.id || null
+  pedido.retiraNombre = retiraSeleccionado?.nombre || String(datosPedido?.retira || '').trim()
+
+  const items = (materialesPedido || [])
+    .map((item) => ({
+      material_vale: String(item.descripcion || item.codigo || '').trim(),
+      material_balance: String(item.descripcion || item.codigo || '').trim(),
+      cantidad: Number(item.cantidad || 0),
+    }))
+    .filter((item) => item.material_balance && item.cantidad > 0)
+
+  if (!pedido.fecha) {
+    mostrarNotificacion('Debes ingresar la fecha del pedido')
+    return false
+  }
+
+  if (!pedido.retiraNombre) {
+    mostrarNotificacion('Debes seleccionar quien retira el material')
+    return false
+  }
+
+  if (items.length === 0) {
+    mostrarNotificacion('Debes ingresar al menos un material con cantidad')
+    return false
+  }
+
+  const observacionPedido = [
+    'Pedido generado desde app',
+    pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
+    pedido.tipoModulo ? `Tipo modulo: ${pedido.tipoModulo}` : '',
+    pedido.linea ? `Linea: ${pedido.linea}` : '',
+    pedido.bodega ? `Bodega: ${pedido.bodega}` : '',
+  ].filter(Boolean).join(' | ')
+
+  setGuardandoPedidoBodega(true)
+  const { error, etapa } = await guardarValeBodegaSupabase({
+    supabase,
+    fecha: pedido.fecha,
+    archivoNombre: '',
+    usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    serie: '',
+    solicitanteId: pedido.retiraId,
+    solicitanteNombre: pedido.retiraNombre,
+    tipoIngreso: 'pedido_app',
+    observacion: observacionPedido,
+    items,
+  })
+  setGuardandoPedidoBodega(false)
+
+  if (error) {
+    mostrarNotificacion(
+      `No se pudo guardar el pedido como vale bodega${etapa ? ` (${etapa})` : ''}. ` +
+      'Revisa que estén ejecutados los SQL de vales bodega. Detalle: ' +
+      error.message
+    )
+    return false
+  }
+
+  mostrarNotificacion('Pedido guardado como vale de bodega')
+  if (mostrarValesBodega && fechaValeBodega === pedido.fecha) {
+    await cargarValesBodegaDia(pedido.fecha)
+  }
+  if (mostrarBalanceMateriales) {
+    await cargarBalanceMateriales(fechaBalanceMateriales, rangoBalanceMateriales)
+  }
+  return true
+}
+
+async function guardarDevolucionBodega(datosDevolucion) {
+  if (!puedeVerBodega) return false
+
+  const fecha = datosDevolucion?.fecha || new Date().toISOString().slice(0, 10)
+  const bodega = String(datosDevolucion?.bodega || '').trim()
+  const motivo = String(datosDevolucion?.motivo || '').trim()
+
+  if (!fecha) {
+    mostrarNotificacion('Debes ingresar la fecha de la devolución')
+    return false
+  }
+
+  if (!bodega) {
+    mostrarNotificacion('Debes seleccionar la bodega de la devolución')
+    return false
+  }
+
+  if (!motivo) {
+    mostrarNotificacion('Debes ingresar el motivo de la devolución')
+    return false
+  }
+
+  const observacion = [
+    'Devolución generada desde app',
+    `Bodega: ${bodega}`,
+    `Motivo: ${motivo}`,
+  ].join(' | ')
+
+  setGuardandoDevolucionBodega(true)
+  const { error } = await supabase
+    .from('vales_bodega')
+    .insert([{
+      fecha,
+      serie: '',
+      archivo_nombre: '',
+      usuario_nombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+      solicitante_id: null,
+      solicitante_nombre: '',
+      tipo_ingreso: 'devolucion_app',
+      observacion,
+    }])
+  setGuardandoDevolucionBodega(false)
+
+  if (error) {
+    mostrarNotificacion(
+      'No se pudo registrar la devolución. Revisa que estén ejecutados los SQL de vales bodega. Detalle: ' +
+      error.message
+    )
+    return false
+  }
+
+  mostrarNotificacion('Devolución registrada')
+  if (mostrarValesBodega && fechaValeBodega === fecha) {
+    await cargarValesBodegaDia(fecha)
+  }
+  return true
+}
+
+async function guardarDevolucionBodegaConMateriales(datosDevolucion, materialesDevolucion) {
+  if (!puedeVerBodega) return false
+
+  const fecha = datosDevolucion?.fecha || new Date().toISOString().slice(0, 10)
+  const bodega = String(datosDevolucion?.bodega || '').trim()
+  const motivo = String(datosDevolucion?.motivo || '').trim()
+  const items = (materialesDevolucion || [])
+    .map((item) => ({
+      material_vale: String(item.descripcion || item.codigo || '').trim(),
+      material_balance: String(item.descripcion || item.codigo || '').trim(),
+      cantidad: Number(item.cantidad || 0),
+    }))
+    .filter((item) => item.material_balance && item.cantidad > 0)
+
+  if (!fecha) {
+    mostrarNotificacion('Debes ingresar la fecha de la devolución')
+    return false
+  }
+
+  if (!bodega) {
+    mostrarNotificacion('Debes seleccionar la bodega de la devolución')
+    return false
+  }
+
+  if (!motivo) {
+    mostrarNotificacion('Debes ingresar el motivo de la devolución')
+    return false
+  }
+
+  if (items.length === 0) {
+    mostrarNotificacion('Debes ingresar al menos un material devuelto con cantidad')
+    return false
+  }
+
+  const observacion = [
+    'Devolución generada desde app',
+    `Bodega: ${bodega}`,
+    `Motivo: ${motivo}`,
+  ].join(' | ')
+
+  setGuardandoDevolucionBodega(true)
+  const { error, etapa } = await guardarValeBodegaSupabase({
+    supabase,
+    fecha,
+    archivoNombre: '',
+    usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    serie: '',
+    solicitanteId: null,
+    solicitanteNombre: '',
+    tipoIngreso: 'devolucion_app',
+    observacion,
+    items,
+  })
+  setGuardandoDevolucionBodega(false)
+
+  if (error) {
+    mostrarNotificacion(
+      `No se pudo registrar la devolución${etapa ? ` (${etapa})` : ''}. Revisa que estén ejecutados los SQL de vales bodega. Detalle: ` +
+      error.message
+    )
+    return false
+  }
+
+  mostrarNotificacion('Devolución registrada')
+  if (mostrarValesBodega && fechaValeBodega === fecha) {
+    await cargarValesBodegaDia(fecha)
+  }
+  return true
+}
+
+async function entregarSolicitudBodega(alerta) {
+  if (!esRolBodega || !alerta?.id) return false
+
+  const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+  if (!inventarioActual?.id) {
+    mostrarNotificacion('No hay inventario seleccionado para descontar material')
+    return false
+  }
+
+  const itemsSolicitud = alerta.items || []
+  if (itemsSolicitud.length === 0) {
+    mostrarNotificacion('La solicitud no tiene materiales para descontar')
+    return false
+  }
+
+  const actualizaciones = []
+  const noEncontrados = []
+
+  for (const itemSolicitud of itemsSolicitud) {
+    const nombreSolicitud = itemSolicitud.material_balance || itemSolicitud.material_vale || ''
+    const itemInventario = (inventarioActual.items || []).find((item) => (
+      normalizarTextoComparacion(item.descripcion) === normalizarTextoComparacion(nombreSolicitud) ||
+      normalizarTextoComparacion(item.codigo) === normalizarTextoComparacion(nombreSolicitud)
+    ))
+
+    if (!itemInventario?.id) {
+      noEncontrados.push(nombreSolicitud)
+      continue
+    }
+
+    const cantidad = Number(itemSolicitud.cantidad || 0)
+    const saldoActual = Number(itemInventario.saldoFinal || 0)
+    if (cantidad > saldoActual) {
+      noEncontrados.push(`${nombreSolicitud} (stock insuficiente: ${saldoActual.toLocaleString('es-CL')})`)
+      continue
+    }
+
+    actualizaciones.push({
+      itemInventario,
+      cantidad,
+      nuevoSaldoFinal: saldoActual - cantidad,
+      nuevasSalidas: Number(itemInventario.salidas || 0) + cantidad,
+    })
+  }
+
+  if (noEncontrados.length > 0) {
+    mostrarNotificacion('No se encontraron en el inventario: ' + noEncontrados.join(', '))
+    return false
+  }
+
+  const confirmado = window.confirm('¿Confirmar pedido entregado y descontar material del inventario?')
+  if (!confirmado) return false
+
+  setEntregandoSolicitudBodega(true)
+
+  for (const actualizacion of actualizaciones) {
+    const { error } = await supabase
+      .from('bodega_inventario_items')
+      .update({
+        salidas: actualizacion.nuevasSalidas,
+        saldo_final: actualizacion.nuevoSaldoFinal,
+      })
+      .eq('id', actualizacion.itemInventario.id)
+
+    if (error) {
+      setEntregandoSolicitudBodega(false)
+      mostrarNotificacion('No se pudo descontar inventario: ' + error.message)
+      return false
+    }
+  }
+
+  const { error: errorVale } = await supabase
+    .from('vales_bodega')
+    .update({
+      estado_bodega: 'entregado',
+      fecha_entrega_bodega: new Date().toISOString(),
+      entregado_por: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    })
+    .eq('id', alerta.id)
+
+  setEntregandoSolicitudBodega(false)
+
+  if (errorVale) {
+    mostrarNotificacion('Se descontó inventario, pero no se pudo marcar el pedido como entregado. Ejecuta supabase_vales_bodega_entrega.sql. Detalle: ' + errorVale.message)
+    await cargarInventariosBodega()
+    await cargarAlertasBodega()
+    return false
+  }
+
+  mostrarNotificacion('Pedido entregado y descontado del inventario')
+  await cargarInventariosBodega()
+  await cargarAlertasBodega()
+  return true
 }
 
 function fechaInicialProtocoloManual() {
@@ -3557,6 +3913,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         onClick={cerrarPanelesYModulo}
         style={{
           padding: '20px',
+          display: esRolBodega ? 'none' : undefined,
           width: '100%',
           boxSizing: 'border-box',
           maxWidth: '1200px',
@@ -5101,18 +5458,39 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   />
 )}
 
-{mostrarBodega && puedeVerBodega && (
+{(mostrarBodega || esRolBodega) && puedeVerBodega && (
   <BodegaModal
+    modoSoloBodega={esRolBodega}
     puedeAdministrar={puedeAdministrarBodega}
     archivo={archivoInventarioBodega}
     inventarios={inventariosBodega}
+    solicitantes={solicitantesValeBodega}
     inventarioSeleccionadoId={inventarioBodegaSeleccionadoId}
     cargandoInventarios={cargandoInventariosBodega}
     leyendo={leyendoInventarioBodega}
+    guardandoPedido={guardandoPedidoBodega}
+    guardandoDevolucion={guardandoDevolucionBodega}
+    entregandoSolicitudBodega={entregandoSolicitudBodega}
+    alertasBodega={alertasBodega}
+    mostrarAlertasBodega={mostrarAlertasBodega}
+    pedidosBodegaHoy={pedidosBodegaHoy}
+    mostrarPedidosBodegaHoy={mostrarPedidosBodegaHoy}
     onCambiarArchivo={setArchivoInventarioBodega}
     onLeerArchivo={leerInventarioBodega}
+    onGuardarPedido={guardarPedidoBodega}
+    onGuardarDevolucion={guardarDevolucionBodegaConMateriales}
+    onEntregarSolicitudBodega={entregarSolicitudBodega}
+    onToggleAlertasBodega={() => setMostrarAlertasBodega((actual) => !actual)}
+    onTogglePedidosBodegaHoy={() => setMostrarPedidosBodegaHoy((actual) => !actual)}
+    onActualizarAlertasBodega={cargarAlertasBodega}
     onSeleccionarInventario={setInventarioBodegaSeleccionadoId}
-    onCerrar={() => setMostrarBodega(false)}
+    onCerrar={() => {
+      if (esRolBodega) {
+        supabase.auth.signOut()
+        return
+      }
+      setMostrarBodega(false)
+    }}
     onClickFondo={cerrarPanelesFlotantes}
   />
 )}
