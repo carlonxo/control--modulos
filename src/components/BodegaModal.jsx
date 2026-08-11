@@ -488,32 +488,6 @@ function BodegaModal({
                 >
                   Crear devolución
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMostrarIngresoProveedor((actual) => !actual)
-                    setMostrarSalidaMaterial(false)
-                    setMostrarCrearPedido(false)
-                    setMostrarCrearDevolucion(false)
-                    setMostrarRecepcionarMaterial(false)
-                  }}
-                  style={botonVerde}
-                >
-                  Ingreso
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMostrarSalidaMaterial((actual) => !actual)
-                    setMostrarIngresoProveedor(false)
-                    setMostrarCrearPedido(false)
-                    setMostrarCrearDevolucion(false)
-                    setMostrarRecepcionarMaterial(false)
-                  }}
-                  style={botonRojo}
-                >
-                  Salida
-                </button>
               </div>
             )}
             {!puedeAdministrar && !modoSoloBodega && (

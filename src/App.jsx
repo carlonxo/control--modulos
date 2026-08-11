@@ -2234,9 +2234,7 @@ async function cargarInventariosBodega() {
 
   const inventariosFiltrados = filtrarInventariosPorBodegaAsignada(inventarios, perfil)
   setInventariosBodega(inventariosFiltrados)
-  setInventarioBodegaSeleccionadoId((actual) => (
-    inventariosFiltrados.some((item) => item.id === actual) ? actual : inventariosFiltrados[0]?.id || ''
-  ))
+  setInventarioBodegaSeleccionadoId(inventariosFiltrados[0]?.id || '')
 
   if (inventariosFiltrados.length === 0) {
     cargarInventariosBodegaLocalesRespaldo()
