@@ -306,6 +306,12 @@ function normalizarTextoComparacion(valor) {
     .replace(/[^a-z0-9]+/g, '')
 }
 
+function esCodigoBodegaDescontable(valor) {
+  const codigo = String(valor || '').trim()
+  const normalizado = normalizarTextoComparacion(codigo)
+  return Boolean(normalizado) && !['-', 'sincodigo', 'na', 'n/a', 'nocatalogado'].includes(normalizado)
+}
+
 function normalizarBodega(valor) {
   const texto = String(valor || '')
     .normalize('NFD')
@@ -2557,10 +2563,17 @@ async function entregarSolicitudBodega(alerta) {
 
   const actualizacionesPorItem = {}
   const noEncontrados = []
+  const itemsSinDescuento = []
 
   for (const itemSolicitud of itemsSolicitud) {
     const codigoSolicitud = String(itemSolicitud.material_vale || '').trim()
     const nombreSolicitud = itemSolicitud.material_balance || itemSolicitud.material_vale || ''
+
+    if (!esCodigoBodegaDescontable(codigoSolicitud)) {
+      itemsSinDescuento.push(nombreSolicitud || codigoSolicitud || 'Material sin código')
+      continue
+    }
+
     const itemInventario = (inventarioActual.items || []).find((item) => (
       codigoSolicitud &&
       normalizarTextoComparacion(item.codigo) === normalizarTextoComparacion(codigoSolicitud)
@@ -2606,7 +2619,11 @@ async function entregarSolicitudBodega(alerta) {
     return false
   }
 
-  const confirmado = window.confirm('¿Confirmar pedido entregado y descontar material del inventario?')
+  const mensajeConfirmacion = itemsSinDescuento.length > 0
+    ? `¿Confirmar pedido entregado y descontar material del inventario?\n\n` +
+      `Estos ítems quedarán en el pedido/vale, pero no descuentan stock:\n- ${itemsSinDescuento.join('\n- ')}`
+    : '¿Confirmar pedido entregado y descontar material del inventario?'
+  const confirmado = window.confirm(mensajeConfirmacion)
   if (!confirmado) return false
 
   setEntregandoSolicitudBodega(true)
@@ -2682,7 +2699,11 @@ async function entregarSolicitudBodega(alerta) {
 
   setEntregandoSolicitudBodega(false)
 
-  mostrarNotificacion('Pedido entregado y descontado del inventario')
+  mostrarNotificacion(
+    itemsSinDescuento.length > 0
+      ? `Pedido entregado. Se omitieron ${itemsSinDescuento.length} ítems sin stock/inventario.`
+      : 'Pedido entregado y descontado del inventario'
+  )
   setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
     vale.id === alerta.id
       ? { ...vale, ...datosEntrega }
