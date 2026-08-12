@@ -2332,10 +2332,20 @@ function exportarInventarioBodegaActual() {
 async function imprimirPedidosBodegaHoy() {
   if (!puedeVerPedidosBodegaHoy) return
   try {
-    await exportarPedidosBodegaExcel(pedidosBodegaHoy)
+    await exportarPedidosBodegaExcel(pedidosBodegaHoy, { modo: 'detalle' })
   } catch (error) {
     console.error(error)
     mostrarNotificacion('No se pudo generar el vale de bodega')
+  }
+}
+
+async function imprimirPedidosBodegaHoyGeneral() {
+  if (!puedeVerPedidosBodegaHoy) return
+  try {
+    await exportarPedidosBodegaExcel(pedidosBodegaHoy, { modo: 'general' })
+  } catch (error) {
+    console.error(error)
+    mostrarNotificacion('No se pudo generar el vale general de bodega')
   }
 }
 
@@ -6114,6 +6124,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onEditarSolicitudBodega={editarSolicitudBodega}
     onExportarInventario={exportarInventarioBodegaActual}
     onImprimirPedidos={imprimirPedidosBodegaHoy}
+    onImprimirPedidosGeneral={imprimirPedidosBodegaHoyGeneral}
     onToggleAlertasBodega={() => setMostrarAlertasBodega((actual) => !actual)}
     onTogglePedidosBodegaHoy={() => setMostrarPedidosBodegaHoy((actual) => !actual)}
     onToggleRecepcionesBodega={() => setMostrarRecepcionesBodega((actual) => !actual)}

@@ -50,6 +50,7 @@ function BodegaModal({
   onEditarSolicitudBodega,
   onExportarInventario,
   onImprimirPedidos,
+  onImprimirPedidosGeneral,
   onToggleAlertasBodega,
   onTogglePedidosBodegaHoy,
   onToggleRecepcionesBodega,
@@ -567,6 +568,7 @@ function BodegaModal({
               pedidos={pedidosBodegaHoy}
               onSeleccionar={setAlertaBodegaSeleccionada}
               onImprimir={onImprimirPedidos}
+              onImprimirGeneral={onImprimirPedidosGeneral}
             />
           )}
 
@@ -908,24 +910,39 @@ function CampanaBodega({
   )
 }
 
-function PanelPedidosBodegaHoy({ pedidos, onSeleccionar, onImprimir }) {
+function PanelPedidosBodegaHoy({ pedidos, onSeleccionar, onImprimir, onImprimirGeneral }) {
   return (
     <div style={{ ...panelMovimientoStyle, marginTop: '-2px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
         <h3 style={{ margin: 0 }}>Pedidos de hoy</h3>
-        <button
-          type="button"
-          onClick={onImprimir}
-          disabled={pedidos.length === 0}
-          style={{
-            ...botonAzul,
-            padding: '8px 14px',
-            opacity: pedidos.length === 0 ? 0.65 : 1,
-            cursor: pedidos.length === 0 ? 'not-allowed' : 'pointer',
-          }}
-        >
-          Imprimir
-        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={onImprimir}
+            disabled={pedidos.length === 0}
+            style={{
+              ...botonAzul,
+              padding: '8px 14px',
+              opacity: pedidos.length === 0 ? 0.65 : 1,
+              cursor: pedidos.length === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Imprimir detalle
+          </button>
+          <button
+            type="button"
+            onClick={onImprimirGeneral}
+            disabled={pedidos.length === 0}
+            style={{
+              ...botonAzul,
+              padding: '8px 14px',
+              opacity: pedidos.length === 0 ? 0.65 : 1,
+              cursor: pedidos.length === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Imprimir general
+          </button>
+        </div>
       </div>
       {pedidos.length === 0 ? (
         <p style={{ color: '#bbb', margin: 0 }}>No hay pedidos registrados hoy.</p>

@@ -95,33 +95,38 @@ export function exportarInventarioBodegaExcel(inventario) {
   XLSX.writeFile(libro, `inventario_bodega_${fechaInventario}.xlsx`)
 }
 
-export async function exportarPedidosBodegaExcel(pedidos = []) {
+export async function exportarPedidosBodegaExcel(pedidos = [], opciones = {}) {
   const pedidosValidos = (pedidos || []).filter((pedido) => (pedido.items || []).length > 0)
+  const modo = opciones.modo || 'detalle'
 
   if (pedidosValidos.length === 0) {
     alert('No hay pedidos con materiales para imprimir')
     return
   }
 
-  const grupos = agruparPedidosParaVales(pedidosValidos)
+  const grupos = modo === 'general'
+    ? agruparPedidosParaValesGeneral(pedidosValidos)
+    : agruparPedidosParaVales(pedidosValidos)
   const fecha = pedidosValidos[0]?.fecha || new Date().toISOString().slice(0, 10)
 
   if (grupos.length === 1) {
-    const blob = await crearValePedidosGrupoDesdePlantilla(grupos[0])
-    descargarBlob(blob, `vale_${nombreArchivoSeguro(grupos[0].proyecto || fecha)}.xlsx`)
+    const blob = await crearValePedidosGrupoDesdePlantilla(grupos[0], { modo })
+    const sufijoModo = modo === 'general' ? '_general' : ''
+    descargarBlob(blob, `vale_${nombreArchivoSeguro(grupos[0].proyecto || fecha)}${sufijoModo}.xlsx`)
     return
   }
 
   const zip = new JSZip()
   for (const [indice, grupo] of grupos.entries()) {
-    const blob = await crearValePedidosGrupoDesdePlantilla(grupo)
+    const blob = await crearValePedidosGrupoDesdePlantilla(grupo, { modo })
     const sufijo = grupo.bloque > 1 ? `_parte_${grupo.bloque}` : ''
-    const nombre = `vale_${nombreArchivoSeguro(grupo.proyecto || `vale_${indice + 1}`)}${sufijo}.xlsx`
+    const sufijoModo = modo === 'general' ? '_general' : ''
+    const nombre = `vale_${nombreArchivoSeguro(grupo.proyecto || `vale_${indice + 1}`)}${sufijo}${sufijoModo}.xlsx`
     zip.file(nombre, blob)
   }
 
   const blobZip = await zip.generateAsync({ type: 'blob' })
-  descargarBlob(blobZip, `vales_bodega_${fecha}.zip`)
+  descargarBlob(blobZip, `vales_bodega_${modo}_${fecha}.zip`)
 }
 
 function extraerDatoObservacion(observacion = '', etiqueta = '') {
@@ -159,6 +164,14 @@ function agruparPedidosParaVales(pedidos = []) {
   })
 }
 
+function agruparPedidosParaValesGeneral(pedidos = []) {
+  return [{
+    proyecto: 'GENERAL',
+    bloque: 1,
+    pedidos,
+  }]
+}
+
 function normalizarClaveVale(valor) {
   return String(valor || '')
     .normalize('NFD')
@@ -168,13 +181,14 @@ function normalizarClaveVale(valor) {
     .trim()
 }
 
-async function crearValePedidosGrupoDesdePlantilla(grupo = {}) {
+async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
   const respuesta = await fetch(plantillaValeBodegaUrl)
   const buffer = await respuesta.arrayBuffer()
   const zip = await JSZip.loadAsync(buffer)
   let sheetXml = await zip.file('xl/worksheets/sheet1.xml').async('string')
   let sharedStringsXml = await zip.file('xl/sharedStrings.xml').async('string')
   const sharedStrings = crearEditorSharedStrings(sharedStringsXml)
+  const modo = opciones.modo || 'detalle'
 
   const pedidos = grupo.pedidos || []
   const primerPedido = pedidos[0] || {}
@@ -198,7 +212,7 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}) {
   const columnasSeries = ['T', 'W', 'Z', 'AD', 'AG']
   columnasSeries.forEach((columna, indice) => {
     const pedido = pedidos[indice]
-    const serie = pedido?.serie || extraerDatoObservacion(pedido?.observacion, 'serie') || ''
+    const serie = modo === 'general' ? '' : (pedido?.serie || extraerDatoObservacion(pedido?.observacion, 'serie') || '')
     sheetXml = setCellValue(sheetXml, `${columna}8`, serie, serie ? 'string' : 'blank', sharedStrings)
   })
 
@@ -208,7 +222,9 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}) {
     })
   }
 
-  const materiales = compilarMaterialesPedidosPorSerie(pedidos)
+  const materiales = modo === 'general'
+    ? compilarMaterialesPedidosGeneral(pedidos)
+    : compilarMaterialesPedidosPorSerie(pedidos)
   materiales.slice(0, 47).forEach((material, indice) => {
     const fila = 9 + indice
     sheetXml = setCellValue(sheetXml, `A${fila}`, indice + 1, 'number', sharedStrings)
@@ -217,7 +233,7 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}) {
     sheetXml = setCellValue(sheetXml, `Q${fila}`, material.unidad, material.unidad ? 'string' : 'blank', sharedStrings)
 
     columnasSeries.forEach((columna, indiceSerie) => {
-      const cantidad = material.cantidades[indiceSerie] || 0
+      const cantidad = modo === 'general' ? 0 : (material.cantidades[indiceSerie] || 0)
       sheetXml = setCellValue(sheetXml, `${columna}${fila}`, cantidad || '', cantidad ? 'number' : 'blank', sharedStrings)
     })
 
@@ -230,6 +246,33 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}) {
     type: 'blob',
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
+}
+
+function compilarMaterialesPedidosGeneral(pedidos = []) {
+  const mapa = new Map()
+
+  pedidos.forEach((pedido) => {
+    ;(pedido.items || []).forEach((item) => {
+      const codigo = String(item.material_vale || item.codigo || '').trim()
+      const descripcion = String(item.material_balance || item.material_vale || '').trim()
+      const unidad = String(item.unidad || '').trim()
+      const clave = `${normalizarClaveVale(codigo)}|${normalizarClaveVale(descripcion)}`
+
+      if (!mapa.has(clave)) {
+        mapa.set(clave, {
+          codigo,
+          descripcion,
+          unidad,
+          cantidades: [0, 0, 0, 0, 0],
+          total: 0,
+        })
+      }
+
+      mapa.get(clave).total += numeroExcel(item.cantidad)
+    })
+  })
+
+  return Array.from(mapa.values())
 }
 
 function compilarMaterialesPedidosPorSerie(pedidos = []) {
