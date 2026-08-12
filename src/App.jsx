@@ -674,6 +674,7 @@ const [lineaReintegrar, setLineaReintegrar] = useState(1)
 const [extremoReintegrar, setExtremoReintegrar] = useState('fin')
 const [historialSeleccionadoReintegrar, setHistorialSeleccionadoReintegrar] = useState(null)
 const [reintegrandoModulo, setReintegrandoModulo] = useState(false)
+const [finalizandoModulo, setFinalizandoModulo] = useState(false)
 const [mostrarProtocoloEntrega, setMostrarProtocoloEntrega] = useState(false)
 const [datosProtocoloEntrega, setDatosProtocoloEntrega] = useState({})
 const [responsableProtocolo, setResponsableProtocolo] = useState('')
@@ -704,6 +705,7 @@ const puedeVerBodega = tienePermiso(perfil?.rol, 'verBodega')
 const puedeExportarInventarioBodega = tienePermiso(perfil?.rol, 'exportarInventarioBodega')
 const puedeAdministrarBodega = tienePermiso(perfil?.rol, 'administrarBodega')
 const puedeVerPedidosBodegaHoy = tienePermiso(perfil?.rol, 'verPedidosBodegaHoy')
+const puedeEditarPedidosBodega = tienePermiso(perfil?.rol, 'editarPedidosBodega')
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
@@ -4145,8 +4147,11 @@ async function guardarProtocoloEntrega(protocolo) {
 
 
 async function finalizarModulo() {
-  if (!puedeFinalizarModulos || !moduloSeleccionado?.id) return
+  if (!puedeFinalizarModulos || !moduloSeleccionado?.id || finalizandoModulo) return
 
+  setFinalizandoModulo(true)
+
+  try {
   const { data: modulo, error: errorModulo } = await cargarModuloPorId({
     supabase,
     id: moduloSeleccionado.id,
@@ -4234,6 +4239,9 @@ async function finalizarModulo() {
   limpiarEstadosModal()
 
   mostrarNotificacion('Módulo finalizado correctamente')
+  } finally {
+    setFinalizandoModulo(false)
+  }
 }
 
 async function eliminarModuloSinRegistro() {
@@ -5664,6 +5672,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     <EncabezadoModalModulo
       puedeVerMenuModulo={puedeVerMenuModulo}
       puedeFinalizarModulos={puedeFinalizarModulos}
+      finalizandoModulo={finalizandoModulo}
       puedeEliminarModulo={perfil?.rol === 'admin'}
       mostrarMenuModulo={mostrarMenuModulo}
       pruebaBloqueada={
@@ -5912,6 +5921,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     modoSoloBodega={esRolBodega}
     puedeAdministrar={puedeAdministrarBodega}
     puedeVerPedidosHoy={puedeVerPedidosBodegaHoy}
+    puedeEditarPedidos={puedeEditarPedidosBodega}
     puedeGestionarPedidos={esRolBodega}
     archivo={archivoInventarioBodega}
     inventarios={inventariosBodega}

@@ -20,6 +20,7 @@ function IconoOpcionesModulo() {
 export default function EncabezadoModalModulo({
   puedeVerMenuModulo,
   puedeFinalizarModulos,
+  finalizandoModulo = false,
   puedeEliminarModulo,
   mostrarMenuModulo,
   pruebaBloqueada,
@@ -162,19 +163,22 @@ export default function EncabezadoModalModulo({
 
           {puedeFinalizarModulos && (
             <button
+              type="button"
               onClick={onFinalizarModulo}
+              disabled={finalizandoModulo}
               style={{
                 background: '#d32f2f',
                 color: 'white',
                 padding: '10px 14px',
                 border: 'none',
                 borderRadius: '6px',
-                cursor: 'pointer',
+                cursor: finalizandoModulo ? 'not-allowed' : 'pointer',
                 flex: '0 0 180px',
                 maxWidth: '55%',
+                opacity: finalizandoModulo ? 0.7 : 1,
               }}
             >
-              Finalizar módulo
+              {finalizandoModulo ? 'Finalizando...' : 'Finalizar módulo'}
             </button>
           )}
         </div>

@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 
+let contadorFilasEdicionPedido = 0
+
+function crearIdFilaEdicionPedido(prefijo = 'fila') {
+  contadorFilasEdicionPedido += 1
+  return `${prefijo}-${Date.now()}-${contadorFilasEdicionPedido}`
+}
+
 const filaMovimientoVacia = {
   codigo: '',
   descripcion: '',
@@ -12,6 +19,7 @@ function BodegaModal({
   modoSoloBodega,
   puedeAdministrar,
   puedeVerPedidosHoy,
+  puedeEditarPedidos,
   puedeGestionarPedidos,
   archivo,
   inventarios = [],
@@ -332,6 +340,7 @@ function BodegaModal({
           alerta={alertaBodegaSeleccionada}
           entregando={entregandoSolicitudBodega}
           materialesInventario={materialesInventario}
+          puedeEditar={puedeEditarPedidos}
           puedeGestionar={puedeGestionarPedidos}
           onEditar={async (itemsEditados) => {
             const resultado = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
@@ -1084,6 +1093,7 @@ function DetalleSolicitudBodega({
   alerta,
   entregando,
   materialesInventario = [],
+  puedeEditar,
   puedeGestionar,
   onEditar,
   onEntregar,
@@ -1098,7 +1108,8 @@ function DetalleSolicitudBodega({
   const fueModificadoPorBodega = tieneMarcaModificacionBodega(alerta.observacion)
 
   useEffect(() => {
-    setItemsEditados((alerta?.items || []).map((item) => ({
+    setItemsEditados((alerta?.items || []).map((item, indice) => ({
+      _uid: item.id || crearIdFilaEdicionPedido(`pedido-${alerta?.id || 'sin-id'}-${indice}`),
       id: item.id,
       material_vale: item.material_vale || item.material_balance || '',
       material_balance: item.material_balance || item.material_vale || '',
@@ -1126,7 +1137,12 @@ function DetalleSolicitudBodega({
   }
 
   function agregarItem() {
-    setItemsEditados((actuales) => [...actuales, { material_vale: '', material_balance: '', cantidad: '' }])
+    setItemsEditados((actuales) => [...actuales, {
+      _uid: crearIdFilaEdicionPedido(`nuevo-${alerta?.id || 'pedido'}`),
+      material_vale: '',
+      material_balance: '',
+      cantidad: '',
+    }])
   }
 
   function quitarItem(indice) {
@@ -1135,7 +1151,7 @@ function DetalleSolicitudBodega({
 
   async function guardarEdicion() {
     setGuardandoEdicion(true)
-    const ok = await onEditar?.(itemsEditados)
+    const ok = await onEditar?.(itemsEditados.map(({ _uid, ...item }) => item))
     setGuardandoEdicion(false)
     if (ok) setEditando(false)
   }
@@ -1154,7 +1170,7 @@ function DetalleSolicitudBodega({
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {puedeGestionar && esPedido && !entregado && !editando && (
+            {puedeEditar && esPedido && !entregado && !editando && (
               <button type="button" onClick={() => setEditando(true)} style={botonMiniAzul}>
                 Editar
               </button>
@@ -1197,9 +1213,9 @@ function DetalleSolicitudBodega({
             </thead>
             <tbody>
               {(editando ? itemsEditados : (alerta.items || [])).map((item, indice) => {
-                const codigo = obtenerCodigoMaterialPedido(item, materialesInventario)
+                const codigo = editando ? (item.material_vale || '') : obtenerCodigoMaterialPedido(item, materialesInventario)
                 return (
-                  <tr key={item.id || `${item.material_balance}-${item.cantidad}-${indice}`}>
+                  <tr key={item._uid || item.id || indice}>
                     <td style={{ ...tdStyle, width: '190px' }}>
                       {editando ? (
                         <input
@@ -1217,7 +1233,7 @@ function DetalleSolicitudBodega({
                         <div style={{ position: 'relative' }}>
                           <input
                             type="text"
-                            value={item.material_balance || item.material_vale || ''}
+                            value={item.material_balance ?? ''}
                             onFocus={() => setFilaSugerenciasEdicion(indice)}
                             onBlur={() => setTimeout(() => setFilaSugerenciasEdicion(null), 160)}
                             onChange={(e) => {
@@ -1227,11 +1243,11 @@ function DetalleSolicitudBodega({
                             style={inputTablaStyle}
                           />
                           {filaSugerenciasEdicion === indice && obtenerSugerenciasMateriales(
-                            item.material_balance || item.material_vale,
+                            item.material_balance,
                             materialesInventario,
                           ).length > 0 && (
                             <div style={{ ...sugerenciasMaterialStyle, position: 'absolute', zIndex: 3300 }}>
-                              {obtenerSugerenciasMateriales(item.material_balance || item.material_vale, materialesInventario).map((material) => (
+                              {obtenerSugerenciasMateriales(item.material_balance, materialesInventario).map((material) => (
                                 <button
                                   key={`editar-pedido-${indice}-${material.codigo}-${material.descripcion}`}
                                   type="button"
