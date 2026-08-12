@@ -48,6 +48,7 @@ function BodegaModal({
   onEntregarSolicitudBodega,
   onEditarSolicitudBodega,
   onExportarInventario,
+  onImprimirPedidos,
   onToggleAlertasBodega,
   onTogglePedidosBodegaHoy,
   onToggleRecepcionesBodega,
@@ -563,6 +564,7 @@ function BodegaModal({
             <PanelPedidosBodegaHoy
               pedidos={pedidosBodegaHoy}
               onSeleccionar={setAlertaBodegaSeleccionada}
+              onImprimir={onImprimirPedidos}
             />
           )}
 
@@ -904,10 +906,25 @@ function CampanaBodega({
   )
 }
 
-function PanelPedidosBodegaHoy({ pedidos, onSeleccionar }) {
+function PanelPedidosBodegaHoy({ pedidos, onSeleccionar, onImprimir }) {
   return (
     <div style={{ ...panelMovimientoStyle, marginTop: '-2px' }}>
-      <h3 style={{ margin: '0 0 10px' }}>Pedidos de hoy</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0 }}>Pedidos de hoy</h3>
+        <button
+          type="button"
+          onClick={onImprimir}
+          disabled={pedidos.length === 0}
+          style={{
+            ...botonAzul,
+            padding: '8px 14px',
+            opacity: pedidos.length === 0 ? 0.65 : 1,
+            cursor: pedidos.length === 0 ? 'not-allowed' : 'pointer',
+          }}
+        >
+          Imprimir
+        </button>
+      </div>
       {pedidos.length === 0 ? (
         <p style={{ color: '#bbb', margin: 0 }}>No hay pedidos registrados hoy.</p>
       ) : (

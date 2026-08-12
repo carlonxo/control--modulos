@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from './services/supabase'
-import { exportarHistorialExcel, exportarInventarioBodegaExcel } from './services/exportarExcel'
+import { exportarHistorialExcel, exportarInventarioBodegaExcel, exportarPedidosBodegaExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
 import Login from './components/Login'
 import RegistroAcciones from './components/RegistroAcciones'
@@ -2308,6 +2308,16 @@ function exportarInventarioBodegaActual() {
   exportarInventarioBodegaExcel(inventarioActual)
 }
 
+async function imprimirPedidosBodegaHoy() {
+  if (!puedeVerPedidosBodegaHoy) return
+  try {
+    await exportarPedidosBodegaExcel(pedidosBodegaHoy)
+  } catch (error) {
+    console.error(error)
+    mostrarNotificacion('No se pudo generar el vale de bodega')
+  }
+}
+
 async function guardarPedidoBodega(datosPedido, materialesPedido) {
   if (!puedeVerBodega) return false
 
@@ -2685,7 +2695,7 @@ async function entregarSolicitudBodega(alerta) {
 }
 
 async function editarSolicitudBodega(alerta, itemsEditados) {
-  if (!esRolBodega || !alerta?.id) return false
+  if (!puedeEditarPedidosBodega || !alerta?.id) return false
   if (String(alerta.estado_bodega || '').toLowerCase() === 'entregado') {
     mostrarNotificacion('No se puede editar un pedido ya entregado')
     return false
@@ -2716,12 +2726,18 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
     return false
   }
 
-  const marcaEdicion = `Modificado por bodega: ${perfil?.nombre || perfil?.email || session?.user?.email || 'bodega'}`
-  const observacionActualizada = agregarMarcaObservacionVale(alerta.observacion, marcaEdicion)
-  const { error: errorMarcaEdicion } = await supabase
-    .from('vales_bodega')
-    .update({ observacion: observacionActualizada })
-    .eq('id', alerta.id)
+  const marcaEdicion = esRolBodega
+    ? `Modificado por bodega: ${perfil?.nombre || perfil?.email || session?.user?.email || 'bodega'}`
+    : ''
+  const observacionActualizada = marcaEdicion
+    ? agregarMarcaObservacionVale(alerta.observacion, marcaEdicion)
+    : alerta.observacion
+  const { error: errorMarcaEdicion } = marcaEdicion
+    ? await supabase
+      .from('vales_bodega')
+      .update({ observacion: observacionActualizada })
+      .eq('id', alerta.id)
+    : { error: null }
 
   const observacionFinal = errorMarcaEdicion ? alerta.observacion : observacionActualizada
   const pedidoActualizado = { ...alerta, observacion: observacionFinal, items: itemsGuardados || items }
@@ -5950,6 +5966,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onEntregarSolicitudBodega={entregarSolicitudBodega}
     onEditarSolicitudBodega={editarSolicitudBodega}
     onExportarInventario={exportarInventarioBodegaActual}
+    onImprimirPedidos={imprimirPedidosBodegaHoy}
     onToggleAlertasBodega={() => setMostrarAlertasBodega((actual) => !actual)}
     onTogglePedidosBodegaHoy={() => setMostrarPedidosBodegaHoy((actual) => !actual)}
     onToggleRecepcionesBodega={() => setMostrarRecepcionesBodega((actual) => !actual)}
