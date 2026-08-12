@@ -462,19 +462,21 @@ function BodegaModal({
 
             {puedeExportarInventario && (
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMostrarRecepcionarMaterial((actual) => !actual)
-                    setMostrarCrearPedido(false)
-                    setMostrarCrearDevolucion(false)
-                    setMostrarIngresoProveedor(false)
-                    setMostrarSalidaMaterial(false)
-                  }}
-                  style={botonVerde}
-                >
-                  Recepcionar material
-                </button>
+                {modoSoloBodega && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarRecepcionarMaterial((actual) => !actual)
+                      setMostrarCrearPedido(false)
+                      setMostrarCrearDevolucion(false)
+                      setMostrarIngresoProveedor(false)
+                      setMostrarSalidaMaterial(false)
+                    }}
+                    style={botonVerde}
+                  >
+                    Recepcionar material
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onExportarInventario}
