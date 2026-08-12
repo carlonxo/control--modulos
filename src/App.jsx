@@ -2562,7 +2562,6 @@ async function entregarSolicitudBodega(alerta) {
   }
 
   const actualizacionesPorItem = {}
-  const noEncontrados = []
   const itemsSinDescuento = []
 
   for (const itemSolicitud of itemsSolicitud) {
@@ -2583,7 +2582,7 @@ async function entregarSolicitudBodega(alerta) {
     ))
 
     if (!itemInventario?.id) {
-      noEncontrados.push(nombreSolicitud)
+      itemsSinDescuento.push(`${nombreSolicitud || codigoSolicitud || 'Material'} (no encontrado en inventario)`)
       continue
     }
 
@@ -2600,24 +2599,20 @@ async function entregarSolicitudBodega(alerta) {
     actualizacionesPorItem[clave].nombres.add(nombreSolicitud)
   }
 
-  const actualizaciones = Object.values(actualizacionesPorItem).map((actualizacion) => {
+  const actualizaciones = Object.values(actualizacionesPorItem).flatMap((actualizacion) => {
     const saldoActual = Number(actualizacion.itemInventario.saldoFinal || 0)
     const cantidad = Number(actualizacion.cantidad || 0)
     if (cantidad > saldoActual) {
-      noEncontrados.push(`${[...actualizacion.nombres][0] || actualizacion.itemInventario.descripcion} (stock insuficiente: ${saldoActual.toLocaleString('es-CL')})`)
+      itemsSinDescuento.push(`${[...actualizacion.nombres][0] || actualizacion.itemInventario.descripcion} (stock insuficiente: ${saldoActual.toLocaleString('es-CL')})`)
+      return []
     }
-    return {
+    return [{
       itemInventario: actualizacion.itemInventario,
       cantidad,
       nuevoSaldoFinal: saldoActual - cantidad,
       nuevasSalidas: Number(actualizacion.itemInventario.salidas || 0) + cantidad,
-    }
+    }]
   })
-
-  if (noEncontrados.length > 0) {
-    mostrarNotificacion('No se encontraron en el inventario: ' + noEncontrados.join(', '))
-    return false
-  }
 
   const mensajeConfirmacion = itemsSinDescuento.length > 0
     ? `¿Confirmar pedido entregado y descontar material del inventario?\n\n` +
