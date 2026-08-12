@@ -20,6 +20,7 @@ function BodegaModal({
   puedeAdministrar,
   puedeVerPedidosHoy,
   puedeEditarPedidos,
+  puedeEditarPedidosEntregados,
   puedeGestionarPedidos,
   archivo,
   inventarios = [],
@@ -342,6 +343,7 @@ function BodegaModal({
           entregando={entregandoSolicitudBodega}
           materialesInventario={materialesInventario}
           puedeEditar={puedeEditarPedidos}
+          puedeEditarEntregados={puedeEditarPedidosEntregados}
           puedeGestionar={puedeGestionarPedidos}
           onEditar={async (itemsEditados) => {
             const resultado = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
@@ -1111,6 +1113,7 @@ function DetalleSolicitudBodega({
   entregando,
   materialesInventario = [],
   puedeEditar,
+  puedeEditarEntregados,
   puedeGestionar,
   onEditar,
   onEntregar,
@@ -1122,6 +1125,7 @@ function DetalleSolicitudBodega({
   const [filaSugerenciasEdicion, setFilaSugerenciasEdicion] = useState(null)
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
   const entregado = String(alerta?.estado_bodega || '').toLowerCase() === 'entregado'
+  const puedeEditarEstePedido = puedeEditar && esPedido && (!entregado || puedeEditarEntregados)
   const fueModificadoPorBodega = tieneMarcaModificacionBodega(alerta.observacion)
 
   useEffect(() => {
@@ -1187,7 +1191,7 @@ function DetalleSolicitudBodega({
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {puedeEditar && esPedido && !entregado && !editando && (
+            {puedeEditarEstePedido && !editando && (
               <button type="button" onClick={() => setEditando(true)} style={botonMiniAzul}>
                 Editar
               </button>
