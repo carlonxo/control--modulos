@@ -337,7 +337,7 @@ function BodegaModal({
             const resultado = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
             if (!resultado) return false
             if (resultado?.items) {
-              setAlertaBodegaSeleccionada((actual) => ({ ...actual, items: resultado.items }))
+              setAlertaBodegaSeleccionada((actual) => ({ ...actual, ...resultado }))
             }
             onActualizarAlertasBodega?.()
             return true
@@ -1093,6 +1093,7 @@ function DetalleSolicitudBodega({
   const [filaSugerenciasEdicion, setFilaSugerenciasEdicion] = useState(null)
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
   const entregado = String(alerta?.estado_bodega || '').toLowerCase() === 'entregado'
+  const fueModificadoPorBodega = tieneMarcaModificacionBodega(alerta.observacion)
 
   useEffect(() => {
     setItemsEditados((alerta?.items || []).map((item) => ({
@@ -1162,8 +1163,16 @@ function DetalleSolicitudBodega({
           </div>
         </div>
 
-        {limpiarObservacionSolicitudBodega(alerta.observacion) && (
-          <div style={{ padding: '10px', border: '1px solid #795548', borderRadius: '8px', background: '#2b211b', color: '#ffcc80', marginBottom: '12px' }}>
+        {(limpiarObservacionSolicitudBodega(alerta.observacion) || fueModificadoPorBodega) && (
+          <div
+            className={fueModificadoPorBodega ? 'vale-bodega-modificado' : ''}
+            style={{ padding: '10px', border: '1px solid #795548', borderRadius: '8px', background: '#2b211b', color: '#ffcc80', marginBottom: '12px' }}
+          >
+            {fueModificadoPorBodega && (
+              <span style={{ display: 'inline-block', marginRight: '8px', color: '#ffe082', fontWeight: 900 }}>
+                Editado por bodega
+              </span>
+            )}
             {limpiarObservacionSolicitudBodega(alerta.observacion)}
           </div>
         )}
@@ -1831,7 +1840,14 @@ function limpiarObservacionSolicitudBodega(observacion = '') {
     .split('|')
     .map((parte) => parte.trim())
     .filter((parte) => parte && normalizarBusqueda(parte) !== 'pedido generado desde app')
+    .filter((parte) => !normalizarBusqueda(parte).startsWith('modificado por bodega'))
     .join(' | ')
+}
+
+function tieneMarcaModificacionBodega(observacion = '') {
+  return String(observacion || '')
+    .split('|')
+    .some((parte) => normalizarBusqueda(parte).startsWith('modificado por bodega'))
 }
 
 const labelStyle = {

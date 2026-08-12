@@ -325,6 +325,17 @@ function obtenerBodegaDesdeObservacion(observacion = '') {
   return normalizarBodega(parteBodega.split(':').slice(1).join(':'))
 }
 
+function agregarMarcaObservacionVale(observacion = '', marca = '') {
+  const partes = String(observacion || '')
+    .split('|')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+    .filter((parte) => !normalizarTextoComparacion(parte).startsWith('modificadoporbodega'))
+
+  if (marca) partes.push(marca)
+  return partes.join(' | ')
+}
+
 function obtenerBodegaInventario(inventario = {}) {
   return normalizarBodega([
     inventario.bodega,
@@ -2703,14 +2714,22 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
     return false
   }
 
-  const pedidoActualizado = { ...alerta, items: itemsGuardados || items }
+  const marcaEdicion = `Modificado por bodega: ${perfil?.nombre || perfil?.email || session?.user?.email || 'bodega'}`
+  const observacionActualizada = agregarMarcaObservacionVale(alerta.observacion, marcaEdicion)
+  const { error: errorMarcaEdicion } = await supabase
+    .from('vales_bodega')
+    .update({ observacion: observacionActualizada })
+    .eq('id', alerta.id)
+
+  const observacionFinal = errorMarcaEdicion ? alerta.observacion : observacionActualizada
+  const pedidoActualizado = { ...alerta, observacion: observacionFinal, items: itemsGuardados || items }
   setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
     vale.id === alerta.id ? pedidoActualizado : vale
   )))
   setAlertasBodega((actuales) => actuales.map((vale) => (
     vale.id === alerta.id ? pedidoActualizado : vale
   )))
-  mostrarNotificacion('Pedido actualizado correctamente')
+  mostrarNotificacion(errorMarcaEdicion ? 'Pedido actualizado, pero no se pudo marcar como editado' : 'Pedido actualizado correctamente')
   await cargarAlertasBodega()
   return pedidoActualizado
 }

@@ -17,6 +17,23 @@
   }
 }
 
+.vale-bodega-modificado {
+  animation: vale-bodega-modificado-pulso 2.6s ease-in-out infinite;
+}
+
+@keyframes vale-bodega-modificado-pulso {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(255, 193, 7, 0);
+    border-color: #795548;
+  }
+
+  50% {
+    box-shadow: 0 0 14px rgba(255, 193, 7, 0.22);
+    border-color: #d6a847;
+  }
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
