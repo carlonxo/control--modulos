@@ -692,6 +692,7 @@ const puedeVerValesBodega = tienePermiso(perfil?.rol, 'verValesBodega')
 const puedeVerBodega = tienePermiso(perfil?.rol, 'verBodega')
 const puedeExportarInventarioBodega = tienePermiso(perfil?.rol, 'exportarInventarioBodega')
 const puedeAdministrarBodega = tienePermiso(perfil?.rol, 'administrarBodega')
+const puedeVerPedidosBodegaHoy = tienePermiso(perfil?.rol, 'verPedidosBodegaHoy')
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
@@ -1145,9 +1146,9 @@ useEffect(() => {
 }, [datos, recibeAvisosPrueba])
 
 useEffect(() => {
-  if (!esRolBodega || !puedeVerBodega) return
+  if (!puedeVerBodega || (!esRolBodega && !mostrarBodega)) return
 
-  setMostrarBodega(true)
+  if (esRolBodega) setMostrarBodega(true)
   cargarInventariosBodega()
   cargarAlertasBodega()
   cargarRecepcionesBodega()
@@ -1158,7 +1159,7 @@ useEffect(() => {
   }, 7000)
 
   return () => clearInterval(intervalo)
-}, [esRolBodega, puedeVerBodega])
+}, [esRolBodega, puedeVerBodega, mostrarBodega])
 
 if (!session) {
   return <Login supabase={supabase} />
@@ -1880,7 +1881,7 @@ async function cargarValesBodegaDia(fecha = fechaValeBodega) {
 }
 
 async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
-  if (!fecha || !esRolBodega) return
+  if (!fecha || !puedeVerBodega) return
 
   const { vales, error } = await cargarValesBodegaDiaSupabase({
     supabase,
@@ -2249,6 +2250,8 @@ async function abrirBodega() {
   setMostrarBodega(true)
   await cargarSolicitantesValesBodega()
   await cargarInventariosBodega()
+  await cargarAlertasBodega()
+  await cargarRecepcionesBodega()
 }
 
 async function leerInventarioBodega() {
@@ -2529,12 +2532,16 @@ async function entregarSolicitudBodega(alerta) {
     return false
   }
 
-  const actualizaciones = []
+  const actualizacionesPorItem = {}
   const noEncontrados = []
 
   for (const itemSolicitud of itemsSolicitud) {
+    const codigoSolicitud = String(itemSolicitud.material_vale || '').trim()
     const nombreSolicitud = itemSolicitud.material_balance || itemSolicitud.material_vale || ''
     const itemInventario = (inventarioActual.items || []).find((item) => (
+      codigoSolicitud &&
+      normalizarTextoComparacion(item.codigo) === normalizarTextoComparacion(codigoSolicitud)
+    )) || (inventarioActual.items || []).find((item) => (
       normalizarTextoComparacion(item.descripcion) === normalizarTextoComparacion(nombreSolicitud) ||
       normalizarTextoComparacion(item.codigo) === normalizarTextoComparacion(nombreSolicitud)
     ))
@@ -2545,19 +2552,31 @@ async function entregarSolicitudBodega(alerta) {
     }
 
     const cantidad = Number(itemSolicitud.cantidad || 0)
-    const saldoActual = Number(itemInventario.saldoFinal || 0)
-    if (cantidad > saldoActual) {
-      noEncontrados.push(`${nombreSolicitud} (stock insuficiente: ${saldoActual.toLocaleString('es-CL')})`)
-      continue
-    }
+    if (cantidad <= 0) continue
 
-    actualizaciones.push({
+    const clave = itemInventario.id
+    actualizacionesPorItem[clave] = actualizacionesPorItem[clave] || {
       itemInventario,
+      cantidad: 0,
+      nombres: new Set(),
+    }
+    actualizacionesPorItem[clave].cantidad += cantidad
+    actualizacionesPorItem[clave].nombres.add(nombreSolicitud)
+  }
+
+  const actualizaciones = Object.values(actualizacionesPorItem).map((actualizacion) => {
+    const saldoActual = Number(actualizacion.itemInventario.saldoFinal || 0)
+    const cantidad = Number(actualizacion.cantidad || 0)
+    if (cantidad > saldoActual) {
+      noEncontrados.push(`${[...actualizacion.nombres][0] || actualizacion.itemInventario.descripcion} (stock insuficiente: ${saldoActual.toLocaleString('es-CL')})`)
+    }
+    return {
+      itemInventario: actualizacion.itemInventario,
       cantidad,
       nuevoSaldoFinal: saldoActual - cantidad,
-      nuevasSalidas: Number(itemInventario.salidas || 0) + cantidad,
-    })
-  }
+      nuevasSalidas: Number(actualizacion.itemInventario.salidas || 0) + cantidad,
+    }
+  })
 
   if (noEncontrados.length > 0) {
     mostrarNotificacion('No se encontraron en el inventario: ' + noEncontrados.join(', '))
@@ -5873,6 +5892,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   <BodegaModal
     modoSoloBodega={esRolBodega}
     puedeAdministrar={puedeAdministrarBodega}
+    puedeVerPedidosHoy={puedeVerPedidosBodegaHoy}
+    puedeGestionarPedidos={esRolBodega}
     archivo={archivoInventarioBodega}
     inventarios={inventariosBodega}
     solicitantes={solicitantesValeBodega}

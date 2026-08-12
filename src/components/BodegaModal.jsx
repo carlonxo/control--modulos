@@ -11,6 +11,8 @@ const filaMovimientoVacia = {
 function BodegaModal({
   modoSoloBodega,
   puedeAdministrar,
+  puedeVerPedidosHoy,
+  puedeGestionarPedidos,
   archivo,
   inventarios = [],
   solicitantes = [],
@@ -98,6 +100,7 @@ function BodegaModal({
   const [materialesRecepcion, setMaterialesRecepcion] = useState([{ ...filaMovimientoVacia }])
   const inventarioSeleccionado = inventarios.find((item) => item.id === inventarioSeleccionadoId) || inventarios[0]
   const materialesInventario = inventarioSeleccionado?.items || []
+  const mostrarPedidosHoy = Boolean(puedeVerPedidosHoy)
   const electricosDisponibles = useMemo(() => (
     (solicitantes || [])
       .filter((item) => normalizarBusqueda(item.rol).includes('electrico'))
@@ -329,6 +332,7 @@ function BodegaModal({
           alerta={alertaBodegaSeleccionada}
           entregando={entregandoSolicitudBodega}
           materialesInventario={materialesInventario}
+          puedeGestionar={puedeGestionarPedidos}
           onEditar={async (itemsEditados) => {
             const resultado = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
             if (!resultado) return false
@@ -436,7 +440,7 @@ function BodegaModal({
               <Tarjeta titulo="Materiales" valor={inventarioSeleccionado?.totalItems || 0} />
             </div>
 
-            {modoSoloBodega && (
+            {mostrarPedidosHoy && (
               <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
                 <Tarjeta
                   titulo="Pedidos hoy"
@@ -544,7 +548,7 @@ function BodegaModal({
             )}
           </div>
 
-          {modoSoloBodega && mostrarPedidosBodegaHoy && (
+          {mostrarPedidosHoy && mostrarPedidosBodegaHoy && (
             <PanelPedidosBodegaHoy
               pedidos={pedidosBodegaHoy}
               onSeleccionar={setAlertaBodegaSeleccionada}
@@ -1078,6 +1082,7 @@ function DetalleSolicitudBodega({
   alerta,
   entregando,
   materialesInventario = [],
+  puedeGestionar,
   onEditar,
   onEntregar,
   onCerrar,
@@ -1146,7 +1151,7 @@ function DetalleSolicitudBodega({
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {esPedido && !entregado && !editando && (
+            {puedeGestionar && esPedido && !entregado && !editando && (
               <button type="button" onClick={() => setEditando(true)} style={botonMiniAzul}>
                 Editar
               </button>
@@ -1297,7 +1302,7 @@ function DetalleSolicitudBodega({
               </button>
             </>
           )}
-          {esPedido && (
+          {puedeGestionar && esPedido && (
             <button
               type="button"
               disabled={entregando || entregado || editando}

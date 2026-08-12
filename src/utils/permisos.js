@@ -18,6 +18,7 @@ const permisosPorAccion = {
   verBodega: ['admin', 'analista', 'operador', 'bodega'],
   exportarInventarioBodega: ['admin', 'analista', 'bodega'],
   administrarBodega: ['admin'],
+  verPedidosBodegaHoy: ['admin', 'operador', 'bodega'],
   eliminarProtocolosMensuales: ['admin', 'analista'],
   ajustarValoresProtocolos: ['admin', 'analista'],
   verMenuModulo: ['admin', 'operador'],
