@@ -13,6 +13,7 @@ function BalanceMaterialesModal({
   configMateriales = {},
   materialesCatalogados = [],
   catalogoPrecios = [],
+  equivalenciasMateriales = [],
   preciosMateriales = {},
   preciosCompraMateriales = {},
   lineasDisponibles = [],
@@ -152,6 +153,7 @@ function BalanceMaterialesModal({
     solicitantesDisponibles,
     solicitantesSeleccionados: solicitantesGrupo,
     lineasSeleccionadas: lineasGrupo,
+    equivalenciasMateriales,
     normalizarTextoComparacion: normalizarTextoBalance,
   })
   const alertasGrupo = trazabilidadGrupo.filter((fila) => fila.estado === 'critico' && fila.diferencia > 0).length

@@ -25,6 +25,7 @@ import BalanceMantencionModal from './components/BalanceMantencionModal'
 import ValesBodegaModal from './components/ValesBodegaModal'
 import BodegaModal from './components/BodegaModal'
 import UsuariosBodegaModal from './components/UsuariosBodegaModal'
+import EquivalenciasMaterialesModal from './components/EquivalenciasMaterialesModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
 import {
@@ -50,6 +51,12 @@ import {
 } from './services/bodegaInventarioService'
 import { compilarBalanceMateriales } from './services/balanceMaterialesService'
 import { compilarTrazabilidadMaterialesPorSolicitante } from './services/trazabilidadMaterialesService'
+import {
+  cargarEquivalenciasMateriales as cargarEquivalenciasMaterialesSupabase,
+  combinarEquivalenciasMateriales,
+  equivalenciasMaterialesBase,
+  guardarEquivalenciasMateriales as guardarEquivalenciasMaterialesSupabase,
+} from './services/materialEquivalenciasService'
 import {
   cargarConfigBalanceMateriales as cargarConfigBalanceMaterialesSupabase,
   guardarConfigBalanceMaterial,
@@ -617,6 +624,7 @@ const [mostrarReintegrar, setMostrarReintegrar] = useState(false)
 const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false)
 const [mostrarPreciosMateriales, setMostrarPreciosMateriales] = useState(false)
 const [mostrarUsuariosBodega, setMostrarUsuariosBodega] = useState(false)
+const [mostrarEquivalenciasMateriales, setMostrarEquivalenciasMateriales] = useState(false)
 const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(false)
 const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
 const [mostrarBalanceMantencion, setMostrarBalanceMantencion] = useState(false)
@@ -682,6 +690,9 @@ const [usuariosBodega, setUsuariosBodega] = useState([])
 const [cargandoUsuariosBodega, setCargandoUsuariosBodega] = useState(false)
 const [guardandoUsuarioBodegaId, setGuardandoUsuarioBodegaId] = useState(null)
 const [guardandoUsuariosBodega, setGuardandoUsuariosBodega] = useState(false)
+const [equivalenciasMateriales, setEquivalenciasMateriales] = useState(equivalenciasMaterialesBase)
+const [cargandoEquivalenciasMateriales, setCargandoEquivalenciasMateriales] = useState(false)
+const [guardandoEquivalenciasMateriales, setGuardandoEquivalenciasMateriales] = useState(false)
 const [idOtEnEdicion, setIdOtEnEdicion] = useState(null)
 const [idsOtEnEdicion, setIdsOtEnEdicion] = useState(['', '', ''])
 const [detalleCobroSeleccionado, setDetalleCobroSeleccionado] = useState(null)
@@ -733,6 +744,7 @@ const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiar
 const puedeVerMenuModulo = tienePermiso(perfil?.rol, 'verMenuModulo')
 const esRolBodega = perfil?.rol === 'bodega'
 const puedeAdministrarUsuariosBodega = perfil?.rol === 'admin'
+const puedeAdministrarEquivalenciasMateriales = perfil?.rol === 'admin'
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
 const normalizarProyectoFiltro = (proyecto) => String(proyecto || '')
   .replace(/\s*\([^)]*\)\s*$/g, '')
@@ -820,7 +832,8 @@ const catalogoPreciosBaseYGuardado = [
 ]
 const catalogoPreciosParaBalance = catalogoPreciosBaseYGuardado.map((item) => ({
   ...item,
-    precio: primerPrecioDisponible(preciosMateriales[item.material], preciosMateriales[item.materialOriginal], item.precio),
+  codigoBodega: codigosBodegaMateriales[item.material] ?? codigosBodegaMateriales[item.materialOriginal] ?? item.codigoBodega ?? '',
+  precio: primerPrecioDisponible(preciosMateriales[item.material], preciosMateriales[item.materialOriginal], item.precio),
   precioCompra: primerPrecioDisponible(
     preciosCompraMateriales[item.material],
     preciosCompraMateriales[item.materialOriginal],
@@ -832,12 +845,14 @@ const balanceMateriales = compilarBalanceMateriales(protocolosBalanceMateriales,
   catalogoPreciosProtocolo: catalogoPreciosParaBalance,
   equivalenciasPrecioProtocolo,
   equivalenciasValeBodega,
+  equivalenciasMateriales,
   normalizarTextoComparacion,
 })
 const trazabilidadMaterialesSolicitante = compilarTrazabilidadMaterialesPorSolicitante({
   registros: protocolosBalanceMateriales,
   vales: valesBalanceMateriales,
   catalogoPrecios: catalogoPreciosParaBalance,
+  equivalenciasMateriales,
   normalizarTextoComparacion,
 })
 const catalogoPreciosMaterialesBaseCompleto = construirCatalogoPreciosMaterialesCompleto({
@@ -1067,6 +1082,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
     setMostrarDescargaProtocolos,
     setMostrarPreciosMateriales,
     setMostrarUsuariosBodega,
+    setMostrarEquivalenciasMateriales,
     setMostrarBalanceMateriales,
     setMostrarBalanceMantencion,
     setMostrarValesBodega,
@@ -1455,6 +1471,48 @@ async function abrirUsuariosBodega() {
   await cargarUsuariosBodega()
 }
 
+async function abrirEquivalenciasMateriales() {
+  if (!puedeAdministrarEquivalenciasMateriales) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setMostrarEquivalenciasMateriales(true)
+  await cargarEquivalenciasMateriales()
+}
+
+async function cargarEquivalenciasMateriales() {
+  setCargandoEquivalenciasMateriales(true)
+  const { data, error } = await cargarEquivalenciasMaterialesSupabase({ supabase })
+  setCargandoEquivalenciasMateriales(false)
+
+  setEquivalenciasMateriales(data || equivalenciasMaterialesBase)
+
+  if (error) {
+    mostrarNotificacion('No se pudieron cargar equivalencias desde Supabase. Se usarán las equivalencias base.')
+  }
+
+  return data || equivalenciasMaterialesBase
+}
+
+async function guardarEquivalenciasMateriales(filas = []) {
+  if (!puedeAdministrarEquivalenciasMateriales) return
+
+  const equivalenciasLimpias = combinarEquivalenciasMateriales(filas)
+  setGuardandoEquivalenciasMateriales(true)
+  const { data, error } = await guardarEquivalenciasMaterialesSupabase({
+    supabase,
+    equivalencias: equivalenciasLimpias,
+  })
+  setGuardandoEquivalenciasMateriales(false)
+
+  if (error) {
+    mostrarNotificacion(`No se pudieron guardar equivalencias: ${error.message || 'error desconocido'}`)
+    return
+  }
+
+  setEquivalenciasMateriales(data || equivalenciasLimpias)
+  mostrarNotificacion('Equivalencias de materiales guardadas')
+}
+
 async function cargarUsuariosBodega() {
   if (!puedeAdministrarUsuariosBodega) return
 
@@ -1743,7 +1801,11 @@ function actualizarConfigBalanceMaterial(clave, cambios) {
   })
 }
 
-async function cargarBalanceMateriales(valor = fechaBalanceMateriales, rango = rangoBalanceMateriales) {
+async function cargarBalanceMateriales(
+  valor = fechaBalanceMateriales,
+  rango = rangoBalanceMateriales,
+  equivalenciasActuales = equivalenciasMateriales
+) {
   if (!puedeVerBalanceMateriales || !valor) return { registros: [], vales: [] }
 
   setCargandoBalanceMateriales(true)
@@ -1798,10 +1860,11 @@ async function abrirBalanceMateriales() {
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarBalanceMateriales(true)
+  const equivalenciasActuales = await cargarEquivalenciasMateriales()
   await Promise.all([
     cargarConfigBalanceMateriales(),
     cargarSolicitantesValesBodega(),
-    cargarBalanceMateriales(),
+    cargarBalanceMateriales(fechaBalanceMateriales, rangoBalanceMateriales, equivalenciasActuales),
   ])
 }
 
@@ -1831,7 +1894,11 @@ function completarCompraMaterialesBalance(filas = [], preciosCompraActuales = pr
   })
 }
 
-async function cargarBalanceMantencion(valor = fechaBalanceMantencion, rango = rangoBalanceMantencion) {
+async function cargarBalanceMantencion(
+  valor = fechaBalanceMantencion,
+  rango = rangoBalanceMantencion,
+  equivalenciasActuales = equivalenciasMateriales
+) {
   if (!puedeVerBalanceMantencion || !valor) return
 
   setCargandoBalanceMantencion(true)
@@ -1852,6 +1919,7 @@ async function cargarBalanceMantencion(valor = fechaBalanceMantencion, rango = r
     catalogoPreciosProtocolo: catalogoPreciosParaBalance,
     equivalenciasPrecioProtocolo,
     equivalenciasValeBodega,
+    equivalenciasMateriales: equivalenciasActuales,
     normalizarTextoComparacion,
   })
 
@@ -1868,7 +1936,8 @@ async function abrirBalanceMantencion() {
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarBalanceMantencion(true)
-  await cargarBalanceMantencion()
+  const equivalenciasActuales = await cargarEquivalenciasMateriales()
+  await cargarBalanceMantencion(fechaBalanceMantencion, rangoBalanceMantencion, equivalenciasActuales)
 }
 
 async function cargarValesBodegaPorRango(valor = fechaBalanceMateriales, rango = rangoBalanceMateriales) {
@@ -4783,6 +4852,25 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     Precios materiales
                   </button>
                 )}
+                {puedeAdministrarEquivalenciasMateriales && (
+                  <button
+                    type="button"
+                    onClick={abrirEquivalenciasMateriales}
+                    style={{
+                      width: '100%',
+                      marginTop: '8px',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #555',
+                      background: '#00695c',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Equivalencias materiales
+                  </button>
+                )}
                 {puedeAdministrarUsuariosBodega && (
                   <button
                     type="button"
@@ -6020,6 +6108,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       item.materialOriginal,
     ]).filter(Boolean)}
     catalogoPrecios={catalogoPreciosMaterialesCompleto}
+    equivalenciasMateriales={equivalenciasMateriales}
     preciosMateriales={preciosMateriales}
     preciosCompraMateriales={preciosCompraMateriales}
     lineasDisponibles={LINEAS_TABLERO}
@@ -6165,6 +6254,17 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardar={guardarPreciosMateriales}
     onCerrar={() => setMostrarPreciosMateriales(false)}
     onClickFondo={cerrarPanelesFlotantes}
+  />
+)}
+
+{mostrarEquivalenciasMateriales && puedeAdministrarEquivalenciasMateriales && (
+  <EquivalenciasMaterialesModal
+    equivalencias={equivalenciasMateriales}
+    materialesCatalogo={catalogoPreciosMaterialesCompleto.map((item) => item.material)}
+    cargando={cargandoEquivalenciasMateriales}
+    guardando={guardandoEquivalenciasMateriales}
+    onGuardar={guardarEquivalenciasMateriales}
+    onCerrar={() => setMostrarEquivalenciasMateriales(false)}
   />
 )}
 
