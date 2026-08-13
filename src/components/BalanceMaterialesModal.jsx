@@ -527,11 +527,34 @@ function TablaTrazabilidadMateriales({
 
   return (
     <div>
-      <FiltroMaterialTrazabilidad
-        opciones={opcionesMateriales}
-        valor={materialSeleccionado}
-        onCambiar={onCambiarMaterial}
-      />
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+        <FiltroMaterialTrazabilidad
+          opciones={opcionesMateriales}
+          valor={materialSeleccionado}
+          onCambiar={onCambiarMaterial}
+        />
+        <button
+          type="button"
+          onClick={() => imprimirDetalleMateriales({
+            filas: filasConDiferencia,
+            materialSeleccionado,
+            opcionesMateriales,
+            configMateriales,
+            formatearPrecio,
+          })}
+          style={{
+            padding: '9px 14px',
+            borderRadius: '8px',
+            border: '1px solid #64b5f6',
+            background: '#1565c0',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 800,
+          }}
+        >
+          Imprimir detalle
+        </button>
+      </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
         <thead>
@@ -1274,6 +1297,87 @@ function imprimirDetalleGrupo({
               <th>Material</th>
               <th>Retirado grupo</th>
               <th>Instalado lineas</th>
+              <th>Diferencia</th>
+              <th>% fuga</th>
+              <th>Valor fuga</th>
+            </tr>
+          </thead>
+          <tbody>${filasHtml}</tbody>
+        </table>
+      </body>
+    </html>
+  `)
+  ventana.document.close()
+  ventana.focus()
+  ventana.print()
+}
+
+function imprimirDetalleMateriales({
+  filas = [],
+  materialSeleccionado = '__todos__',
+  opcionesMateriales = [],
+  configMateriales = {},
+  formatearPrecio,
+}) {
+  if (filas.length === 0 || typeof window === 'undefined') return
+
+  const materialTexto = materialSeleccionado === '__todos__'
+    ? 'Todos los materiales'
+    : opcionesMateriales.find((opcion) => opcion.valor === materialSeleccionado)?.etiqueta || materialSeleccionado
+  const filasHtml = filas.map((fila) => {
+    const alertaDesactivada = esAlertaMaterialDesactivada(fila, configMateriales)
+    const estado = alertaDesactivada
+      ? 'Silenciada'
+      : fila.estado === 'critico'
+        ? 'Critico'
+        : fila.estado === 'alerta'
+          ? 'Alerta'
+          : 'OK'
+    return `
+      <tr>
+        <td>${escaparHtml(estado)}</td>
+        <td>${escaparHtml(fila.material)}</td>
+        <td class="numero">${escaparHtml(fila.retirado || '-')}</td>
+        <td class="numero">${escaparHtml(fila.cobrado || '-')}</td>
+        <td class="numero">${escaparHtml(fila.diferencia)}</td>
+        <td class="numero">${Number(fila.porcentajeDiferencia || 0).toFixed(1)}%</td>
+        <td class="numero">${escaparHtml(formatearPrecio(fila.valorDiferencia || 0))}</td>
+      </tr>
+    `
+  }).join('')
+
+  const ventana = window.open('', '_blank')
+  if (!ventana) return
+
+  ventana.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Detalle balance por material</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
+          h1 { margin: 0 0 8px; font-size: 22px; }
+          .meta { margin: 0 0 14px; line-height: 1.5; font-size: 13px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
+          th { background: #e0e0e0; }
+          .numero { text-align: right; }
+          @media print { body { margin: 12mm; } }
+        </style>
+      </head>
+      <body>
+        <h1>Detalle balance por material</h1>
+        <div class="meta">
+          <div><strong>Material:</strong> ${escaparHtml(materialTexto)}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Estado</th>
+              <th>Material</th>
+              <th>Total retirado</th>
+              <th>Total cobrado</th>
               <th>Diferencia</th>
               <th>% fuga</th>
               <th>Valor fuga</th>
