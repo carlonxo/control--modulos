@@ -146,14 +146,16 @@ function BalanceMaterialesModal({
   )
   const indicadorBalance = mostrarReutilizados ? totalValorReutilizados : balanceTotal
   const colorBalanceTotal = balanceTotal > 0 ? '#66bb6a' : balanceTotal < 0 ? '#ff5252' : 'white'
-  const alertasCriticas = trazabilidadSolicitantes.filter((fila) => (
+  const trazabilidadMateriales = agruparTrazabilidadPorMaterial(trazabilidadSolicitantes)
+  const trazabilidadMaterialesOrdenada = ordenarTrazabilidadPorEstadoAlerta(trazabilidadMateriales, configMateriales)
+  const alertasCriticas = trazabilidadMateriales.filter((fila) => (
     fila.estado === 'critico' &&
     fila.diferencia > 0 &&
     !esAlertaMaterialDesactivada(fila, configMateriales)
   )).length
-  const opcionesMaterialesSolicitante = obtenerOpcionesMaterialesTrazabilidad(trazabilidadSolicitantes)
+  const opcionesMaterialesSolicitante = obtenerOpcionesMaterialesTrazabilidad(trazabilidadMaterialesOrdenada)
   const trazabilidadSolicitantesFiltrada = filtrarTrazabilidadPorMaterial(
-    trazabilidadSolicitantes,
+    trazabilidadMaterialesOrdenada,
     materialSolicitanteFiltro
   )
   const opcionesSolicitantesGrupo = obtenerOpcionesSolicitantesGrupo(itemsVales, solicitantesDisponibles)
@@ -306,7 +308,7 @@ function BalanceMaterialesModal({
             cursor: 'pointer',
           }}
         >
-          Por solicitante ({alertasCriticas} alertas)
+          Por material ({alertasCriticas} alertas)
         </button>
         <button
           type="button"
@@ -352,7 +354,7 @@ function BalanceMaterialesModal({
             formatearPrecio={formatearPrecio}
           />
         ) : mostrarPorSolicitante ? (
-          <TablaTrazabilidadSolicitantes
+          <TablaTrazabilidadMateriales
             filas={trazabilidadSolicitantesFiltrada}
             opcionesMateriales={opcionesMaterialesSolicitante}
             materialSeleccionado={materialSolicitanteFiltro}
@@ -499,7 +501,7 @@ function TablaBalanceMateriales({
   )
 }
 
-function TablaTrazabilidadSolicitantes({
+function TablaTrazabilidadMateriales({
   filas,
   opcionesMateriales = [],
   materialSeleccionado = '__todos__',
@@ -518,7 +520,7 @@ function TablaTrazabilidadSolicitantes({
           valor={materialSeleccionado}
           onCambiar={onCambiarMaterial}
         />
-        <p style={{ color: '#ccc' }}>No hay diferencias por solicitante para el material seleccionado.</p>
+        <p style={{ color: '#ccc' }}>No hay diferencias por material para el material seleccionado.</p>
       </div>
     )
   }
@@ -535,10 +537,9 @@ function TablaTrazabilidadSolicitantes({
         <thead>
           <tr style={{ background: '#333' }}>
             <th style={thStyle}>Estado</th>
-            <th style={thStyle}>Solicitante</th>
             <th style={thStyle}>Material</th>
-            <th style={{ ...thStyle, textAlign: 'right' }}>Retirado</th>
-            <th style={{ ...thStyle, textAlign: 'right' }}>Cobrado</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Total retirado</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Total cobrado</th>
             <th style={{ ...thStyle, textAlign: 'right' }}>Diferencia</th>
             <th style={{ ...thStyle, textAlign: 'right' }}>% fuga</th>
             <th style={{ ...thStyle, textAlign: 'right' }}>Valor fuga</th>
@@ -584,7 +585,6 @@ function TablaTrazabilidadSolicitantes({
                     </button>
                   </div>
                 </td>
-                <td style={{ ...tdStyle, fontWeight: 800 }}>{fila.solicitante}</td>
                 <td style={tdStyle}>{fila.material}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.retirado || '-'}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.cobrado || '-'}</td>
@@ -1107,6 +1107,63 @@ function obtenerOpcionesMaterialesTrazabilidad(filas = []) {
 function filtrarTrazabilidadPorMaterial(filas = [], materialSeleccionado = '__todos__') {
   if (!materialSeleccionado || materialSeleccionado === '__todos__') return filas
   return filas.filter((fila) => normalizarTextoBalanceFlexible(fila.material) === materialSeleccionado)
+}
+
+function agruparTrazabilidadPorMaterial(filas = []) {
+  const acumulado = new Map()
+
+  filas.forEach((fila) => {
+    const material = String(fila.material || '').trim()
+    const clave = normalizarTextoBalanceFlexible(material)
+    if (!clave) return
+
+    if (!acumulado.has(clave)) {
+      acumulado.set(clave, {
+        clave,
+        material,
+        retirado: 0,
+        cobrado: 0,
+        diferencia: 0,
+        porcentajeDiferencia: 0,
+        valorDiferencia: 0,
+        precioCompra: Number(fila.precioCompra || 0),
+        estado: 'ok',
+      })
+    }
+
+    const actual = acumulado.get(clave)
+    actual.retirado += Number(fila.retirado || 0)
+    actual.cobrado += Number(fila.cobrado || 0)
+    if (!actual.precioCompra && Number(fila.precioCompra || 0) > 0) {
+      actual.precioCompra = Number(fila.precioCompra || 0)
+    }
+  })
+
+  return [...acumulado.values()]
+    .map((fila) => {
+      const diferencia = Number(fila.retirado || 0) - Number(fila.cobrado || 0)
+      const porcentajeDiferencia = fila.retirado > 0
+        ? (diferencia / fila.retirado) * 100
+        : 0
+      const estado = porcentajeDiferencia > 15
+        ? 'critico'
+        : porcentajeDiferencia > 5
+          ? 'alerta'
+          : 'ok'
+
+      return {
+        ...fila,
+        diferencia,
+        porcentajeDiferencia,
+        valorDiferencia: diferencia * Number(fila.precioCompra || 0),
+        estado,
+      }
+    })
+    .filter((fila) => fila.retirado > 0 || fila.cobrado > 0)
+    .sort((a, b) => (
+      Number(b.valorDiferencia || 0) - Number(a.valorDiferencia || 0) ||
+      Number(b.diferencia || 0) - Number(a.diferencia || 0)
+    ))
 }
 
 function ordenarTrazabilidadPorEstadoAlerta(filas = [], configMateriales = {}) {
