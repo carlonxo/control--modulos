@@ -5,7 +5,7 @@ export async function cargarConfigBalanceMateriales({
 }) {
   const { data, error } = await supabase
     .from('balance_materiales_config')
-    .select('material_key, nombre_visible, valor_compra')
+    .select('*')
 
   if (error) {
     return {
@@ -19,6 +19,7 @@ export async function cargarConfigBalanceMateriales({
     {
       nombreVisible: item.nombre_visible || '',
       valorCompra: item.valor_compra ?? '',
+      alertaDesactivada: Boolean(item.alerta_desactivada),
     },
   ]))
 
@@ -49,6 +50,7 @@ export async function guardarConfigBalanceMaterial({
       material_key: clave,
       nombre_visible: config.nombreVisible || null,
       valor_compra: normalizarPrecioMaterial(config.valorCompra),
+      alerta_desactivada: Boolean(config.alertaDesactivada),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'material_key' })
 

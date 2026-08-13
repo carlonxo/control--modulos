@@ -30,6 +30,8 @@ function BalanceMaterialesModal({
   const [mostrarPorGrupo, setMostrarPorGrupo] = useState(false)
   const [solicitantesGrupo, setSolicitantesGrupo] = useState([])
   const [lineasGrupo, setLineasGrupo] = useState([])
+  const [materialSolicitanteFiltro, setMaterialSolicitanteFiltro] = useState('__todos__')
+  const [materialGrupoFiltro, setMaterialGrupoFiltro] = useState('__todos__')
   const clavesMaterialesCatalogados = new Set(materialesCatalogados.map(normalizarTextoBalance))
   materialesCatalogados.forEach((material) => clavesMaterialesCatalogados.add(normalizarTextoBalanceFlexible(material)))
   const preciosVentaPorMaterial = construirMapaPreciosBalance(catalogoPrecios, preciosMateriales, 'precio')
@@ -144,7 +146,16 @@ function BalanceMaterialesModal({
   )
   const indicadorBalance = mostrarReutilizados ? totalValorReutilizados : balanceTotal
   const colorBalanceTotal = balanceTotal > 0 ? '#66bb6a' : balanceTotal < 0 ? '#ff5252' : 'white'
-  const alertasCriticas = trazabilidadSolicitantes.filter((fila) => fila.estado === 'critico' && fila.diferencia > 0).length
+  const alertasCriticas = trazabilidadSolicitantes.filter((fila) => (
+    fila.estado === 'critico' &&
+    fila.diferencia > 0 &&
+    !esAlertaMaterialDesactivada(fila, configMateriales)
+  )).length
+  const opcionesMaterialesSolicitante = obtenerOpcionesMaterialesTrazabilidad(trazabilidadSolicitantes)
+  const trazabilidadSolicitantesFiltrada = filtrarTrazabilidadPorMaterial(
+    trazabilidadSolicitantes,
+    materialSolicitanteFiltro
+  )
   const opcionesSolicitantesGrupo = obtenerOpcionesSolicitantesGrupo(itemsVales, solicitantesDisponibles)
   const trazabilidadGrupo = compilarTrazabilidadMaterialesPorGrupo({
     registros: registrosProtocolos,
@@ -156,7 +167,13 @@ function BalanceMaterialesModal({
     equivalenciasMateriales,
     normalizarTextoComparacion: normalizarTextoBalance,
   })
-  const alertasGrupo = trazabilidadGrupo.filter((fila) => fila.estado === 'critico' && fila.diferencia > 0).length
+  const alertasGrupo = trazabilidadGrupo.filter((fila) => (
+    fila.estado === 'critico' &&
+    fila.diferencia > 0 &&
+    !esAlertaMaterialDesactivada(fila, configMateriales)
+  )).length
+  const opcionesMaterialesGrupo = obtenerOpcionesMaterialesTrazabilidad(trazabilidadGrupo)
+  const trazabilidadGrupoFiltrada = filtrarTrazabilidadPorMaterial(trazabilidadGrupo, materialGrupoFiltro)
 
   return (
     <div
@@ -320,18 +337,28 @@ function BalanceMaterialesModal({
       ) : (
         mostrarPorGrupo ? (
           <VistaTrazabilidadGrupo
-            filas={trazabilidadGrupo}
+            filas={trazabilidadGrupoFiltrada}
+            opcionesMateriales={opcionesMaterialesGrupo}
+            materialSeleccionado={materialGrupoFiltro}
             solicitantes={opcionesSolicitantesGrupo}
             lineas={lineasDisponibles}
             solicitantesSeleccionados={solicitantesGrupo}
             lineasSeleccionadas={lineasGrupo}
+            onCambiarMaterial={setMaterialGrupoFiltro}
             onCambiarSolicitantes={setSolicitantesGrupo}
             onCambiarLineas={setLineasGrupo}
+            configMateriales={configMateriales}
+            onActualizarConfigMaterial={onActualizarConfigMaterial}
             formatearPrecio={formatearPrecio}
           />
         ) : mostrarPorSolicitante ? (
           <TablaTrazabilidadSolicitantes
-            filas={trazabilidadSolicitantes}
+            filas={trazabilidadSolicitantesFiltrada}
+            opcionesMateriales={opcionesMaterialesSolicitante}
+            materialSeleccionado={materialSolicitanteFiltro}
+            onCambiarMaterial={setMaterialSolicitanteFiltro}
+            configMateriales={configMateriales}
+            onActualizarConfigMaterial={onActualizarConfigMaterial}
             formatearPrecio={formatearPrecio}
           />
         ) : mostrarReutilizados ? (
@@ -474,17 +501,37 @@ function TablaBalanceMateriales({
 
 function TablaTrazabilidadSolicitantes({
   filas,
+  opcionesMateriales = [],
+  materialSeleccionado = '__todos__',
+  onCambiarMaterial,
+  configMateriales = {},
+  onActualizarConfigMaterial,
   formatearPrecio,
 }) {
   const filasConDiferencia = filas.filter((fila) => Number(fila.diferencia || 0) !== 0)
 
   if (filasConDiferencia.length === 0) {
-    return <p style={{ color: '#ccc' }}>No hay diferencias por solicitante en el rango seleccionado.</p>
+    return (
+      <div>
+        <FiltroMaterialTrazabilidad
+          opciones={opcionesMateriales}
+          valor={materialSeleccionado}
+          onCambiar={onCambiarMaterial}
+        />
+        <p style={{ color: '#ccc' }}>No hay diferencias por solicitante para el material seleccionado.</p>
+      </div>
+    )
   }
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
+    <div>
+      <FiltroMaterialTrazabilidad
+        opciones={opcionesMateriales}
+        valor={materialSeleccionado}
+        onCambiar={onCambiarMaterial}
+      />
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
         <thead>
           <tr style={{ background: '#333' }}>
             <th style={thStyle}>Estado</th>
@@ -499,12 +546,17 @@ function TablaTrazabilidadSolicitantes({
         </thead>
         <tbody>
           {filasConDiferencia.map((fila) => {
-            const color = fila.estado === 'critico'
+            const alertaDesactivada = esAlertaMaterialDesactivada(fila, configMateriales)
+            const color = alertaDesactivada
+              ? '#9e9e9e'
+              : fila.estado === 'critico'
               ? '#ff5252'
               : fila.estado === 'alerta'
                 ? '#ffb74d'
                 : '#66bb6a'
-            const etiqueta = fila.estado === 'critico'
+            const etiqueta = alertaDesactivada
+              ? 'Silenciada'
+              : fila.estado === 'critico'
               ? 'Crítico'
               : fila.estado === 'alerta'
                 ? 'Alerta'
@@ -512,7 +564,26 @@ function TablaTrazabilidadSolicitantes({
 
             return (
               <tr key={fila.clave}>
-                <td style={{ ...tdStyle, color, fontWeight: 900 }}>{etiqueta}</td>
+                <td style={{ ...tdStyle, color, fontWeight: 900 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span>{etiqueta}</span>
+                    <button
+                      type="button"
+                      onClick={() => onActualizarConfigMaterial?.(
+                        claveConfigAlertaMaterial(fila),
+                        { alertaDesactivada: !alertaDesactivada }
+                      )}
+                      title={alertaDesactivada ? 'Activar alerta para este material' : 'Desactivar alerta para este material'}
+                      style={{
+                        ...botonIconoAlerta,
+                        borderColor: alertaDesactivada ? '#777' : '#ff8a80',
+                        color: alertaDesactivada ? '#ccc' : '#ffccbc',
+                      }}
+                    >
+                      {alertaDesactivada ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </td>
                 <td style={{ ...tdStyle, fontWeight: 800 }}>{fila.solicitante}</td>
                 <td style={tdStyle}>{fila.material}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.retirado || '-'}</td>
@@ -528,22 +599,30 @@ function TablaTrazabilidadSolicitantes({
             )
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   )
 }
 
 function VistaTrazabilidadGrupo({
   filas,
+  opcionesMateriales = [],
+  materialSeleccionado = '__todos__',
   solicitantes,
   lineas,
   solicitantesSeleccionados,
   lineasSeleccionadas,
+  onCambiarMaterial,
   onCambiarSolicitantes,
   onCambiarLineas,
+  configMateriales = {},
+  onActualizarConfigMaterial,
   formatearPrecio,
 }) {
   const filtrosCompletos = solicitantesSeleccionados.length > 0 && lineasSeleccionadas.length > 0
+  const filasOrdenadas = ordenarTrazabilidadPorEstadoAlerta(filas, configMateriales)
+  const filasImpresion = filasOrdenadas.filter((fila) => Number(fila.diferencia || 0) !== 0)
 
   return (
     <div>
@@ -563,13 +642,85 @@ function VistaTrazabilidadGrupo({
         />
       </div>
 
+      <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-2px 0 10px' }}>
+        <button
+          type="button"
+          onClick={() => imprimirDetalleGrupo({
+            filas: filasImpresion,
+            solicitantes,
+            solicitantesSeleccionados,
+            lineasSeleccionadas,
+            materialSeleccionado,
+            opcionesMateriales,
+            configMateriales,
+            formatearPrecio,
+          })}
+          disabled={!filtrosCompletos || filasImpresion.length === 0}
+          style={{
+            padding: '9px 14px',
+            borderRadius: '8px',
+            border: '1px solid #64b5f6',
+            background: filtrosCompletos && filasImpresion.length > 0 ? '#1565c0' : '#555',
+            color: 'white',
+            cursor: filtrosCompletos && filasImpresion.length > 0 ? 'pointer' : 'not-allowed',
+            fontWeight: 800,
+          }}
+        >
+          Imprimir detalle
+        </button>
+      </div>
+
+      <FiltroMaterialTrazabilidad
+        opciones={opcionesMateriales}
+        valor={materialSeleccionado}
+        onCambiar={onCambiarMaterial}
+      />
+
       {!filtrosCompletos ? (
         <p style={{ color: '#ccc' }}>
           Selecciona al menos un solicitante y una línea para cruzar material retirado versus material instalado.
         </p>
       ) : (
-        <TablaTrazabilidadGrupo filas={filas} formatearPrecio={formatearPrecio} />
+        <TablaTrazabilidadGrupo
+          filas={filasOrdenadas}
+          configMateriales={configMateriales}
+          onActualizarConfigMaterial={onActualizarConfigMaterial}
+          formatearPrecio={formatearPrecio}
+        />
       )}
+    </div>
+  )
+}
+
+function FiltroMaterialTrazabilidad({
+  opciones = [],
+  valor = '__todos__',
+  onCambiar,
+}) {
+  return (
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
+      <strong>Material</strong>
+      <select
+        value={valor}
+        onChange={(e) => onCambiar?.(e.target.value)}
+        style={{
+          minWidth: '260px',
+          maxWidth: '100%',
+          padding: '8px',
+          borderRadius: '6px',
+          border: '1px solid #777',
+          background: '#fff',
+          color: '#111',
+          fontWeight: 700,
+        }}
+      >
+        <option value="__todos__">Todos los materiales</option>
+        {opciones.map((material) => (
+          <option key={material.valor} value={material.valor}>
+            {material.etiqueta}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -710,6 +861,8 @@ function PanelSeleccionSolicitantesGrupo({
 
 function TablaTrazabilidadGrupo({
   filas,
+  configMateriales = {},
+  onActualizarConfigMaterial,
   formatearPrecio,
 }) {
   const filasConDiferencia = filas.filter((fila) => Number(fila.diferencia || 0) !== 0)
@@ -734,12 +887,17 @@ function TablaTrazabilidadGrupo({
         </thead>
         <tbody>
           {filasConDiferencia.map((fila) => {
-            const color = fila.estado === 'critico'
+            const alertaDesactivada = esAlertaMaterialDesactivada(fila, configMateriales)
+            const color = alertaDesactivada
+              ? '#9e9e9e'
+              : fila.estado === 'critico'
               ? '#ff5252'
               : fila.estado === 'alerta'
                 ? '#ffb74d'
                 : '#66bb6a'
-            const etiqueta = fila.estado === 'critico'
+            const etiqueta = alertaDesactivada
+              ? 'Silenciada'
+              : fila.estado === 'critico'
               ? 'Crítico'
               : fila.estado === 'alerta'
                 ? 'Alerta'
@@ -747,7 +905,26 @@ function TablaTrazabilidadGrupo({
 
             return (
               <tr key={fila.clave}>
-                <td style={{ ...tdStyle, color, fontWeight: 900 }}>{etiqueta}</td>
+                <td style={{ ...tdStyle, color, fontWeight: 900 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span>{etiqueta}</span>
+                    <button
+                      type="button"
+                      onClick={() => onActualizarConfigMaterial?.(
+                        claveConfigAlertaMaterial(fila),
+                        { alertaDesactivada: !alertaDesactivada }
+                      )}
+                      title={alertaDesactivada ? 'Activar alerta para este material' : 'Desactivar alerta para este material'}
+                      style={{
+                        ...botonIconoAlerta,
+                        borderColor: alertaDesactivada ? '#777' : '#ff8a80',
+                        color: alertaDesactivada ? '#ccc' : '#ffccbc',
+                      }}
+                    >
+                      {alertaDesactivada ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </td>
                 <td style={{ ...tdStyle, fontWeight: 800 }}>{fila.material}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.retirado || '-'}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fila.instalado || '-'}</td>
@@ -871,6 +1048,18 @@ const botonMini = {
   fontWeight: 800,
 }
 
+const botonIconoAlerta = {
+  padding: '3px 7px',
+  borderRadius: '999px',
+  border: '1px solid #777',
+  background: '#2b2b2b',
+  color: 'white',
+  cursor: 'pointer',
+  fontSize: '11px',
+  fontWeight: 900,
+  lineHeight: 1,
+}
+
 function normalizarPrecioManual(valor) {
   if (valor === null || valor === undefined || valor === '') return 0
   const limpio = String(valor).replace(/[^\d,-]/g, '').replace(',', '.')
@@ -895,6 +1084,161 @@ function obtenerOpcionesSolicitantesGrupo(itemsVales = [], solicitantesDisponibl
     numeric: true,
     sensitivity: 'base',
   }))
+}
+
+function obtenerOpcionesMaterialesTrazabilidad(filas = []) {
+  const opciones = new Map()
+  filas.forEach((fila) => {
+    const material = String(fila.material || '').trim()
+    const clave = normalizarTextoBalanceFlexible(material)
+    if (!material || !clave || opciones.has(clave)) return
+    opciones.set(clave, {
+      valor: clave,
+      etiqueta: material,
+    })
+  })
+
+  return [...opciones.values()].sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, 'es', {
+    numeric: true,
+    sensitivity: 'base',
+  }))
+}
+
+function filtrarTrazabilidadPorMaterial(filas = [], materialSeleccionado = '__todos__') {
+  if (!materialSeleccionado || materialSeleccionado === '__todos__') return filas
+  return filas.filter((fila) => normalizarTextoBalanceFlexible(fila.material) === materialSeleccionado)
+}
+
+function ordenarTrazabilidadPorEstadoAlerta(filas = [], configMateriales = {}) {
+  return [...filas].sort((a, b) => {
+    const alertaA = esAlertaMaterialDesactivada(a, configMateriales) ? 1 : 0
+    const alertaB = esAlertaMaterialDesactivada(b, configMateriales) ? 1 : 0
+    if (alertaA !== alertaB) return alertaA - alertaB
+
+    const prioridadEstado = { critico: 0, alerta: 1 }
+    const prioridadA = prioridadEstado[a.estado] ?? 2
+    const prioridadB = prioridadEstado[b.estado] ?? 2
+    if (prioridadA !== prioridadB) return prioridadA - prioridadB
+
+    return Number(b.valorDiferencia || 0) - Number(a.valorDiferencia || 0)
+  })
+}
+
+function claveConfigAlertaMaterial(fila) {
+  return normalizarTextoBalanceFlexible(fila?.material || fila?.materialVisible || fila?.clave || '')
+}
+
+function esAlertaMaterialDesactivada(fila, configMateriales = {}) {
+  const claves = [
+    fila?.clave,
+    claveConfigAlertaMaterial(fila),
+    normalizarTextoBalance(fila?.material),
+    normalizarTextoBalanceFlexible(fila?.material),
+    normalizarTextoBalance(fila?.materialVisible),
+    normalizarTextoBalanceFlexible(fila?.materialVisible),
+  ].filter(Boolean)
+
+  return claves.some((clave) => Boolean(configMateriales[clave]?.alertaDesactivada))
+}
+
+function imprimirDetalleGrupo({
+  filas = [],
+  solicitantes = [],
+  solicitantesSeleccionados = [],
+  lineasSeleccionadas = [],
+  materialSeleccionado = '__todos__',
+  opcionesMateriales = [],
+  configMateriales = {},
+  formatearPrecio,
+}) {
+  if (filas.length === 0 || typeof window === 'undefined') return
+
+  const etiquetasSolicitantes = Object.fromEntries(solicitantes.map((opcion) => [String(opcion.valor), opcion.etiqueta]))
+  const solicitantesTexto = solicitantesSeleccionados
+    .map((valor) => etiquetasSolicitantes[String(valor)] || valor)
+    .join(', ')
+  const materialTexto = materialSeleccionado === '__todos__'
+    ? 'Todos los materiales'
+    : opcionesMateriales.find((opcion) => opcion.valor === materialSeleccionado)?.etiqueta || materialSeleccionado
+  const lineasTexto = lineasSeleccionadas.length > 0 ? lineasSeleccionadas.join(', ') : 'Todas'
+  const filasHtml = filas.map((fila) => {
+    const alertaDesactivada = esAlertaMaterialDesactivada(fila, configMateriales)
+    const estado = alertaDesactivada
+      ? 'Silenciada'
+      : fila.estado === 'critico'
+        ? 'Critico'
+        : fila.estado === 'alerta'
+          ? 'Alerta'
+          : 'OK'
+    return `
+      <tr>
+        <td>${escaparHtml(estado)}</td>
+        <td>${escaparHtml(fila.material)}</td>
+        <td class="numero">${escaparHtml(fila.retirado || '-')}</td>
+        <td class="numero">${escaparHtml(fila.instalado || '-')}</td>
+        <td class="numero">${escaparHtml(fila.diferencia)}</td>
+        <td class="numero">${Number(fila.porcentajeDiferencia || 0).toFixed(1)}%</td>
+        <td class="numero">${escaparHtml(formatearPrecio(fila.valorDiferencia || 0))}</td>
+      </tr>
+    `
+  }).join('')
+
+  const ventana = window.open('', '_blank')
+  if (!ventana) return
+
+  ventana.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Detalle balance por grupo</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
+          h1 { margin: 0 0 8px; font-size: 22px; }
+          .meta { margin: 0 0 14px; line-height: 1.5; font-size: 13px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
+          th { background: #e0e0e0; }
+          .numero { text-align: right; }
+          @media print { body { margin: 12mm; } }
+        </style>
+      </head>
+      <body>
+        <h1>Detalle balance por grupo</h1>
+        <div class="meta">
+          <div><strong>Solicitantes:</strong> ${escaparHtml(solicitantesTexto || 'Sin seleccion')}</div>
+          <div><strong>Lineas:</strong> ${escaparHtml(lineasTexto)}</div>
+          <div><strong>Material:</strong> ${escaparHtml(materialTexto)}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Estado</th>
+              <th>Material</th>
+              <th>Retirado grupo</th>
+              <th>Instalado lineas</th>
+              <th>Diferencia</th>
+              <th>% fuga</th>
+              <th>Valor fuga</th>
+            </tr>
+          </thead>
+          <tbody>${filasHtml}</tbody>
+        </table>
+      </body>
+    </html>
+  `)
+  ventana.document.close()
+  ventana.focus()
+  ventana.print()
+}
+
+function escaparHtml(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
 }
 
 function normalizarTextoBalance(valor) {

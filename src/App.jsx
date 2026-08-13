@@ -1787,7 +1787,7 @@ function guardarConfigBalanceMaterialesDebounced(clave, config) {
       config: configGuardar,
       normalizarPrecioMaterial,
     }),
-    onError: (error) => mostrarNotificacion('No se pudo guardar el valor compra en Supabase: ' + error.message),
+    onError: (error) => mostrarNotificacion('No se pudo guardar la configuración de balance en Supabase: ' + error.message),
   })
 }
 
