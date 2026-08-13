@@ -37,6 +37,10 @@ function BodegaModal({
   mostrarAlertasBodega,
   pedidosBodegaHoy = [],
   mostrarPedidosBodegaHoy,
+  historialValesBodega = [],
+  mostrarHistorialValesBodega,
+  fechaHistorialValesBodega = fechaActualInput(),
+  cargandoHistorialValesBodega = false,
   recepcionesBodega = [],
   mostrarRecepcionesBodega,
   rangoRecepcionesBodega = 'mes',
@@ -51,8 +55,13 @@ function BodegaModal({
   onExportarInventario,
   onImprimirPedidos,
   onImprimirPedidosGeneral,
+  onImprimirHistorialVales,
+  onImprimirHistorialValesGeneral,
   onToggleAlertasBodega,
   onTogglePedidosBodegaHoy,
+  onToggleHistorialValesBodega,
+  onCambiarFechaHistorialValesBodega,
+  onActualizarHistorialValesBodega,
   onToggleRecepcionesBodega,
   onCambiarRangoRecepcionesBodega,
   onCambiarFechaRecepcionesBodega,
@@ -374,13 +383,32 @@ function BodegaModal({
 
       {puedeAdministrar ? (
         <>
-          <button
-            type="button"
-            onClick={() => setMostrarCargaExcel((actual) => !actual)}
-            style={{ ...botonAzul, marginBottom: '12px' }}
-          >
-            Cargar inventario Excel
-          </button>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setMostrarCargaExcel((actual) => !actual)
+                if (!mostrarCargaExcel && mostrarHistorialValesBodega) onToggleHistorialValesBodega?.()
+              }}
+              style={botonAzul}
+            >
+              Cargar inventario Excel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMostrarCargaExcel(false)
+                onToggleHistorialValesBodega?.()
+              }}
+              style={{
+                ...botonAzul,
+                background: mostrarHistorialValesBodega ? '#0d47a1' : '#455a64',
+                borderColor: mostrarHistorialValesBodega ? '#64b5f6' : '#607d8b',
+              }}
+            >
+              Historial de vales
+            </button>
+          </div>
 
           {mostrarCargaExcel && (
             <div style={panelMovimientoStyle}>
@@ -412,6 +440,19 @@ function BodegaModal({
                 La app detectará las hojas con fecha en el nombre, leerá el inventario y lo guardará en Supabase.
               </p>
             </div>
+          )}
+
+          {mostrarHistorialValesBodega && (
+            <PanelHistorialValesBodega
+              pedidos={historialValesBodega}
+              fecha={fechaHistorialValesBodega}
+              cargando={cargandoHistorialValesBodega}
+              onCambiarFecha={onCambiarFechaHistorialValesBodega}
+              onActualizar={onActualizarHistorialValesBodega}
+              onSeleccionar={setAlertaBodegaSeleccionada}
+              onImprimir={onImprimirHistorialVales}
+              onImprimirGeneral={onImprimirHistorialValesGeneral}
+            />
           )}
         </>
       ) : null}
@@ -946,6 +987,111 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar, onImprimir, onImprimirG
       </div>
       {pedidos.length === 0 ? (
         <p style={{ color: '#bbb', margin: 0 }}>No hay pedidos registrados hoy.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: '8px' }}>
+          {pedidos.map((pedido) => {
+            const total = (pedido.items || []).length
+            const entregado = String(pedido.estado_bodega || '').toLowerCase() === 'entregado'
+            const etiquetaEstado = entregado ? 'Entregado' : 'Pendiente'
+            const solicitante = pedido.solicitante_nombre || pedido.usuario_nombre || 'Sin usuario'
+            const detalle = [
+              pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
+              pedido.tipo_modulo ? `Tipo: ${pedido.tipo_modulo}` : '',
+              pedido.serie ? `Serie: ${pedido.serie}` : '',
+              `Total: ${formatearNumero(total)}`,
+            ].filter(Boolean).join(' | ')
+
+            return (
+              <button
+                type="button"
+                key={pedido.id || `${pedido.fecha}-${solicitante}-${total}`}
+                onClick={() => onSeleccionar?.(pedido)}
+                style={filaPedidoHoyStyle}
+              >
+                <span style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
+                  <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Pedido | {solicitante}
+                  </strong>
+                  <small style={{ color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {detalle}
+                  </small>
+                </span>
+                <strong style={{
+                  color: entregado ? '#66bb6a' : '#ffcc80',
+                  border: `1px solid ${entregado ? '#2e7d32' : '#f9a825'}`,
+                  borderRadius: '999px',
+                  padding: '5px 10px',
+                  whiteSpace: 'nowrap',
+                  background: entregado ? '#15351c' : '#3a2b10',
+                }}>
+                  {etiquetaEstado}
+                </strong>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PanelHistorialValesBodega({
+  pedidos,
+  fecha,
+  cargando,
+  onCambiarFecha,
+  onActualizar,
+  onSeleccionar,
+  onImprimir,
+  onImprimirGeneral,
+}) {
+  return (
+    <div style={{ ...panelMovimientoStyle, marginBottom: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0 }}>Historial de vales</h3>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <input
+            type="date"
+            value={fecha}
+            onChange={(e) => onCambiarFecha?.(e.target.value)}
+            style={{ ...inputStyle, width: '170px' }}
+          />
+          <button type="button" onClick={onActualizar} style={botonAzul}>
+            Actualizar
+          </button>
+          <button
+            type="button"
+            onClick={onImprimir}
+            disabled={pedidos.length === 0}
+            style={{
+              ...botonAzul,
+              padding: '8px 14px',
+              opacity: pedidos.length === 0 ? 0.65 : 1,
+              cursor: pedidos.length === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Imprimir detalle
+          </button>
+          <button
+            type="button"
+            onClick={onImprimirGeneral}
+            disabled={pedidos.length === 0}
+            style={{
+              ...botonAzul,
+              padding: '8px 14px',
+              opacity: pedidos.length === 0 ? 0.65 : 1,
+              cursor: pedidos.length === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Imprimir general
+          </button>
+        </div>
+      </div>
+
+      {cargando ? (
+        <p style={{ color: '#bbb', margin: 0 }}>Cargando vales...</p>
+      ) : pedidos.length === 0 ? (
+        <p style={{ color: '#bbb', margin: 0 }}>No hay pedidos registrados para esta fecha.</p>
       ) : (
         <div style={{ display: 'grid', gap: '8px' }}>
           {pedidos.map((pedido) => {

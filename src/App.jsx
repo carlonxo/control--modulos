@@ -670,6 +670,10 @@ const [alertasBodega, setAlertasBodega] = useState([])
 const [mostrarAlertasBodega, setMostrarAlertasBodega] = useState(false)
 const [pedidosBodegaHoy, setPedidosBodegaHoy] = useState([])
 const [mostrarPedidosBodegaHoy, setMostrarPedidosBodegaHoy] = useState(false)
+const [historialValesBodega, setHistorialValesBodega] = useState([])
+const [mostrarHistorialValesBodega, setMostrarHistorialValesBodega] = useState(false)
+const [fechaHistorialValesBodega, setFechaHistorialValesBodega] = useState(fechaActualLocalInput())
+const [cargandoHistorialValesBodega, setCargandoHistorialValesBodega] = useState(false)
 const [recepcionesBodega, setRecepcionesBodega] = useState([])
 const [mostrarRecepcionesBodega, setMostrarRecepcionesBodega] = useState(false)
 const [rangoRecepcionesBodega, setRangoRecepcionesBodega] = useState('mes')
@@ -2005,6 +2009,28 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
   setAlertasBodega(solicitudesFiltradas.filter((vale) => vale.estado_bodega !== 'entregado'))
 }
 
+async function cargarHistorialValesBodega(fecha = fechaHistorialValesBodega) {
+  if (!fecha || !puedeVerBodega) return []
+
+  setCargandoHistorialValesBodega(true)
+  const { vales, error } = await cargarValesBodegaDiaSupabase({
+    supabase,
+    fecha,
+  })
+  setCargandoHistorialValesBodega(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudo cargar el historial de vales: ' + error.message)
+    setHistorialValesBodega([])
+    return []
+  }
+
+  const solicitudesApp = (vales || []).filter((vale) => vale.tipo_ingreso === 'pedido_app')
+  const solicitudesFiltradas = filtrarSolicitudesPorBodegaAsignada(solicitudesApp, perfil)
+  setHistorialValesBodega(solicitudesFiltradas)
+  return solicitudesFiltradas
+}
+
 async function cargarRecepcionesBodega(valor = fechaRecepcionesBodega, rango = rangoRecepcionesBodega) {
   if (!valor || !puedeVerBodega) return
 
@@ -2415,6 +2441,26 @@ async function imprimirPedidosBodegaHoyGeneral() {
   } catch (error) {
     console.error(error)
     mostrarNotificacion('No se pudo generar el vale general de bodega')
+  }
+}
+
+async function imprimirHistorialValesBodega() {
+  if (!puedeVerPedidosBodegaHoy) return
+  try {
+    await exportarPedidosBodegaExcel(historialValesBodega, { modo: 'detalle' })
+  } catch (error) {
+    console.error(error)
+    mostrarNotificacion('No se pudo generar el vale de bodega del historial')
+  }
+}
+
+async function imprimirHistorialValesBodegaGeneral() {
+  if (!puedeVerPedidosBodegaHoy) return
+  try {
+    await exportarPedidosBodegaExcel(historialValesBodega, { modo: 'general' })
+  } catch (error) {
+    console.error(error)
+    mostrarNotificacion('No se pudo generar el vale general de bodega del historial')
   }
 }
 
@@ -6200,6 +6246,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     mostrarAlertasBodega={mostrarAlertasBodega}
     pedidosBodegaHoy={pedidosBodegaHoy}
     mostrarPedidosBodegaHoy={mostrarPedidosBodegaHoy}
+    historialValesBodega={historialValesBodega}
+    mostrarHistorialValesBodega={mostrarHistorialValesBodega}
+    fechaHistorialValesBodega={fechaHistorialValesBodega}
+    cargandoHistorialValesBodega={cargandoHistorialValesBodega}
     recepcionesBodega={recepcionesBodega}
     mostrarRecepcionesBodega={mostrarRecepcionesBodega}
     rangoRecepcionesBodega={rangoRecepcionesBodega}
@@ -6214,8 +6264,20 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onExportarInventario={exportarInventarioBodegaActual}
     onImprimirPedidos={imprimirPedidosBodegaHoy}
     onImprimirPedidosGeneral={imprimirPedidosBodegaHoyGeneral}
+    onImprimirHistorialVales={imprimirHistorialValesBodega}
+    onImprimirHistorialValesGeneral={imprimirHistorialValesBodegaGeneral}
     onToggleAlertasBodega={() => setMostrarAlertasBodega((actual) => !actual)}
     onTogglePedidosBodegaHoy={() => setMostrarPedidosBodegaHoy((actual) => !actual)}
+    onToggleHistorialValesBodega={async () => {
+      const abrir = !mostrarHistorialValesBodega
+      setMostrarHistorialValesBodega(abrir)
+      if (abrir) await cargarHistorialValesBodega(fechaHistorialValesBodega)
+    }}
+    onCambiarFechaHistorialValesBodega={(fecha) => {
+      setFechaHistorialValesBodega(fecha)
+      cargarHistorialValesBodega(fecha)
+    }}
+    onActualizarHistorialValesBodega={() => cargarHistorialValesBodega(fechaHistorialValesBodega)}
     onToggleRecepcionesBodega={() => setMostrarRecepcionesBodega((actual) => !actual)}
     onCambiarRangoRecepcionesBodega={cambiarRangoRecepcionesBodega}
     onCambiarFechaRecepcionesBodega={cambiarFechaRecepcionesBodega}

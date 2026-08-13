@@ -129,6 +129,31 @@ export async function exportarPedidosBodegaExcel(pedidos = [], opciones = {}) {
   descargarBlob(blobZip, `vales_bodega_${modo}_${fecha}.zip`)
 }
 
+async function limpiarReferenciasCalculoExcel(zip) {
+  zip.remove('xl/calcChain.xml')
+
+  const contentTypes = zip.file('[Content_Types].xml')
+  if (contentTypes) {
+    const xml = await contentTypes.async('string')
+    const limpio = xml.replace(/<Override[^>]*PartName="\/xl\/calcChain\.xml"[^>]*\/>/g, '')
+    zip.file('[Content_Types].xml', limpio)
+  }
+
+  const workbookRels = zip.file('xl/_rels/workbook.xml.rels')
+  if (workbookRels) {
+    const xml = await workbookRels.async('string')
+    const limpio = xml.replace(/<Relationship[^>]*Type="[^"]*\/calcChain"[^>]*\/>/g, '')
+    zip.file('xl/_rels/workbook.xml.rels', limpio)
+  }
+
+  const workbook = zip.file('xl/workbook.xml')
+  if (workbook) {
+    const xml = await workbook.async('string')
+    const limpio = xml.replace(/<calcPr\b[^>]*\/>/g, '<calcPr calcMode="auto"/>')
+    zip.file('xl/workbook.xml', limpio)
+  }
+}
+
 function extraerDatoObservacion(observacion = '', etiqueta = '') {
   const etiquetaNormalizada = String(etiqueta || '').toLowerCase()
   const parte = String(observacion || '')
@@ -185,6 +210,7 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
   const respuesta = await fetch(plantillaValeBodegaUrl)
   const buffer = await respuesta.arrayBuffer()
   const zip = await JSZip.loadAsync(buffer)
+  await limpiarReferenciasCalculoExcel(zip)
   let sheetXml = await zip.file('xl/worksheets/sheet1.xml').async('string')
   let sharedStringsXml = await zip.file('xl/sharedStrings.xml').async('string')
   const sharedStrings = crearEditorSharedStrings(sharedStringsXml)
