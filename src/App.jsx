@@ -2042,6 +2042,39 @@ async function cargarHistorialValesBodega(fecha = fechaHistorialValesBodega) {
   return solicitudesFiltradas
 }
 
+function alternarPanelPedidosBodegaHoy() {
+  setMostrarPedidosBodegaHoy((actual) => {
+    const abrir = !actual
+    if (abrir) {
+      setMostrarRecepcionesBodega(false)
+      setMostrarDespachosBodega(false)
+    }
+    return abrir
+  })
+}
+
+function alternarPanelRecepcionesBodega() {
+  setMostrarRecepcionesBodega((actual) => {
+    const abrir = !actual
+    if (abrir) {
+      setMostrarPedidosBodegaHoy(false)
+      setMostrarDespachosBodega(false)
+    }
+    return abrir
+  })
+}
+
+function alternarPanelDespachosBodega() {
+  setMostrarDespachosBodega((actual) => {
+    const abrir = !actual
+    if (abrir) {
+      setMostrarPedidosBodegaHoy(false)
+      setMostrarRecepcionesBodega(false)
+    }
+    return abrir
+  })
+}
+
 async function cargarRecepcionesBodega(valor = fechaRecepcionesBodega, rango = rangoRecepcionesBodega) {
   if (!valor || !puedeVerBodega) return
 
@@ -6442,7 +6475,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onImprimirHistorialVales={imprimirHistorialValesBodega}
     onImprimirHistorialValesGeneral={imprimirHistorialValesBodegaGeneral}
     onToggleAlertasBodega={() => setMostrarAlertasBodega((actual) => !actual)}
-    onTogglePedidosBodegaHoy={() => setMostrarPedidosBodegaHoy((actual) => !actual)}
+    onTogglePedidosBodegaHoy={alternarPanelPedidosBodegaHoy}
     onToggleHistorialValesBodega={async () => {
       const abrir = !mostrarHistorialValesBodega
       setMostrarHistorialValesBodega(abrir)
@@ -6453,11 +6486,11 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       cargarHistorialValesBodega(fecha)
     }}
     onActualizarHistorialValesBodega={() => cargarHistorialValesBodega(fechaHistorialValesBodega)}
-    onToggleRecepcionesBodega={() => setMostrarRecepcionesBodega((actual) => !actual)}
+    onToggleRecepcionesBodega={alternarPanelRecepcionesBodega}
     onCambiarRangoRecepcionesBodega={cambiarRangoRecepcionesBodega}
     onCambiarFechaRecepcionesBodega={cambiarFechaRecepcionesBodega}
     onActualizarRecepcionesBodega={() => cargarRecepcionesBodega()}
-    onToggleDespachosBodega={() => setMostrarDespachosBodega((actual) => !actual)}
+    onToggleDespachosBodega={alternarPanelDespachosBodega}
     onCambiarRangoDespachosBodega={cambiarRangoDespachosBodega}
     onCambiarFechaDespachosBodega={cambiarFechaDespachosBodega}
     onActualizarDespachosBodega={() => cargarDespachosBodega()}

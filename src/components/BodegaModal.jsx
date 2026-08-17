@@ -151,6 +151,12 @@ function BodegaModal({
     })
   }, [busqueda, materialesInventario, ocultarSinStock])
 
+  function cerrarPanelesResumenBodega() {
+    if (mostrarPedidosBodegaHoy) onTogglePedidosBodegaHoy?.()
+    if (mostrarRecepcionesBodega) onToggleRecepcionesBodega?.()
+    if (mostrarDespachosBodega) onToggleDespachosBodega?.()
+  }
+
   function cambiarFacturaIngreso(campo, valor) {
     setFacturaIngreso((actual) => ({ ...actual, [campo]: valor }))
   }
@@ -628,6 +634,7 @@ function BodegaModal({
                     setMostrarIngresoProveedor(false)
                     setMostrarSalidaMaterial(false)
                     setMostrarRecepcionarMaterial(false)
+                    cerrarPanelesResumenBodega()
                   }}
                   style={botonAzul}
                 >
@@ -641,6 +648,7 @@ function BodegaModal({
                     setMostrarIngresoProveedor(false)
                     setMostrarSalidaMaterial(false)
                     setMostrarRecepcionarMaterial(false)
+                    cerrarPanelesResumenBodega()
                   }}
                   style={botonAzul}
                 >
