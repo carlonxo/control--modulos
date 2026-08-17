@@ -31,6 +31,7 @@ function BodegaModal({
   guardandoPedido,
   guardandoDevolucion,
   guardandoRecepcion,
+  guardandoSalida,
   entregandoSolicitudBodega,
   puedeExportarInventario,
   alertasBodega = [],
@@ -45,11 +46,16 @@ function BodegaModal({
   mostrarRecepcionesBodega,
   rangoRecepcionesBodega = 'mes',
   fechaRecepcionesBodega = '',
+  despachosBodega = [],
+  mostrarDespachosBodega,
+  rangoDespachosBodega = 'mes',
+  fechaDespachosBodega = '',
   onCambiarArchivo,
   onLeerArchivo,
   onGuardarPedido,
   onGuardarDevolucion,
   onGuardarRecepcion,
+  onGuardarSalida,
   onEntregarSolicitudBodega,
   onEditarSolicitudBodega,
   onExportarInventario,
@@ -66,6 +72,10 @@ function BodegaModal({
   onCambiarRangoRecepcionesBodega,
   onCambiarFechaRecepcionesBodega,
   onActualizarRecepcionesBodega,
+  onToggleDespachosBodega,
+  onCambiarRangoDespachosBodega,
+  onCambiarFechaDespachosBodega,
+  onActualizarDespachosBodega,
   onActualizarAlertasBodega,
   onCerrar,
   onClickFondo,
@@ -80,6 +90,7 @@ function BodegaModal({
   const [mostrarRecepcionarMaterial, setMostrarRecepcionarMaterial] = useState(false)
   const [alertaBodegaSeleccionada, setAlertaBodegaSeleccionada] = useState(null)
   const [recepcionSeleccionada, setRecepcionSeleccionada] = useState(null)
+  const [despachoSeleccionado, setDespachoSeleccionado] = useState(null)
   const [facturaIngreso, setFacturaIngreso] = useState({
     fecha: fechaActualInput(),
     factura: '',
@@ -298,6 +309,22 @@ function BodegaModal({
     setMostrarRecepcionarMaterial(false)
   }
 
+  async function guardarSalidaActual() {
+    const guardado = await onGuardarSalida?.(salidaMaterial, materialesSalida)
+    if (!guardado) return
+
+    setSalidaMaterial({
+      fecha: fechaActualInput(),
+      tipoDocumento: 'vale',
+      documento: '',
+      solicitante: '',
+      destino: '',
+      observacion: '',
+    })
+    setMaterialesSalida([{ ...filaMovimientoVacia }])
+    setMostrarSalidaMaterial(false)
+  }
+
   return (
     <div
       onClick={(e) => {
@@ -378,6 +405,13 @@ function BodegaModal({
         <DetalleRecepcionBodega
           recepcion={recepcionSeleccionada}
           onCerrar={() => setRecepcionSeleccionada(null)}
+        />
+      )}
+
+      {despachoSeleccionado && (
+        <DetalleDespachoBodega
+          despacho={despachoSeleccionado}
+          onCerrar={() => setDespachoSeleccionado(null)}
         />
       )}
 
@@ -514,34 +548,72 @@ function BodegaModal({
               </div>
             )}
 
+            {modoSoloBodega && (
+              <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+                <Tarjeta
+                  titulo="Material despachado"
+                  valor={despachosBodega.length}
+                  onClick={onToggleDespachosBodega}
+                />
+              </div>
+            )}
+
             {puedeExportarInventario && (
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch', marginLeft: 'auto' }}>
                 {modoSoloBodega && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMostrarRecepcionarMaterial((actual) => !actual)
-                      setMostrarCrearPedido(false)
-                      setMostrarCrearDevolucion(false)
-                      setMostrarIngresoProveedor(false)
-                      setMostrarSalidaMaterial(false)
-                    }}
-                    style={botonVerde}
-                  >
-                    Recepcionar material
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMostrarSalidaMaterial((actual) => !actual)
+                        setMostrarRecepcionarMaterial(false)
+                        setMostrarCrearPedido(false)
+                        setMostrarCrearDevolucion(false)
+                        setMostrarIngresoProveedor(false)
+                      }}
+                      style={{
+                        ...botonAccionInventarioCompacto,
+                        background: '#5d4037',
+                        borderColor: '#a1887f',
+                      }}
+                    >
+                      <span>Despachar</span>
+                      <span>material</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMostrarRecepcionarMaterial((actual) => !actual)
+                        setMostrarCrearPedido(false)
+                        setMostrarCrearDevolucion(false)
+                        setMostrarIngresoProveedor(false)
+                        setMostrarSalidaMaterial(false)
+                      }}
+                      style={{
+                        ...botonAccionInventarioCompacto,
+                        background: '#1b5e20',
+                        borderColor: '#66bb6a',
+                      }}
+                    >
+                      <span>Recepcionar</span>
+                      <span>material</span>
+                    </button>
+                  </>
                 )}
                 <button
                   type="button"
                   onClick={onExportarInventario}
                   disabled={!inventarioSeleccionado?.items?.length}
                   style={{
-                    ...botonAzul,
+                    ...botonAccionInventarioCompacto,
+                    background: '#1565c0',
+                    borderColor: '#777',
                     opacity: !inventarioSeleccionado?.items?.length ? 0.7 : 1,
                     cursor: !inventarioSeleccionado?.items?.length ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  Exportar inventario
+                  <span>Exportar</span>
+                  <span>inventario</span>
                 </button>
               </div>
             )}
@@ -625,6 +697,18 @@ function BodegaModal({
             />
           )}
 
+          {modoSoloBodega && mostrarDespachosBodega && (
+            <PanelDespachosBodega
+              despachos={despachosBodega}
+              rango={rangoDespachosBodega}
+              fecha={fechaDespachosBodega}
+              onCambiarRango={onCambiarRangoDespachosBodega}
+              onCambiarFecha={onCambiarFechaDespachosBodega}
+              onActualizar={onActualizarDespachosBodega}
+              onSeleccionar={setDespachoSeleccionado}
+            />
+          )}
+
           {mostrarRecepcionarMaterial && puedeExportarInventario && (
             <PanelRecepcionarMaterial
               recepcion={recepcionMaterial}
@@ -684,7 +768,7 @@ function BodegaModal({
             />
           )}
 
-          {mostrarSalidaMaterial && puedeAdministrar && (
+          {mostrarSalidaMaterial && (puedeAdministrar || modoSoloBodega) && (
             <PanelSalidaMaterial
               salidaMaterial={salidaMaterial}
               materialesSalida={materialesSalida}
@@ -693,6 +777,8 @@ function BodegaModal({
               onCambiarMaterial={cambiarMaterialSalida}
               onAgregarMaterial={agregarMaterialSalida}
               onQuitarMaterial={quitarMaterialSalida}
+              onGuardar={guardarSalidaActual}
+              guardando={guardandoSalida}
               onCerrar={() => setMostrarSalidaMaterial(false)}
             />
           )}
@@ -1214,6 +1300,80 @@ function PanelRecepcionesBodega({
   )
 }
 
+function PanelDespachosBodega({
+  despachos,
+  rango,
+  fecha,
+  onCambiarRango,
+  onCambiarFecha,
+  onActualizar,
+  onSeleccionar,
+}) {
+  return (
+    <div style={{ ...panelMovimientoStyle, marginTop: '-2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0 }}>Material despachado</h3>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            value={rango}
+            onChange={(e) => onCambiarRango?.(e.target.value)}
+            style={{ ...inputStyle, width: '120px' }}
+          >
+            <option value="dia">Día</option>
+            <option value="semana">Semana</option>
+            <option value="mes">Mes</option>
+            <option value="anio">Año</option>
+          </select>
+          <input
+            type={tipoInputRangoRecepcion(rango)}
+            value={fecha}
+            onChange={(e) => onCambiarFecha?.(e.target.value)}
+            min={rango === 'anio' ? '2000' : undefined}
+            max={rango === 'anio' ? '2100' : undefined}
+            style={{ ...inputStyle, width: rango === 'anio' ? '110px' : '170px' }}
+          />
+          <button type="button" onClick={onActualizar} style={botonAzul}>
+            Actualizar
+          </button>
+        </div>
+      </div>
+      {despachos.length === 0 ? (
+        <p style={{ color: '#bbb', margin: 0 }}>No hay despachos registrados en este rango.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: '8px' }}>
+          {despachos.map((despacho) => (
+            <button
+              type="button"
+              key={despacho.id}
+              onClick={() => onSeleccionar?.(despacho)}
+              style={filaPedidoHoyStyle}
+            >
+              <span style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
+                <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {despacho.fecha || '-'} | Documento: {despacho.documento || '-'}
+                </strong>
+                <small style={{ color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {despacho.bodega || 'Sin bodega'} | {despacho.usuario_nombre || 'Sin usuario'} | {(despacho.items || []).length} materiales
+                </small>
+              </span>
+              <strong style={{
+                color: '#ffcc80',
+                border: '1px solid #ef6c00',
+                borderRadius: '999px',
+                padding: '5px 10px',
+                whiteSpace: 'nowrap',
+                background: '#3a2610',
+              }}>
+                Ver detalle
+              </strong>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DetalleRecepcionBodega({ recepcion, onCerrar }) {
   return (
     <div
@@ -1265,6 +1425,61 @@ function DetalleRecepcionBodega({ recepcion, onCerrar }) {
 
         {(recepcion.items || []).length === 0 && (
           <p style={{ color: '#bbb' }}>Esta recepción no tiene materiales asociados.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DetalleDespachoBodega({ despacho, onCerrar }) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={modalDetalleBodegaOverlayStyle}
+    >
+      <div style={modalDetalleBodegaStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '12px' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Despacho de material</h3>
+            <p style={{ margin: '6px 0 0', color: '#ccc' }}>
+              {despacho.fecha || ''} | {despacho.usuario_nombre || 'Sin usuario'}
+            </p>
+          </div>
+          <button type="button" onClick={onCerrar} style={botonMiniGris}>
+            Cerrar
+          </button>
+        </div>
+
+        <div style={{ padding: '10px', border: '1px solid #5d4037', borderRadius: '8px', background: '#2a1d18', color: '#ffcc80', marginBottom: '12px' }}>
+          <div><strong>N° documento:</strong> {despacho.documento || '-'}</div>
+          <div><strong>Bodega:</strong> {despacho.bodega || '-'}</div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
+            <thead>
+              <tr style={{ background: '#333' }}>
+                <th style={{ ...thStyle, width: '190px' }}>Código</th>
+                <th style={thStyle}>Material</th>
+                <th style={thStyle}>Unidad</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(despacho.items || []).map((item) => (
+                <tr key={item.id || `${item.codigo_bodega}-${item.descripcion}`}>
+                  <td style={tdStyle}>{item.codigo_bodega || '-'}</td>
+                  <td style={tdStyle}>{item.descripcion || '-'}</td>
+                  <td style={tdStyle}>{item.unidad || '-'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>{formatearNumero(item.cantidad)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {(despacho.items || []).length === 0 && (
+          <p style={{ color: '#bbb' }}>Este despacho no tiene materiales asociados.</p>
         )}
       </div>
     </div>
@@ -1776,6 +1991,8 @@ function PanelSalidaMaterial({
   onCambiarMaterial,
   onAgregarMaterial,
   onQuitarMaterial,
+  onGuardar,
+  guardando,
   onCerrar,
 }) {
   return (
@@ -1787,22 +2004,24 @@ function PanelSalidaMaterial({
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(150px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(180px, 1fr))', gap: '10px', marginBottom: '12px' }}>
         <CampoTexto label="Fecha" type="date" value={salidaMaterial.fecha} onChange={(valor) => onCambiarSalida('fecha', valor)} />
-        <label style={labelStyle}>
-          Documento
-          <select
-            value={salidaMaterial.tipoDocumento}
-            onChange={(e) => onCambiarSalida('tipoDocumento', e.target.value)}
-            style={inputStyle}
-          >
-            <option value="vale">Vale</option>
-            <option value="guia">Guía de despacho</option>
-          </select>
-        </label>
         <CampoTexto label="N° documento" value={salidaMaterial.documento} onChange={(valor) => onCambiarSalida('documento', valor)} placeholder="N° vale o guía" />
-        <CampoTexto label="Solicitante" value={salidaMaterial.solicitante} onChange={(valor) => onCambiarSalida('solicitante', valor)} placeholder="Quién retira o solicita" />
-        <CampoTexto label="Destino" value={salidaMaterial.destino} onChange={(valor) => onCambiarSalida('destino', valor)} placeholder="Obra, línea, módulo o área" />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+        <button
+          type="button"
+          onClick={onGuardar}
+          disabled={guardando}
+          style={{
+            ...botonRojo,
+            opacity: guardando ? 0.7 : 1,
+            cursor: guardando ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {guardando ? 'Despachando...' : 'Despachar material'}
+        </button>
       </div>
 
       <TablaMovimientoMateriales
@@ -1813,17 +2032,9 @@ function PanelSalidaMaterial({
         onQuitarMaterial={onQuitarMaterial}
       />
 
-      <CampoObservacion
-        value={salidaMaterial.observacion}
-        onChange={(valor) => onCambiarSalida('observacion', valor)}
-      />
-
       <div style={accionesPanelStyle}>
         <button type="button" onClick={onAgregarMaterial} style={botonGris}>
           + Agregar material
-        </button>
-        <button type="button" style={botonRojo}>
-          Guardar salida
         </button>
       </div>
     </div>
@@ -2212,6 +2423,23 @@ const botonFiltroStock = {
   minHeight: '43px',
   whiteSpace: 'nowrap',
   padding: '9px 16px',
+}
+
+const botonAccionInventarioCompacto = {
+  width: '112px',
+  minHeight: '72px',
+  padding: '8px 9px',
+  borderRadius: '10px',
+  color: 'white',
+  cursor: 'pointer',
+  fontWeight: 900,
+  lineHeight: 1.12,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '4px',
+  textAlign: 'center',
 }
 
 const botonAzul = {

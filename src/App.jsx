@@ -72,6 +72,10 @@ import {
   guardarRecepcionBodega as guardarRecepcionBodegaSupabase,
 } from './services/bodegaRecepcionesService'
 import {
+  cargarDespachosBodegaRango as cargarDespachosBodegaRangoSupabase,
+  guardarDespachoBodega as guardarDespachoBodegaSupabase,
+} from './services/bodegaDespachosService'
+import {
   cargarCatalogoMaterialesGuardado,
   cargarPreciosMateriales as cargarPreciosMaterialesSupabase,
   eliminarMaterialPrecio,
@@ -678,6 +682,10 @@ const [recepcionesBodega, setRecepcionesBodega] = useState([])
 const [mostrarRecepcionesBodega, setMostrarRecepcionesBodega] = useState(false)
 const [rangoRecepcionesBodega, setRangoRecepcionesBodega] = useState('mes')
 const [fechaRecepcionesBodega, setFechaRecepcionesBodega] = useState(new Date().toISOString().slice(0, 7))
+const [despachosBodega, setDespachosBodega] = useState([])
+const [mostrarDespachosBodega, setMostrarDespachosBodega] = useState(false)
+const [rangoDespachosBodega, setRangoDespachosBodega] = useState('mes')
+const [fechaDespachosBodega, setFechaDespachosBodega] = useState(new Date().toISOString().slice(0, 7))
 const [cargandoValesBodegaDia, setCargandoValesBodegaDia] = useState(false)
 const [leyendoValeBodega, setLeyendoValeBodega] = useState(false)
 const [guardandoValeBodega, setGuardandoValeBodega] = useState(false)
@@ -689,6 +697,7 @@ const [leyendoInventarioBodega, setLeyendoInventarioBodega] = useState(false)
 const [guardandoPedidoBodega, setGuardandoPedidoBodega] = useState(false)
 const [guardandoDevolucionBodega, setGuardandoDevolucionBodega] = useState(false)
 const [guardandoRecepcionBodega, setGuardandoRecepcionBodega] = useState(false)
+const [guardandoDespachoBodega, setGuardandoDespachoBodega] = useState(false)
 const [entregandoSolicitudBodega, setEntregandoSolicitudBodega] = useState(false)
 const [usuariosBodega, setUsuariosBodega] = useState([])
 const [cargandoUsuariosBodega, setCargandoUsuariosBodega] = useState(false)
@@ -1206,10 +1215,12 @@ useEffect(() => {
   cargarInventariosBodega()
   cargarAlertasBodega()
   cargarRecepcionesBodega()
+  cargarDespachosBodega()
 
   const intervalo = setInterval(() => {
     cargarAlertasBodega()
     cargarRecepcionesBodega()
+    cargarDespachosBodega()
   }, 7000)
 
   return () => clearInterval(intervalo)
@@ -2063,6 +2074,38 @@ function cambiarFechaRecepcionesBodega(valor) {
   cargarRecepcionesBodega(valor, rangoRecepcionesBodega)
 }
 
+async function cargarDespachosBodega(valor = fechaDespachosBodega, rango = rangoDespachosBodega) {
+  if (!valor || !puedeVerBodega) return
+
+  const { inicio, fin } = obtenerRangoFechasProtocolos(rango, valor)
+
+  const { despachos, error } = await cargarDespachosBodegaRangoSupabase({
+    supabase,
+    fechaInicio: inicio.slice(0, 10),
+    fechaFin: fin.slice(0, 10),
+  })
+
+  if (error) {
+    console.error(error)
+    setDespachosBodega([])
+    return
+  }
+
+  setDespachosBodega(despachos || [])
+}
+
+function cambiarRangoDespachosBodega(rango) {
+  const valor = obtenerValorInicialRangoProtocolo(rango)
+  setRangoDespachosBodega(rango)
+  setFechaDespachosBodega(valor)
+  cargarDespachosBodega(valor, rango)
+}
+
+function cambiarFechaDespachosBodega(valor) {
+  setFechaDespachosBodega(valor)
+  cargarDespachosBodega(valor, rangoDespachosBodega)
+}
+
 async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
   if (!puedeExportarInventarioBodega) return false
 
@@ -2171,7 +2214,133 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
   mostrarNotificacion('Material recepcionado y sumado al inventario')
   await cargarInventariosBodega()
   await cargarRecepcionesBodega()
-  return pedidoActualizado
+  return true
+}
+
+async function guardarDespachoBodega(datosSalida, materialesSalida) {
+  if (!esRolBodega) return false
+
+  const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+  if (!inventarioActual?.id) {
+    mostrarNotificacion('No hay inventario seleccionado para despachar material')
+    return false
+  }
+
+  const fecha = datosSalida?.fecha || new Date().toISOString().slice(0, 10)
+  const documento = String(datosSalida?.documento || '').trim()
+  const bodega = obtenerBodegaInventario(inventarioActual) || 'bayona'
+
+  const items = (materialesSalida || [])
+    .map((item) => ({
+      codigo: String(item.codigo || '').trim(),
+      descripcion: String(item.descripcion || '').trim(),
+      unidad: String(item.unidad || '').trim(),
+      cantidad: Number(item.cantidad || 0),
+    }))
+    .filter((item) => (item.codigo || item.descripcion) && item.cantidad > 0)
+
+  if (!fecha) {
+    mostrarNotificacion('Debes ingresar la fecha del despacho')
+    return false
+  }
+
+  if (!documento) {
+    mostrarNotificacion('Debes ingresar el N° documento')
+    return false
+  }
+
+  if (items.length === 0) {
+    mostrarNotificacion('Debes ingresar al menos un material despachado con cantidad')
+    return false
+  }
+
+  const actualizacionesPorItem = new Map()
+  const noEncontrados = []
+  const sinStock = []
+
+  for (const itemSalida of items) {
+    const itemInventario = (inventarioActual.items || []).find((item) => (
+      normalizarTextoComparacion(item.codigo) === normalizarTextoComparacion(itemSalida.codigo) ||
+      normalizarTextoComparacion(item.descripcion) === normalizarTextoComparacion(itemSalida.descripcion)
+    ))
+
+    if (!itemInventario?.id) {
+      noEncontrados.push(itemSalida.descripcion || itemSalida.codigo)
+      continue
+    }
+
+    const acumuladaPrevia = actualizacionesPorItem.get(itemInventario.id)?.cantidad || 0
+    const cantidadAcumulada = acumuladaPrevia + itemSalida.cantidad
+    const saldoActual = Number(itemInventario.saldoFinal || 0)
+    const nuevaSalida = Number(itemInventario.salidas || 0) + cantidadAcumulada
+    const nuevoSaldoFinal = saldoActual - cantidadAcumulada
+
+    if (nuevoSaldoFinal < -0.000001) {
+      sinStock.push(`${itemInventario.descripcion || itemSalida.descripcion}: stock ${saldoActual}, solicitado ${cantidadAcumulada}`)
+      continue
+    }
+
+    actualizacionesPorItem.set(itemInventario.id, {
+      itemInventario,
+      cantidad: cantidadAcumulada,
+      nuevasSalidas: nuevaSalida,
+      nuevoSaldoFinal,
+    })
+  }
+
+  const actualizaciones = Array.from(actualizacionesPorItem.values())
+
+  if (noEncontrados.length > 0) {
+    mostrarNotificacion('No se encontraron en el inventario: ' + noEncontrados.join(', '))
+    return false
+  }
+
+  if (sinStock.length > 0) {
+    mostrarNotificacion('Stock insuficiente: ' + sinStock.join(' | '))
+    return false
+  }
+
+  setGuardandoDespachoBodega(true)
+
+  const { error, etapa } = await guardarDespachoBodegaSupabase({
+    supabase,
+    fecha,
+    documento,
+    bodega,
+    usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    items,
+  })
+
+  if (error) {
+    setGuardandoDespachoBodega(false)
+    mostrarNotificacion(
+      `No se pudo guardar el despacho${etapa ? ` (${etapa})` : ''}. Revisa si existen las tablas bodega_despachos y bodega_despacho_items. Detalle: ${error.message}`
+    )
+    return false
+  }
+
+  for (const actualizacion of actualizaciones) {
+    const { error: errorInventario } = await supabase
+      .from('bodega_inventario_items')
+      .update({
+        salidas: actualizacion.nuevasSalidas,
+        saldo_final: actualizacion.nuevoSaldoFinal,
+      })
+      .eq('id', actualizacion.itemInventario.id)
+
+    if (errorInventario) {
+      setGuardandoDespachoBodega(false)
+      mostrarNotificacion('El despacho se guardó, pero no se pudo actualizar inventario: ' + errorInventario.message)
+      await cargarInventariosBodega()
+      return false
+    }
+  }
+
+  setGuardandoDespachoBodega(false)
+  mostrarNotificacion('Material despachado y descontado del inventario')
+  await cargarInventariosBodega()
+  await cargarDespachosBodega()
+  return true
 }
 
 function cambiarFechaValeBodega(fecha) {
@@ -6240,6 +6409,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     guardandoPedido={guardandoPedidoBodega}
     guardandoDevolucion={guardandoDevolucionBodega}
     guardandoRecepcion={guardandoRecepcionBodega}
+    guardandoSalida={guardandoDespachoBodega}
     entregandoSolicitudBodega={entregandoSolicitudBodega}
     puedeExportarInventario={puedeExportarInventarioBodega}
     alertasBodega={alertasBodega}
@@ -6254,11 +6424,16 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     mostrarRecepcionesBodega={mostrarRecepcionesBodega}
     rangoRecepcionesBodega={rangoRecepcionesBodega}
     fechaRecepcionesBodega={fechaRecepcionesBodega}
+    despachosBodega={despachosBodega}
+    mostrarDespachosBodega={mostrarDespachosBodega}
+    rangoDespachosBodega={rangoDespachosBodega}
+    fechaDespachosBodega={fechaDespachosBodega}
     onCambiarArchivo={setArchivoInventarioBodega}
     onLeerArchivo={leerInventarioBodega}
     onGuardarPedido={guardarPedidoBodega}
     onGuardarDevolucion={guardarDevolucionBodegaConMateriales}
     onGuardarRecepcion={guardarRecepcionBodega}
+    onGuardarSalida={guardarDespachoBodega}
     onEntregarSolicitudBodega={entregarSolicitudBodega}
     onEditarSolicitudBodega={editarSolicitudBodega}
     onExportarInventario={exportarInventarioBodegaActual}
@@ -6282,6 +6457,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onCambiarRangoRecepcionesBodega={cambiarRangoRecepcionesBodega}
     onCambiarFechaRecepcionesBodega={cambiarFechaRecepcionesBodega}
     onActualizarRecepcionesBodega={() => cargarRecepcionesBodega()}
+    onToggleDespachosBodega={() => setMostrarDespachosBodega((actual) => !actual)}
+    onCambiarRangoDespachosBodega={cambiarRangoDespachosBodega}
+    onCambiarFechaDespachosBodega={cambiarFechaDespachosBodega}
+    onActualizarDespachosBodega={() => cargarDespachosBodega()}
     onActualizarAlertasBodega={cargarAlertasBodega}
     onSeleccionarInventario={setInventarioBodegaSeleccionadoId}
     onCerrar={() => {
