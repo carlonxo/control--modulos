@@ -2179,8 +2179,8 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
     return false
   }
 
-  const actualizaciones = []
-  const noEncontrados = []
+  const actualizacionesPorItem = new Map()
+  const nuevosPorClave = new Map()
 
   for (const itemRecepcion of items) {
     const itemInventario = (inventarioActual.items || []).find((item) => (
@@ -2189,22 +2189,35 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
     ))
 
     if (!itemInventario?.id) {
-      noEncontrados.push(itemRecepcion.descripcion || itemRecepcion.codigo)
+      const claveNuevo = normalizarTextoComparacion(itemRecepcion.codigo || itemRecepcion.descripcion)
+      const nuevoPrevio = nuevosPorClave.get(claveNuevo)
+
+      if (nuevoPrevio) {
+        nuevoPrevio.cantidad += itemRecepcion.cantidad
+      } else {
+        nuevosPorClave.set(claveNuevo, {
+          codigo: itemRecepcion.codigo,
+          descripcion: itemRecepcion.descripcion,
+          unidad: itemRecepcion.unidad,
+          cantidad: itemRecepcion.cantidad,
+        })
+      }
       continue
     }
 
-    actualizaciones.push({
+    const actualizacionPrevia = actualizacionesPorItem.get(itemInventario.id)
+    const cantidadAcumulada = (actualizacionPrevia?.cantidad || 0) + itemRecepcion.cantidad
+
+    actualizacionesPorItem.set(itemInventario.id, {
       itemInventario,
-      cantidad: itemRecepcion.cantidad,
-      nuevasEntradas: Number(itemInventario.entradas || 0) + itemRecepcion.cantidad,
-      nuevoSaldoFinal: Number(itemInventario.saldoFinal || 0) + itemRecepcion.cantidad,
+      cantidad: cantidadAcumulada,
+      nuevasEntradas: Number(itemInventario.entradas || 0) + cantidadAcumulada,
+      nuevoSaldoFinal: Number(itemInventario.saldoFinal || 0) + cantidadAcumulada,
     })
   }
 
-  if (noEncontrados.length > 0) {
-    mostrarNotificacion('No se encontraron en el inventario: ' + noEncontrados.join(', '))
-    return false
-  }
+  const actualizaciones = Array.from(actualizacionesPorItem.values())
+  const nuevosItemsInventario = Array.from(nuevosPorClave.values())
 
   setGuardandoRecepcionBodega(true)
 
@@ -2244,8 +2257,38 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
     }
   }
 
+  if (nuevosItemsInventario.length > 0) {
+    const filasNuevasInventario = nuevosItemsInventario.map((item) => ({
+      inventario_id: inventarioActual.id,
+      codigo_bodega: item.codigo,
+      descripcion: item.descripcion,
+      unidad: item.unidad || '',
+      entradas: item.cantidad,
+      salidas: 0,
+      saldo_inicial: 0,
+      stock_container: 0,
+      saldo_final: item.cantidad,
+      fila_excel: null,
+    }))
+
+    const { error: errorInsertarInventario } = await supabase
+      .from('bodega_inventario_items')
+      .insert(filasNuevasInventario)
+
+    if (errorInsertarInventario) {
+      setGuardandoRecepcionBodega(false)
+      mostrarNotificacion('La recepción se guardó, pero no se pudo crear el material en inventario: ' + errorInsertarInventario.message)
+      await cargarRecepcionesBodega()
+      return false
+    }
+  }
+
   setGuardandoRecepcionBodega(false)
-  mostrarNotificacion('Material recepcionado y sumado al inventario')
+  mostrarNotificacion(
+    nuevosItemsInventario.length > 0
+      ? `Material recepcionado. Nuevos materiales creados: ${nuevosItemsInventario.length}`
+      : 'Material recepcionado y sumado al inventario'
+  )
   await cargarInventariosBodega()
   await cargarRecepcionesBodega()
   return true
