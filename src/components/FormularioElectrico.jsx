@@ -60,6 +60,7 @@ function FormularioElectrico({ secciones, valores, onChange }) {
                       key={tipo}
                       type="number"
                       min="0"
+                      step="1"
                       inputMode="numeric"
                       aria-label={`${tipo} de ${item}`}
                       value={cantidades[tipo] ?? ''}

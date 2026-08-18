@@ -268,6 +268,7 @@ function ValesBodegaModal({
                     <input
                       type="number"
                       min="0"
+                      step="1"
                       value={fila.cantidad}
                       onChange={(e) => onActualizarFila(index, { cantidad: e.target.value })}
                       style={{ ...inputStyle, textAlign: 'right', width: '110px' }}

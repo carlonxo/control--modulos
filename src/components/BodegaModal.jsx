@@ -1686,7 +1686,7 @@ function DetalleSolicitudBodega({
                         <input
                           type="number"
                           min="0"
-                          step="0.01"
+                          step="1"
                           value={item.cantidad}
                           onChange={(e) => cambiarItem(indice, 'cantidad', e.target.value)}
                           style={{ ...inputTablaStyle, textAlign: 'right' }}
@@ -2183,7 +2183,7 @@ function TablaMovimientoMateriales({
                   <input
                     type="number"
                     min="0"
-                    step="0.01"
+                    step="1"
                     value={fila.cantidad}
                     onChange={(e) => onCambiarMaterial(indice, 'cantidad', e.target.value)}
                     style={{ ...inputTablaStyle, textAlign: 'right' }}
