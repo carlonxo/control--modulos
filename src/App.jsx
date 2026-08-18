@@ -202,7 +202,7 @@ import { LINEAS_TABLERO } from './utils/lineas'
 const seccionesFormularioElectrico = [
   {
     nombre: 'Canalización',
-    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metálica 100x100x65', 'Caja tabique LH', 'Tapa ciega - Pasac.'],
+    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metálica 100x100x65', 'Caja tabique LH', 'Tapa ciega - Pasac.', 'Prensa Estopa 16-21mm'],
   },
   {
     nombre: 'Cableado',
@@ -467,6 +467,7 @@ const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Caja metálica 100x100x65')]: 'Caja Metálica 100x100x65',
   [normalizarTextoComparacion('Caja tabique LH')]: 'Caja Tabique 3 Puestos LH',
   [normalizarTextoComparacion('Tapa ciega - Pasac.')]: 'Tapa Ciega - Plástica / Metálica',
+  [normalizarTextoComparacion('Prensa Estopa 16-21mm')]: 'Prensa Estopa 16-21mm',
   [normalizarTextoComparacion('Cable RZ1 2,5mm')]: 'Cable RZ1 2,5mm (Alum + Ench)',
   [normalizarTextoComparacion('Cable RZ1 4mm')]: 'Cable RZ1 4mm (Termo)',
   [normalizarTextoComparacion('Cable RZ1 6mm')]: 'Cable RZ1 6mm (Alimentación)',
