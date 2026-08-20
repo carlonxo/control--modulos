@@ -9,7 +9,7 @@ export const camposMateriales = [
   ['Cordon flex 3 x 2.5/4mm', ['Cordon 3x4mm'], 375, 802], ['Cordon flex 3 x 6mm', ['Cordon 3 x 6mm'], 375, 823],
   ['Ampolleta LED', ['Ampolleta LED'], 375, 867], ['Plafón', ['Plafón'], 375, 888], ['Tubo LED', ['Tubo LED'], 375, 909],
   ['EQ. Herm. LED 40W (tubo/placa)', ['EQ. Herm. LED 40W (tubo/placa)'], 375, 931], ['Foco tortuga LED', ['Foco tortuga 60W', 'Foco tortuga LED'], 375, 952], ['Extractor', ['Extractor'], 375, 995],
-  ['Conduit 32mm', ['Conduit 32mm'], 375, 1237], ['Cable RZ-1 3x1.5mm2', ['Cordon 3x1.5mm'], 981, 1215],
+  ['Conduit 32mm', ['Conduit 32mm'], 375, 1237], ['Cable RZ-1 3x1.5mm2', ['Cordon 3x1.5mm'], 981, 1215], ['Cable RZ-1 5x4mm2', ['Cable RZ-1 5x4mm2'], 981, 1237],
   ['Artefacto simple', ['Artefacto simple'], 981, 546], ['Artefacto doble', ['Artefacto doble'], 981, 568],
   ['Artefacto triple', ['Artefacto triple'], 981, 590], ['Tapa ciega artefacto', ['Tapa ciega artefacto'], 981, 611], ['Ench. Ind. 32A hembra', ['Ench. Ind. 32A hembra'], 981, 632],
   ['Ench. Ind. 32A macho', ['Ench. Ind. 32A macho'], 981, 653], ['Tab. PVC 24-36cc IP44', ['Tablero emb. IP44', 'Tablero sobr. IP44'], 981, 696],
@@ -20,7 +20,7 @@ export const camposMateriales = [
   ['Repartidor 4x80A', ['Barra repartidora'], 981, 994], ['Falso polo', ['Falso polo'], 981, 1016],
   ['BPC LH 100x45 + acces', ['BPC LH 100x45'], 375, 1126], ['Tapa idrobox IP65', ['Tapa idrobox IP65'], 375, 1148], ['Caja chuqui PVC', ['Caja chuqui'], 375, 1259],
   ['Foco sobrep LED 18w', ['Plafo led 18w'], 981, 1082], ['Panel led 600x600 mm', ['Panel led 60x60 + soporte'], 981, 1104],
-  ['Accesorio Montaje Panel Led', ['Panel led 60x60 + soporte'], 981, 1126], ['Foco sobrep led 24w', ['Plafo led 24w'], 981, 1148],
+  ['Accesorio Montaje Panel Led', ['Panel led 60x60 + soporte'], 981, 1126], ['Foco sobrep led 24w', ['Plafo led 24w', 'Foco Sobrep LED 24W'], 981, 1148],
 ]
 
 const anchoProtocolo = 1275

@@ -206,7 +206,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Cableado',
-    items: ['Cable RZ1 2,5mm', 'Cable RZ1 4mm', 'Cable RZ1 6mm', 'Cordon 3x1.5mm', 'Cordon 3x4mm', 'Cordon 3 x 6mm'],
+    items: ['Cable RZ1 2,5mm', 'Cable RZ1 4mm', 'Cable RZ1 6mm', 'Cordon 3x1.5mm', 'Cordon 3x4mm', 'Cordon 3 x 6mm', 'Cable RZ-1 5x4mm2'],
   },
   {
     nombre: 'Iluminación',
@@ -222,7 +222,7 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Especiales',
-    items: ['Panel led 60x60 + soporte', 'Plafo led 18w', 'Plafo led 24w', 'BPC LH 100x45', 'Tapa idrobox IP65', 'Caja chuqui'],
+    items: ['Panel led 60x60 + soporte', 'Plafo led 18w', 'Plafo led 24w', 'Foco Sobrep LED 24W', 'BPC LH 100x45', 'Tapa idrobox IP65', 'Caja chuqui'],
   },
 ]
 
@@ -473,6 +473,7 @@ const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Cable RZ1 6mm')]: 'Cable RZ1 6mm (Alimentación)',
   [normalizarTextoComparacion('Cordon flex 3 x 2.5/4mm')]: 'Cable RZ1 3x2.5 / 4mm (Ilu-Term)',
   [normalizarTextoComparacion('Cordon flex 3 x 6mm')]: 'Cable RZ1 3x6mm (Alimentación)',
+  [normalizarTextoComparacion('Cable RZ-1 5x4mm2')]: 'Cable RZ-1 5x4mm2',
   [normalizarTextoComparacion('Plafón')]: 'Foco Led 12W Sob',
   [normalizarTextoComparacion('Extractor')]: 'Instalación Extractor',
   [normalizarTextoComparacion('Conduit 32mm')]: 'Ducto Flex/Rig 32mm LH (Incl Acc)',
@@ -499,6 +500,7 @@ const equivalenciasPrecioProtocolo = {
   [normalizarTextoComparacion('Panel led 600x600 mm')]: 'Panel Led 600x600mm',
   [normalizarTextoComparacion('Accesorio Montaje Panel Led')]: 'Accesorio Mtaje Panel Led',
   [normalizarTextoComparacion('Foco sobrep led 24w')]: 'Foco Sobrep LED 24W',
+  [normalizarTextoComparacion('Foco Sobrep LED 24W')]: 'Foco Sobrep LED 24W',
 }
 
 const equivalenciasValeBodega = {
