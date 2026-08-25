@@ -88,8 +88,15 @@ function DetalleCobroModal({
                     {formatearPrecio(item.subtotal)}
                   </div>
                   {item.ajusteValorizacionItem && (
-                    <div style={{ color: '#ffcc80', fontSize: '12px', textAlign: 'right' }}>
-                      Ajustado{item.subtotalOriginal !== undefined ? ` desde ${formatearPrecio(item.subtotalOriginal)}` : ''}
+                    <div style={{ color: '#ffcc80', fontSize: '12px', textAlign: 'right', maxWidth: '260px' }}>
+                      <div>
+                        Ajustado{item.subtotalOriginal !== undefined ? ` desde ${formatearPrecio(item.subtotalOriginal)}` : ''}
+                      </div>
+                      {item.ajusteValorizacionItem?.motivo && (
+                        <div style={{ color: '#ffdca8', marginTop: '3px', lineHeight: 1.25 }}>
+                          Motivo: {item.ajusteValorizacionItem.motivo}
+                        </div>
+                      )}
                     </div>
                   )}
                   {puedeAjustar && (
