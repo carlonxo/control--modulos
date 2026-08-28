@@ -2682,10 +2682,36 @@ async function imprimirPedidosBodegaHoy() {
   }
 }
 
+function filtrarPedidosEntregadosParaImpresionGeneral(pedidos = []) {
+  const pedidosEntregados = (pedidos || []).filter((pedido) => (
+    String(pedido.estado_bodega || '').toLowerCase() === 'entregado'
+  ))
+  const pedidosPendientes = (pedidos || []).filter((pedido) => (
+    String(pedido.estado_bodega || '').toLowerCase() !== 'entregado'
+  ))
+
+  if (pedidosPendientes.length > 0) {
+    const confirmar = window.confirm(
+      `Existen ${pedidosPendientes.length} pedidos no aprobados por bodega, ` +
+      'los cuales no serán sumados a la impresión. ¿Desea imprimir de todas formas?'
+    )
+    if (!confirmar) return []
+  }
+
+  if (pedidosEntregados.length === 0) {
+    mostrarNotificacion('No hay pedidos con entrega confirmada para imprimir')
+    return []
+  }
+
+  return pedidosEntregados
+}
+
 async function imprimirPedidosBodegaHoyGeneral() {
   if (!puedeVerPedidosBodegaHoy) return
   try {
-    await exportarPedidosBodegaExcel(pedidosBodegaHoy, { modo: 'general' })
+    const pedidosEntregados = filtrarPedidosEntregadosParaImpresionGeneral(pedidosBodegaHoy)
+    if (pedidosEntregados.length === 0) return
+    await exportarPedidosBodegaExcel(pedidosEntregados, { modo: 'general' })
   } catch (error) {
     console.error(error)
     mostrarNotificacion('No se pudo generar el vale general de bodega')
@@ -2705,7 +2731,9 @@ async function imprimirHistorialValesBodega() {
 async function imprimirHistorialValesBodegaGeneral() {
   if (!puedeVerPedidosBodegaHoy) return
   try {
-    await exportarPedidosBodegaExcel(historialValesBodega, { modo: 'general' })
+    const pedidosEntregados = filtrarPedidosEntregadosParaImpresionGeneral(historialValesBodega)
+    if (pedidosEntregados.length === 0) return
+    await exportarPedidosBodegaExcel(pedidosEntregados, { modo: 'general' })
   } catch (error) {
     console.error(error)
     mostrarNotificacion('No se pudo generar el vale general de bodega del historial')
