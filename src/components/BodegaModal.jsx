@@ -132,6 +132,7 @@ function BodegaModal({
   const inventarioSeleccionado = inventarios.find((item) => item.id === inventarioSeleccionadoId) || inventarios[0]
   const materialesInventario = inventarioSeleccionado?.items || []
   const mostrarPedidosHoy = Boolean(puedeVerPedidosHoy)
+  const puedeVerHistorialVales = Boolean(puedeAdministrar || modoSoloBodega || puedeVerPedidosHoy)
   const electricosDisponibles = useMemo(() => (
     (solicitantes || [])
       .filter((item) => normalizarBusqueda(item.rol).includes('electrico'))
@@ -421,9 +422,10 @@ function BodegaModal({
         />
       )}
 
-      {puedeAdministrar ? (
+      {puedeVerHistorialVales ? (
         <>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
+            {puedeAdministrar && (
             <button
               type="button"
               onClick={() => {
@@ -434,6 +436,7 @@ function BodegaModal({
             >
               Cargar inventario Excel
             </button>
+            )}
             <button
               type="button"
               onClick={() => {
