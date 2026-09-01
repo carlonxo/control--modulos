@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
-import { formatearFecha, parseLocalDate } from '../utils/fechas'
+import { formatearFecha, obtenerRangoFechasProtocolos, parseLocalDate } from '../utils/fechas'
 import plantillaValeBodegaUrl from '../assets/vales-template.xlsx?url'
 
 export function exportarHistorialExcel(historial, fechaDesde, fechaHasta) {
@@ -93,6 +93,77 @@ export function exportarInventarioBodegaExcel(inventario) {
   const libro = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(libro, hoja, nombreHoja)
   XLSX.writeFile(libro, `inventario_bodega_${fechaInventario}.xlsx`)
+}
+
+export async function exportarDetalleReutilizadosExcel(registros = [], opciones = {}) {
+  const registrosConReutilizados = construirDetalleReutilizadosPorRegistro(registros)
+
+  if (registrosConReutilizados.length === 0) {
+    alert('No hay materiales reutilizados para imprimir en el rango seleccionado.')
+    return
+  }
+
+  const filasDetalle = []
+  const gruposDetalle = []
+  let contadorModulo = 0
+
+  registrosConReutilizados.forEach((registro) => {
+    contadorModulo += 1
+    const filaInicioGrupo = 7 + filasDetalle.length
+    registro.items.forEach((item, indiceItem) => {
+      filasDetalle.push([
+        indiceItem === 0 ? contadorModulo : '',
+        indiceItem === 0 ? registro.modulo : '',
+        indiceItem === 0 ? registro.fecha : '',
+        item.insumo,
+        item.cantidad,
+        item.valorCompleto,
+        item.valorReutilizado,
+      ])
+    })
+    gruposDetalle.push({
+      inicio: filaInicioGrupo,
+      fin: filaInicioGrupo + registro.items.length - 1,
+    })
+  })
+
+  const montoAdeudado = filasDetalle.reduce((total, fila) => total + numeroExcel(fila[6]), 0)
+  const periodo = describirPeriodoInformeReutilizados(opciones.rango, opciones.fecha)
+  const filas = [
+    ['', 'Listado Insumos Reutilizados y Valoración del 50%', '', '', '', '', ''],
+    ['', '', '', '', '', '', ''],
+    ['', 'Período:', '', periodo, '', '', ''],
+    ['', 'Monto Adeudado:', '', montoAdeudado, '', '', ''],
+    ['', '', '', '', '', '', ''],
+    ['N°', 'Módulo', 'Fecha', 'Insumo', 'Cantidad', 'Valor', '50%'],
+    ...filasDetalle,
+  ]
+
+  const hoja = XLSX.utils.aoa_to_sheet(filas)
+  hoja['!cols'] = [
+    { wch: 8 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 46 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 14 },
+  ]
+  hoja['!merges'] = [{ s: { r: 0, c: 1 }, e: { r: 0, c: 6 } }]
+  hoja['!autofilter'] = { ref: `A6:G${filas.length}` }
+
+  asignarFormatoNumero(hoja, 'D4', '$ #,##0')
+  for (let fila = 7; fila <= filas.length; fila += 1) {
+    asignarFormatoNumero(hoja, `E${fila}`, '#,##0.##')
+    asignarFormatoNumero(hoja, `F${fila}`, '$ #,##0')
+    asignarFormatoNumero(hoja, `G${fila}`, '$ #,##0')
+  }
+
+  const libro = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(libro, hoja, 'Reutilizados')
+  const buffer = XLSX.write(libro, { bookType: 'xlsx', type: 'array' })
+  const blob = await agregarBordesInformeReutilizados(buffer, filas.length, gruposDetalle)
+  descargarBlob(blob, `detalle_reutilizados_${nombreArchivoSeguro(opciones.fecha || new Date().toISOString().slice(0, 10))}.xlsx`)
 }
 
 export async function exportarPedidosBodegaExcel(pedidos = [], opciones = {}) {
@@ -433,6 +504,98 @@ function nombreArchivoSeguro(valor) {
     .slice(0, 80)
 }
 
+function construirDetalleReutilizadosPorRegistro(registros = []) {
+  return (registros || [])
+    .map((registro) => {
+      const items = [
+        ...(registro.detalleCobro?.mantencion || []),
+        ...(registro.detalleCobro?.modificacion || []),
+      ]
+        .filter(esItemReutilizado)
+        .map(normalizarItemReutilizadoInforme)
+        .filter((item) => item.cantidad > 0 && item.valorReutilizado > 0)
+
+      return {
+        modulo: registro.serie || registro.protocolo_entrega?.serie || registro.modulo || registro.id || '',
+        fecha: formatearFechaRegistroInforme(registro.fecha_prueba_electrica || registro.protocolo_entrega?.fecha_prueba_electrica || registro.fecha || registro.created_at),
+        items,
+      }
+    })
+    .filter((registro) => registro.items.length > 0)
+}
+
+function esItemReutilizado(item = {}) {
+  return normalizarClaveVale(item.tipoCantidad || item.material).includes('reutilizado')
+}
+
+function normalizarItemReutilizadoInforme(item = {}) {
+  const cantidad = numeroExcel(item.cantidad)
+  const valorReutilizado = numeroExcel(item.subtotal)
+  const precioUnitarioReutilizado = numeroExcel(item.precioUnitario)
+  const valorCompleto = cantidad > 0 && precioUnitarioReutilizado > 0
+    ? cantidad * precioUnitarioReutilizado * 2
+    : valorReutilizado * 2
+
+  return {
+    insumo: String(item.materialPrecio || item.material || '')
+      .replace(/\s+reutilizado$/i, '')
+      .trim(),
+    cantidad,
+    valorCompleto,
+    valorReutilizado,
+  }
+}
+
+function describirPeriodoInformeReutilizados(rango = 'mes', valor = '') {
+  const rangoFechas = obtenerRangoFechasProtocolos(rango, valor || new Date().toISOString().slice(0, 10))
+  const inicio = parseLocalDate(String(rangoFechas.inicio || '').slice(0, 10))
+  const fin = parseLocalDate(String(rangoFechas.fin || '').slice(0, 10))
+
+  if (!inicio || !fin) return String(valor || '')
+
+  fin.setDate(fin.getDate() - 1)
+  if (inicio.getTime() === fin.getTime()) return formatearFechaLargaInforme(inicio)
+
+  const mismoMes = inicio.getMonth() === fin.getMonth() && inicio.getFullYear() === fin.getFullYear()
+  if (mismoMes) {
+    return `${inicio.getDate()} de ${nombreMesInforme(inicio)} al ${fin.getDate()} ${nombreMesInforme(fin)} ${fin.getFullYear()}`
+  }
+
+  return `${formatearFechaLargaInforme(inicio)} al ${formatearFechaLargaInforme(fin)}`
+}
+
+function formatearFechaLargaInforme(fecha) {
+  return `${fecha.getDate()} de ${nombreMesInforme(fecha)} ${fecha.getFullYear()}`
+}
+
+function formatearFechaRegistroInforme(valor) {
+  const textoFecha = String(valor || '').slice(0, 10)
+  const fechaLocal = parseLocalDate(textoFecha)
+  return fechaLocal ? formatearFecha(fechaLocal) : formatearFecha(valor)
+}
+
+function nombreMesInforme(fecha) {
+  const meses = [
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
+  ]
+  return meses[fecha.getMonth()] || ''
+}
+
+function asignarFormatoNumero(hoja, referencia, formato) {
+  if (hoja[referencia]) hoja[referencia].z = formato
+}
+
 function numeroExcel(valor) {
   const numero = Number(valor || 0)
   return Number.isFinite(numero) ? numero : 0
@@ -448,4 +611,197 @@ function limpiarNombreHoja(nombre) {
   return String(nombre || 'Inventario')
     .replace(/[\\/?*[\]:]/g, ' ')
     .slice(0, 31)
+}
+
+async function agregarBordesInformeReutilizados(buffer, totalFilas, gruposDetalle = []) {
+  const zip = await JSZip.loadAsync(buffer)
+  const archivoEstilos = zip.file('xl/styles.xml')
+  const archivoHoja = zip.file('xl/worksheets/sheet1.xml')
+
+  if (!archivoEstilos || !archivoHoja) {
+    return new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+  }
+
+  let stylesXml = await archivoEstilos.async('string')
+  let sheetXml = await archivoHoja.async('string')
+  const bordersPorClave = new Map()
+  const estilosConBorde = new Map()
+
+  const obtenerBorderId = (borde) => {
+    const clave = claveBordeExcel(borde)
+    if (bordersPorClave.has(clave)) return bordersPorClave.get(clave)
+
+    const borderId = obtenerSiguienteIndiceEstilo(stylesXml, 'borders')
+    stylesXml = agregarBorderExcel(stylesXml, borde)
+    bordersPorClave.set(clave, borderId)
+    return borderId
+  }
+
+  const obtenerEstiloConBorde = (estiloBase = 0, borde = {}) => {
+    const base = Number(estiloBase || 0)
+    const claveEstilo = `${base}|${claveBordeExcel(borde)}`
+    if (estilosConBorde.has(claveEstilo)) return estilosConBorde.get(claveEstilo)
+
+    const estiloBaseXml = obtenerXfPorIndice(stylesXml, base) || '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+    const borderId = obtenerBorderId(borde)
+    const estiloNuevo = clonarXfConBorde(estiloBaseXml, borderId)
+    const nuevoIndice = obtenerSiguienteIndiceEstilo(stylesXml, 'cellXfs')
+    stylesXml = agregarXfEstilo(stylesXml, estiloNuevo)
+    estilosConBorde.set(claveEstilo, nuevoIndice)
+    return nuevoIndice
+  }
+
+  const bordeCompleto = { left: true, right: true, top: true, bottom: true }
+  crearReferenciasRangoExcel(2, 3, 7, 4).forEach((referencia) => {
+    sheetXml = aplicarBordeACeldaExcel(sheetXml, referencia, obtenerEstiloConBorde, bordeCompleto)
+  })
+
+  crearReferenciasRangoExcel(1, 6, 7, 6).forEach((referencia) => {
+    sheetXml = aplicarBordeACeldaExcel(sheetXml, referencia, obtenerEstiloConBorde, bordeCompleto)
+  })
+
+  gruposDetalle.forEach((grupo) => {
+    for (let fila = grupo.inicio; fila <= grupo.fin; fila += 1) {
+      for (let columna = 1; columna <= 7; columna += 1) {
+        const referencia = `${nombreColumnaExcel(columna)}${fila}`
+        const bordeGrupo = {
+          left: true,
+          right: true,
+          top: fila === grupo.inicio,
+          bottom: fila === grupo.fin,
+        }
+        sheetXml = aplicarBordeACeldaExcel(sheetXml, referencia, obtenerEstiloConBorde, bordeGrupo)
+      }
+    }
+  })
+
+  zip.file('xl/styles.xml', stylesXml)
+  zip.file('xl/worksheets/sheet1.xml', sheetXml)
+
+  return zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+}
+
+function claveBordeExcel(borde = {}) {
+  return ['left', 'right', 'top', 'bottom']
+    .filter((lado) => borde[lado])
+    .join('-') || 'none'
+}
+
+function agregarBorderExcel(stylesXml, borde = {}) {
+  const borderXml = [
+    '<border>',
+    ladoBordeExcel('left', borde.left),
+    ladoBordeExcel('right', borde.right),
+    ladoBordeExcel('top', borde.top),
+    ladoBordeExcel('bottom', borde.bottom),
+    '<diagonal/>',
+    '</border>',
+  ].join('')
+
+  return stylesXml.replace(
+    /<borders([^>]*)count="(\d+)"([^>]*)>([\s\S]*?)<\/borders>/,
+    (match, antesCount, count, despuesCount, contenido) => (
+      `<borders${antesCount}count="${Number(count) + 1}"${despuesCount}>${contenido}${borderXml}</borders>`
+    )
+  )
+}
+
+function ladoBordeExcel(lado, activo) {
+  return activo
+    ? `<${lado} style="thin"><color auto="1"/></${lado}>`
+    : `<${lado}/>`
+}
+
+function obtenerSiguienteIndiceEstilo(stylesXml, etiqueta) {
+  const coincidencia = stylesXml.match(new RegExp(`<${etiqueta}[^>]*count="(\\d+)"`))
+  return coincidencia ? Number(coincidencia[1]) : 0
+}
+
+function obtenerXfPorIndice(stylesXml, indice) {
+  const contenido = stylesXml.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/)?.[1] || ''
+  const estilos = contenido.match(/<xf\b[^>]*(?:\/>|>[\s\S]*?<\/xf>)/g) || []
+  return estilos[indice] || estilos[0] || ''
+}
+
+function clonarXfConBorde(xfXml, borderId) {
+  let salida = xfXml
+  if (/\sborderId="[^"]*"/.test(salida)) {
+    salida = salida.replace(/\sborderId="[^"]*"/, ` borderId="${borderId}"`)
+  } else {
+    salida = salida.replace('<xf', `<xf borderId="${borderId}"`)
+  }
+
+  if (/\sapplyBorder="[^"]*"/.test(salida)) {
+    salida = salida.replace(/\sapplyBorder="[^"]*"/, ' applyBorder="1"')
+  } else if (salida.endsWith('/>')) {
+    salida = salida.replace(/\/>$/, ' applyBorder="1"/>')
+  } else {
+    salida = salida.replace(/<xf\b([^>]*)>/, '<xf$1 applyBorder="1">')
+  }
+
+  return salida
+}
+
+function agregarXfEstilo(stylesXml, xfXml) {
+  return stylesXml.replace(
+    /<cellXfs([^>]*)count="(\d+)"([^>]*)>([\s\S]*?)<\/cellXfs>/,
+    (match, antesCount, count, despuesCount, contenido) => (
+      `<cellXfs${antesCount}count="${Number(count) + 1}"${despuesCount}>${contenido}${xfXml}</cellXfs>`
+    )
+  )
+}
+
+function crearReferenciasRangoExcel(columnaInicio, filaInicio, columnaFin, filaFin) {
+  const referencias = []
+  for (let fila = filaInicio; fila <= filaFin; fila += 1) {
+    for (let columna = columnaInicio; columna <= columnaFin; columna += 1) {
+      referencias.push(`${nombreColumnaExcel(columna)}${fila}`)
+    }
+  }
+  return referencias
+}
+
+function nombreColumnaExcel(indice) {
+  let numero = indice
+  let nombre = ''
+  while (numero > 0) {
+    const resto = (numero - 1) % 26
+    nombre = String.fromCharCode(65 + resto) + nombre
+    numero = Math.floor((numero - resto - 1) / 26)
+  }
+  return nombre
+}
+
+function aplicarBordeACeldaExcel(sheetXml, referencia, obtenerEstiloConBorde, borde = {}) {
+  const celdaRegex = new RegExp(`<c\\s+([^>]*\\br="${referencia}"[^>]*)\\s*\\/\\s*>|<c\\s+([^>]*\\br="${referencia}"[^>]*)>([\\s\\S]*?)<\\/c>`)
+  const reemplazarAtributos = (atributos) => {
+    const estiloBase = Number(atributos.match(/\ss="(\d+)"/)?.[1] || 0)
+    const estiloConBorde = obtenerEstiloConBorde(estiloBase, borde)
+    return /\ss="[^"]*"/.test(atributos)
+      ? atributos.replace(/\ss="[^"]*"/, ` s="${estiloConBorde}"`)
+      : `${atributos} s="${estiloConBorde}"`
+  }
+
+  if (celdaRegex.test(sheetXml)) {
+    return sheetXml.replace(celdaRegex, (match, atributosVacios, atributosConContenido, contenido = '') => {
+      const atributos = reemplazarAtributos(atributosVacios || atributosConContenido || `r="${referencia}"`)
+      return atributosVacios ? `<c ${atributos}/>` : `<c ${atributos}>${contenido}</c>`
+    })
+  }
+
+  const fila = referencia.match(/\d+/)?.[0]
+  if (!fila) return sheetXml
+
+  const rowRegex = new RegExp(`(<row[^>]*\\br="${fila}"[^>]*>)([\\s\\S]*?)(<\\/row>)`)
+  if (!rowRegex.test(sheetXml)) return sheetXml
+
+  const estiloConBorde = obtenerEstiloConBorde(0, borde)
+  return sheetXml.replace(rowRegex, (match, inicio, contenido, cierre) => (
+    `${inicio}${contenido}<c r="${referencia}" s="${estiloConBorde}"/>${cierre}`
+  ))
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { exportarDetalleReutilizadosExcel } from '../services/exportarExcel'
 import { compilarTrazabilidadMaterialesPorGrupo } from '../services/trazabilidadMaterialesService'
 
 function BalanceMaterialesModal({
@@ -368,6 +369,7 @@ function BalanceMaterialesModal({
             filas={filasReutilizadas}
             tituloVacio="No hay material reutilizado cobrado en el rango seleccionado."
             formatearPrecio={formatearPrecio}
+            onImprimirDetalle={() => exportarDetalleReutilizadosExcel(registrosProtocolos, { rango, fecha })}
           />
         ) : (
           <TablaBalanceMateriales
@@ -389,6 +391,7 @@ function TablaMaterialesReutilizados({
   filas,
   tituloVacio,
   formatearPrecio,
+  onImprimirDetalle,
 }) {
   if (filas.length === 0) {
     return <p style={{ color: '#ccc' }}>{tituloVacio}</p>
@@ -396,6 +399,23 @@ function TablaMaterialesReutilizados({
 
   return (
     <div style={{ overflowX: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+        <button
+          type="button"
+          onClick={onImprimirDetalle}
+          style={{
+            padding: '9px 14px',
+            borderRadius: '8px',
+            border: '1px solid #64b5f6',
+            background: '#1565c0',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 800,
+          }}
+        >
+          Imprimir detalle
+        </button>
+      </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
         <thead>
           <tr style={{ background: '#333' }}>
