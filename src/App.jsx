@@ -76,6 +76,11 @@ import {
   guardarDespachoBodega as guardarDespachoBodegaSupabase,
 } from './services/bodegaDespachosService'
 import {
+  cargarCodigosBarraBodega as cargarCodigosBarraBodegaSupabase,
+  eliminarCodigoBarraBodega as eliminarCodigoBarraBodegaSupabase,
+  guardarCodigoBarraBodega as guardarCodigoBarraBodegaSupabase,
+} from './services/bodegaCodigosBarraService'
+import {
   cargarCatalogoMaterialesGuardado,
   cargarPreciosMateriales as cargarPreciosMaterialesSupabase,
   eliminarMaterialPrecio,
@@ -689,6 +694,9 @@ const [despachosBodega, setDespachosBodega] = useState([])
 const [mostrarDespachosBodega, setMostrarDespachosBodega] = useState(false)
 const [rangoDespachosBodega, setRangoDespachosBodega] = useState('mes')
 const [fechaDespachosBodega, setFechaDespachosBodega] = useState(new Date().toISOString().slice(0, 7))
+const [codigosBarraBodega, setCodigosBarraBodega] = useState([])
+const [cargandoCodigosBarraBodega, setCargandoCodigosBarraBodega] = useState(false)
+const [guardandoCodigoBarraBodega, setGuardandoCodigoBarraBodega] = useState(false)
 const [cargandoValesBodegaDia, setCargandoValesBodegaDia] = useState(false)
 const [leyendoValeBodega, setLeyendoValeBodega] = useState(false)
 const [guardandoValeBodega, setGuardandoValeBodega] = useState(false)
@@ -1219,6 +1227,7 @@ useEffect(() => {
   cargarAlertasBodega()
   cargarRecepcionesBodega()
   cargarDespachosBodega()
+  cargarCodigosBarraBodega()
 
   const intervalo = setInterval(() => {
     cargarAlertasBodega()
@@ -2140,6 +2149,72 @@ function cambiarRangoDespachosBodega(rango) {
 function cambiarFechaDespachosBodega(valor) {
   setFechaDespachosBodega(valor)
   cargarDespachosBodega(valor, rangoDespachosBodega)
+}
+
+async function cargarCodigosBarraBodega() {
+  if (!puedeVerBodega) return []
+
+  setCargandoCodigosBarraBodega(true)
+  const { codigos, error } = await cargarCodigosBarraBodegaSupabase({ supabase })
+  setCargandoCodigosBarraBodega(false)
+
+  if (error) {
+    console.error(error)
+    if (!error.message?.includes('bodega_codigos_barra')) {
+      mostrarNotificacion('No se pudieron cargar los códigos de barra: ' + error.message)
+    }
+    setCodigosBarraBodega([])
+    return []
+  }
+
+  setCodigosBarraBodega(codigos || [])
+  return codigos || []
+}
+
+async function guardarCodigoBarraBodega(datos = {}) {
+  if (!puedeExportarInventarioBodega) {
+    mostrarNotificacion('Tu rol no tiene permiso para guardar códigos de barra.')
+    return { ok: false, error: 'Tu rol no tiene permiso para guardar códigos de barra.' }
+  }
+
+  setGuardandoCodigoBarraBodega(true)
+  const { data, error } = await guardarCodigoBarraBodegaSupabase({
+    supabase,
+    codigoBodega: datos.codigoBodega,
+    codigoBarra: datos.codigoBarra,
+    descripcion: datos.descripcion,
+  })
+  setGuardandoCodigoBarraBodega(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudo guardar el código de barra: ' + error.message)
+    return { ok: false, error: error.message }
+  }
+
+  setCodigosBarraBodega((actuales) => {
+    const sinDuplicado = actuales.filter((item) => item.id !== data?.id && item.codigoBarra !== data?.codigoBarra)
+    return [...sinDuplicado, data].filter(Boolean).sort((a, b) => (
+      String(a.codigoBodega || '').localeCompare(String(b.codigoBodega || ''), 'es') ||
+      String(a.codigoBarra || '').localeCompare(String(b.codigoBarra || ''), 'es')
+    ))
+  })
+  cargarCodigosBarraBodega()
+  mostrarNotificacion('Código de barra guardado.')
+  return { ok: true }
+}
+
+async function eliminarCodigoBarraBodega(id) {
+  if (!puedeExportarInventarioBodega || !id) return false
+
+  const { error } = await eliminarCodigoBarraBodegaSupabase({ supabase, id })
+  if (error) {
+    mostrarNotificacion('No se pudo eliminar el código de barra: ' + error.message)
+    return false
+  }
+
+  setCodigosBarraBodega((actuales) => actuales.filter((item) => item.id !== id))
+  mostrarNotificacion('Código de barra eliminado.')
+  return true
 }
 
 async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
@@ -6535,6 +6610,9 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     mostrarDespachosBodega={mostrarDespachosBodega}
     rangoDespachosBodega={rangoDespachosBodega}
     fechaDespachosBodega={fechaDespachosBodega}
+    codigosBarraBodega={codigosBarraBodega}
+    cargandoCodigosBarraBodega={cargandoCodigosBarraBodega}
+    guardandoCodigoBarraBodega={guardandoCodigoBarraBodega}
     onCambiarArchivo={setArchivoInventarioBodega}
     onLeerArchivo={leerInventarioBodega}
     onGuardarPedido={guardarPedidoBodega}
@@ -6568,6 +6646,9 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onCambiarRangoDespachosBodega={cambiarRangoDespachosBodega}
     onCambiarFechaDespachosBodega={cambiarFechaDespachosBodega}
     onActualizarDespachosBodega={() => cargarDespachosBodega()}
+    onActualizarCodigosBarraBodega={cargarCodigosBarraBodega}
+    onGuardarCodigoBarraBodega={guardarCodigoBarraBodega}
+    onEliminarCodigoBarraBodega={eliminarCodigoBarraBodega}
     onActualizarAlertasBodega={cargarAlertasBodega}
     onSeleccionarInventario={setInventarioBodegaSeleccionadoId}
     onCerrar={() => {
