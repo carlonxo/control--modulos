@@ -767,6 +767,7 @@ const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresP
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
 const puedeVerMenuModulo = tienePermiso(perfil?.rol, 'verMenuModulo')
 const esRolBodega = perfil?.rol === 'bodega'
+const puedeOperarComoBodega = esRolBodega || perfil?.rol === 'analista'
 const puedeAdministrarUsuariosBodega = perfil?.rol === 'admin'
 const puedeAdministrarEquivalenciasMateriales = perfil?.rol === 'admin'
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
@@ -2029,7 +2030,7 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
   const solicitudesFiltradas = filtrarSolicitudesPorBodegaAsignada(solicitudesApp, perfil)
 
   setPedidosBodegaHoy(solicitudesFiltradas.filter((vale) => vale.tipo_ingreso === 'pedido_app'))
-  setAlertasBodega(solicitudesFiltradas.filter((vale) => vale.estado_bodega !== 'entregado'))
+  setAlertasBodega(solicitudesFiltradas.filter((vale) => !['entregado', 'denegado'].includes(String(vale.estado_bodega || '').toLowerCase())))
 }
 
 async function cargarHistorialValesBodega(fecha = fechaHistorialValesBodega) {
@@ -2180,9 +2181,11 @@ async function guardarCodigoBarraBodega(datos = {}) {
   setGuardandoCodigoBarraBodega(true)
   const { data, error } = await guardarCodigoBarraBodegaSupabase({
     supabase,
+    id: datos.id,
     codigoBodega: datos.codigoBodega,
     codigoBarra: datos.codigoBarra,
     descripcion: datos.descripcion,
+    cantidadPorEscaneo: datos.cantidadPorEscaneo,
   })
   setGuardandoCodigoBarraBodega(false)
 
@@ -2372,7 +2375,7 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
 }
 
 async function guardarDespachoBodega(datosSalida, materialesSalida) {
-  if (!esRolBodega) return false
+  if (!puedeOperarComoBodega) return false
 
   const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
   if (!inventarioActual?.id) {
@@ -3026,7 +3029,7 @@ async function guardarDevolucionBodegaConMateriales(datosDevolucion, materialesD
 }
 
 async function entregarSolicitudBodega(alerta) {
-  if (!esRolBodega || !alerta?.id) return false
+  if (!puedeOperarComoBodega || !alerta?.id) return false
   if (String(alerta.estado_bodega || '').toLowerCase() === 'entregado') {
     mostrarNotificacion('Este pedido ya fue marcado como entregado')
     return true
@@ -3195,6 +3198,60 @@ async function entregarSolicitudBodega(alerta) {
   return true
 }
 
+async function denegarSolicitudBodega(alerta) {
+  if (!puedeOperarComoBodega || !alerta?.id) return false
+  const estadoActual = String(alerta.estado_bodega || '').toLowerCase()
+  if (estadoActual === 'entregado') {
+    mostrarNotificacion('No se puede denegar un pedido ya entregado')
+    return false
+  }
+  if (estadoActual === 'denegado') {
+    mostrarNotificacion('Este pedido ya fue denegado')
+    return true
+  }
+
+  const motivo = window.prompt('Motivo para denegar el pedido:', '')
+  if (motivo === null) return false
+
+  const confirmado = window.confirm('¿Confirmar denegación del pedido? No se descontará inventario.')
+  if (!confirmado) return false
+
+  setEntregandoSolicitudBodega(true)
+  const marcaDenegacion = [
+    `Denegado por bodega: ${perfil?.nombre || perfil?.email || session?.user?.email || 'bodega'}`,
+    motivo.trim() ? `Motivo denegación: ${motivo.trim()}` : '',
+  ].filter(Boolean).join(' | ')
+  const observacionActualizada = agregarMarcaObservacionVale(alerta.observacion, marcaDenegacion)
+  const datosDenegacion = {
+    estado_bodega: 'denegado',
+    fecha_entrega_bodega: new Date().toISOString(),
+    entregado_por: perfil?.nombre || perfil?.email || session?.user?.email || '',
+    observacion: observacionActualizada,
+  }
+
+  const { error } = await supabase
+    .from('vales_bodega')
+    .update(datosDenegacion)
+    .eq('id', alerta.id)
+
+  setEntregandoSolicitudBodega(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudo denegar el pedido: ' + error.message)
+    await cargarAlertasBodega()
+    return false
+  }
+
+  mostrarNotificacion('Pedido denegado')
+  const pedidoActualizado = { ...alerta, ...datosDenegacion }
+  setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
+    vale.id === alerta.id ? pedidoActualizado : vale
+  )))
+  setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== alerta.id))
+  await cargarAlertasBodega()
+  return true
+}
+
 function construirAjustesInventarioPorEdicionVale({
   inventarioActual,
   itemsAnteriores = [],
@@ -3341,7 +3398,7 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
     }
   }
 
-  const marcaEdicion = esRolBodega
+  const marcaEdicion = puedeOperarComoBodega
     ? `Modificado por bodega: ${perfil?.nombre || perfil?.email || session?.user?.email || 'bodega'}`
     : ''
   const observacionActualizada = marcaEdicion
@@ -6577,11 +6634,12 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 {(mostrarBodega || esRolBodega) && puedeVerBodega && (
   <BodegaModal
     modoSoloBodega={esRolBodega}
+    puedeOperarBodega={puedeOperarComoBodega}
     puedeAdministrar={puedeAdministrarBodega}
     puedeVerPedidosHoy={puedeVerPedidosBodegaHoy}
     puedeEditarPedidos={puedeEditarPedidosBodega}
     puedeEditarPedidosEntregados={puedeEditarPedidosEntregadosBodega}
-    puedeGestionarPedidos={esRolBodega}
+    puedeGestionarPedidos={puedeOperarComoBodega}
     archivo={archivoInventarioBodega}
     inventarios={inventariosBodega}
     solicitantes={solicitantesValeBodega}
@@ -6620,6 +6678,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarRecepcion={guardarRecepcionBodega}
     onGuardarSalida={guardarDespachoBodega}
     onEntregarSolicitudBodega={entregarSolicitudBodega}
+    onDenegarSolicitudBodega={denegarSolicitudBodega}
     onEditarSolicitudBodega={editarSolicitudBodega}
     onExportarInventario={exportarInventarioBodegaActual}
     onImprimirPedidos={imprimirPedidosBodegaHoy}

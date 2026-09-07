@@ -1,25 +1,35 @@
 export async function cargarCodigosBarraBodega({ supabase }) {
-  const { data, error } = await supabase
+  let respuesta = await supabase
     .from('bodega_codigos_barra')
-    .select('id, codigo_bodega, codigo_barra, descripcion, created_at')
+    .select('id, codigo_bodega, codigo_barra, descripcion, cantidad_por_escaneo, created_at')
     .order('codigo_bodega', { ascending: true })
     .order('codigo_barra', { ascending: true })
 
-  if (error) {
-    return { codigos: [], error }
+  if (respuesta.error?.message?.includes('cantidad_por_escaneo')) {
+    respuesta = await supabase
+      .from('bodega_codigos_barra')
+      .select('id, codigo_bodega, codigo_barra, descripcion, created_at')
+      .order('codigo_bodega', { ascending: true })
+      .order('codigo_barra', { ascending: true })
+  }
+
+  if (respuesta.error) {
+    return { codigos: [], error: respuesta.error }
   }
 
   return {
-    codigos: (data || []).map(normalizarCodigoBarraBodega),
+    codigos: (respuesta.data || []).map(normalizarCodigoBarraBodega),
     error: null,
   }
 }
 
 export async function guardarCodigoBarraBodega({
   supabase,
+  id = '',
   codigoBodega,
   codigoBarra,
   descripcion = '',
+  cantidadPorEscaneo = 1,
 }) {
   const codigoBodegaLimpio = String(codigoBodega || '').trim()
   const codigoBarraLimpio = String(codigoBarra || '').trim()
@@ -32,15 +42,21 @@ export async function guardarCodigoBarraBodega({
     codigo_bodega: codigoBodegaLimpio,
     codigo_barra: codigoBarraLimpio,
     descripcion: String(descripcion || '').trim() || null,
+    cantidad_por_escaneo: normalizarCantidadPorEscaneo(cantidadPorEscaneo),
   }
 
-  const { error } = await supabase
-    .from('bodega_codigos_barra')
-    .upsert(payload, { onConflict: 'codigo_barra' })
+  const respuesta = id
+    ? await supabase
+      .from('bodega_codigos_barra')
+      .update(payload)
+      .eq('id', id)
+    : await supabase
+      .from('bodega_codigos_barra')
+      .upsert(payload, { onConflict: 'codigo_barra' })
 
   return {
-    data: normalizarCodigoBarraBodega(payload),
-    error,
+    data: normalizarCodigoBarraBodega({ id, ...payload }),
+    error: respuesta.error,
   }
 }
 
@@ -59,6 +75,12 @@ function normalizarCodigoBarraBodega(item = {}) {
     codigoBodega: item.codigo_bodega || '',
     codigoBarra: item.codigo_barra || '',
     descripcion: item.descripcion || '',
+    cantidadPorEscaneo: normalizarCantidadPorEscaneo(item.cantidad_por_escaneo),
     createdAt: item.created_at || '',
   }
+}
+
+function normalizarCantidadPorEscaneo(valor) {
+  const numero = Number(String(valor ?? 1).replace(',', '.'))
+  return Number.isFinite(numero) && numero > 0 ? numero : 1
 }

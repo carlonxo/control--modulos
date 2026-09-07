@@ -17,6 +17,7 @@ const filaMovimientoVacia = {
 
 function BodegaModal({
   modoSoloBodega,
+  puedeOperarBodega = false,
   puedeAdministrar,
   puedeVerPedidosHoy,
   puedeEditarPedidos,
@@ -60,6 +61,7 @@ function BodegaModal({
   onGuardarRecepcion,
   onGuardarSalida,
   onEntregarSolicitudBodega,
+  onDenegarSolicitudBodega,
   onEditarSolicitudBodega,
   onExportarInventario,
   onImprimirPedidos,
@@ -341,6 +343,7 @@ function BodegaModal({
 
   return (
     <div
+      className="bodega-modal"
       onClick={(e) => {
         e.stopPropagation()
         onClickFondo?.()
@@ -378,7 +381,7 @@ function BodegaModal({
         </button>
       </div>
 
-      {modoSoloBodega && (
+      {puedeOperarBodega && (
         <CampanaBodega
           alertas={alertasBodega}
           visible={mostrarAlertasBodega}
@@ -408,6 +411,12 @@ function BodegaModal({
           }}
           onEntregar={async () => {
             const ok = await onEntregarSolicitudBodega?.(alertaBodegaSeleccionada)
+            if (!ok) return
+            setAlertaBodegaSeleccionada(null)
+            onActualizarAlertasBodega?.()
+          }}
+          onDenegar={async () => {
+            const ok = await onDenegarSolicitudBodega?.(alertaBodegaSeleccionada)
             if (!ok) return
             setAlertaBodegaSeleccionada(null)
             onActualizarAlertasBodega?.()
@@ -587,7 +596,7 @@ function BodegaModal({
               </div>
             )}
 
-            {modoSoloBodega && (
+            {puedeOperarBodega && (
               <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
                 <Tarjeta
                   titulo="Material recepcionado"
@@ -597,7 +606,7 @@ function BodegaModal({
               </div>
             )}
 
-            {modoSoloBodega && (
+            {puedeOperarBodega && (
               <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
                 <Tarjeta
                   titulo="Material despachado"
@@ -609,7 +618,7 @@ function BodegaModal({
 
             {puedeExportarInventario && (
               <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch', marginLeft: 'auto' }}>
-                {modoSoloBodega && (
+                {puedeOperarBodega && (
                   <>
                     <button
                       type="button"
@@ -736,7 +745,7 @@ function BodegaModal({
             />
           )}
 
-          {modoSoloBodega && mostrarRecepcionesBodega && (
+          {puedeOperarBodega && mostrarRecepcionesBodega && (
             <PanelRecepcionesBodega
               recepciones={recepcionesBodega}
               rango={rangoRecepcionesBodega}
@@ -748,7 +757,7 @@ function BodegaModal({
             />
           )}
 
-          {modoSoloBodega && mostrarDespachosBodega && (
+          {puedeOperarBodega && mostrarDespachosBodega && (
             <PanelDespachosBodega
               despachos={despachosBodega}
               rango={rangoDespachosBodega}
@@ -819,7 +828,7 @@ function BodegaModal({
             />
           )}
 
-          {mostrarSalidaMaterial && (puedeAdministrar || modoSoloBodega) && (
+          {mostrarSalidaMaterial && (puedeAdministrar || puedeOperarBodega) && (
             <PanelSalidaMaterial
               salidaMaterial={salidaMaterial}
               materialesSalida={materialesSalida}
@@ -1547,9 +1556,11 @@ function PanelCodigosBarraBodega({
   onActualizar,
 }) {
   const [formulario, setFormulario] = useState({
+    id: '',
     codigoBarra: '',
     codigoBodega: '',
     descripcion: '',
+    cantidadPorEscaneo: '1',
   })
   const [busqueda, setBusqueda] = useState('')
   const [mensaje, setMensaje] = useState(null)
@@ -1578,7 +1589,7 @@ function PanelCodigosBarraBodega({
   }
 
   async function guardarActual() {
-    setMensaje({ tipo: 'info', texto: 'Guardando código de barra...' })
+    setMensaje({ tipo: 'info', texto: formulario.id ? 'Actualizando código de barra...' : 'Guardando código de barra...' })
     const resultado = await onGuardar?.(formulario)
     const ok = resultado === true || resultado?.ok
     if (!ok) {
@@ -1587,11 +1598,35 @@ function PanelCodigosBarraBodega({
       return
     }
     setFormulario({
+      id: '',
       codigoBarra: '',
       codigoBodega: '',
       descripcion: '',
+      cantidadPorEscaneo: '1',
     })
-    setMensaje({ tipo: 'ok', texto: 'Código de barra guardado correctamente.' })
+    setMensaje({ tipo: 'ok', texto: formulario.id ? 'Código de barra actualizado correctamente.' : 'Código de barra guardado correctamente.' })
+  }
+
+  function editarCodigo(item) {
+    setFormulario({
+      id: item.id || '',
+      codigoBarra: item.codigoBarra || '',
+      codigoBodega: item.codigoBodega || '',
+      descripcion: item.descripcion || obtenerDescripcionMaterialPorCodigo(item.codigoBodega, materialesInventario) || '',
+      cantidadPorEscaneo: String(item.cantidadPorEscaneo || 1),
+    })
+    setMensaje({ tipo: 'info', texto: 'Editando código de barra. Modifica los datos y presiona Actualizar código.' })
+  }
+
+  function cancelarEdicion() {
+    setFormulario({
+      id: '',
+      codigoBarra: '',
+      codigoBodega: '',
+      descripcion: '',
+      cantidadPorEscaneo: '1',
+    })
+    setMensaje(null)
   }
 
   const sugerencias = obtenerSugerenciasMateriales(
@@ -1605,7 +1640,7 @@ function PanelCodigosBarraBodega({
         <div>
           <h3 style={{ margin: 0 }}>Códigos de barra</h3>
           <p style={{ color: '#bbb', margin: '4px 0 0', fontSize: '13px' }}>
-            Asocia códigos externos de proveedor al código interno de bodega.
+            {formulario.id ? 'Actualiza la equivalencia seleccionada.' : 'Asocia códigos externos de proveedor al código interno de bodega.'}
           </p>
         </div>
         <button type="button" onClick={onActualizar} style={botonMiniGris}>
@@ -1613,7 +1648,7 @@ function PanelCodigosBarraBodega({
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(170px, 1fr) minmax(170px, 1fr) minmax(260px, 2fr) auto', gap: '10px', alignItems: 'end', marginBottom: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr) minmax(150px, 1fr) minmax(240px, 2fr) minmax(120px, 0.7fr) auto', gap: '10px', alignItems: 'end', marginBottom: '12px' }}>
         <CampoTexto
           label="Código de barra"
           value={formulario.codigoBarra}
@@ -1655,6 +1690,13 @@ function PanelCodigosBarraBodega({
             </div>
           )}
         </label>
+        <CampoTexto
+          label="Cant. por escaneo"
+          type="number"
+          value={formulario.cantidadPorEscaneo}
+          onChange={(valor) => cambiarFormulario('cantidadPorEscaneo', valor)}
+          placeholder="1"
+        />
         <button
           type="button"
           onClick={guardarActual}
@@ -1666,9 +1708,17 @@ function PanelCodigosBarraBodega({
             whiteSpace: 'nowrap',
           }}
         >
-          {guardando ? 'Guardando...' : 'Guardar código'}
+          {guardando ? 'Guardando...' : formulario.id ? 'Actualizar código' : 'Guardar código'}
         </button>
       </div>
+
+      {formulario.id && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+          <button type="button" onClick={cancelarEdicion} style={botonMiniGris}>
+            Cancelar edición
+          </button>
+        </div>
+      )}
 
       {mensaje && (
         <div
@@ -1698,13 +1748,14 @@ function PanelCodigosBarraBodega({
       </label>
 
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
           <thead>
             <tr style={{ background: '#333' }}>
               <th style={thStyle}>Código de barra</th>
               <th style={thStyle}>Código bodega</th>
               <th style={thStyle}>Material</th>
-              <th style={{ ...thStyle, width: '90px', textAlign: 'center' }}>Quitar</th>
+              <th style={{ ...thStyle, width: '130px', textAlign: 'right' }}>Cant. escaneo</th>
+              <th style={{ ...thStyle, width: '160px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -1713,7 +1764,11 @@ function PanelCodigosBarraBodega({
                 <td style={{ ...tdStyle, fontWeight: 900 }}>{item.codigoBarra}</td>
                 <td style={tdStyle}>{item.codigoBodega}</td>
                 <td style={tdStyle}>{item.descripcion || obtenerDescripcionMaterialPorCodigo(item.codigoBodega, materialesInventario)}</td>
-                <td style={{ ...tdStyle, width: '90px', textAlign: 'center' }}>
+                <td style={{ ...tdStyle, width: '130px', textAlign: 'right', fontWeight: 900 }}>{formatearNumero(item.cantidadPorEscaneo || 1)}</td>
+                <td style={{ ...tdStyle, width: '160px', textAlign: 'center' }}>
+                  <button type="button" onClick={() => editarCodigo(item)} style={{ ...botonMiniAzul, marginRight: '8px' }}>
+                    Editar
+                  </button>
                   <button type="button" onClick={() => onEliminar?.(item.id)} style={botonIconoRojo}>
                     ×
                   </button>
@@ -1748,6 +1803,7 @@ function DetalleSolicitudBodega({
   puedeGestionar,
   onEditar,
   onEntregar,
+  onDenegar,
   onCerrar,
 }) {
   const [editando, setEditando] = useState(false)
@@ -1757,13 +1813,17 @@ function DetalleSolicitudBodega({
   const [textoEscaner, setTextoEscaner] = useState('')
   const [cantidadesEscaneadas, setCantidadesEscaneadas] = useState({})
   const [mensajeEscaner, setMensajeEscaner] = useState(null)
+  const [indiceCambioMaterial, setIndiceCambioMaterial] = useState(null)
+  const [guardandoCambioMaterial, setGuardandoCambioMaterial] = useState(false)
   const inputEscanerRef = useRef(null)
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
   const entregado = String(alerta?.estado_bodega || '').toLowerCase() === 'entregado'
+  const denegado = String(alerta?.estado_bodega || '').toLowerCase() === 'denegado'
   const puedeEditarEstePedido = puedeEditar && esPedido && (!entregado || puedeEditarEntregados)
   const fueModificadoPorBodega = tieneMarcaModificacionBodega(alerta.observacion)
   const itemsPedido = alerta.items || []
-  const requiereEscaneo = puedeGestionar && esPedido && !entregado && !editando && itemsPedido.length > 0
+  const requiereEscaneo = puedeGestionar && esPedido && !entregado && !denegado && !editando && itemsPedido.length > 0
+  const puedeCambiarMaterialPedido = requiereEscaneo
   const resumenEscaneo = calcularResumenEscaneoPedido(itemsPedido, cantidadesEscaneadas, materialesInventario)
   const pedidoEscaneadoCompleto = resumenEscaneo.every((fila) => !fila.requiereEscaneo || fila.escaneado >= fila.cantidad)
 
@@ -1777,6 +1837,7 @@ function DetalleSolicitudBodega({
     })))
     setCantidadesEscaneadas({})
     setMensajeEscaner(null)
+    setIndiceCambioMaterial(null)
   }, [alerta?.id])
 
   useEffect(() => {
@@ -1827,13 +1888,18 @@ function DetalleSolicitudBodega({
     if (ok) setEditando(false)
   }
 
-  function procesarEscaneo(valor) {
+  async function procesarEscaneo(valor) {
     const { cantidad, codigo } = interpretarLecturaEscaner(valor)
     if (!codigo) return
 
     const materialResuelto = resolverMaterialEscaneado(codigo, materialesInventario, codigosBarraBodega)
     if (!materialResuelto) {
       setMensajeEscaner({ tipo: 'error', texto: `Código no reconocido: ${codigo}` })
+      return
+    }
+
+    if (indiceCambioMaterial !== null) {
+      await cambiarMaterialPorEscaneo(indiceCambioMaterial, materialResuelto)
       return
     }
 
@@ -1847,12 +1913,14 @@ function DetalleSolicitudBodega({
     const filaResumen = resumenEscaneo.find((fila) => fila.clave === clave)
     const solicitado = Number(filaResumen?.cantidad || itemPedido.cantidad || 0)
     const escaneadoActual = Number(cantidadesEscaneadas[clave] || 0)
-    const nuevoTotal = escaneadoActual + cantidad
+    const cantidadPorEscaneo = Number(materialResuelto.cantidadPorEscaneo || 1)
+    const cantidadTotal = cantidad * cantidadPorEscaneo
+    const nuevoTotal = escaneadoActual + cantidadTotal
 
     if (nuevoTotal > solicitado) {
       setMensajeEscaner({
         tipo: 'error',
-        texto: `Cantidad excedida para ${itemPedido.material_balance || itemPedido.material_vale}. Solicitado: ${solicitado}, escaneado: ${escaneadoActual}.`,
+        texto: `Cantidad excedida para ${itemPedido.material_balance || itemPedido.material_vale}. Solicitado: ${formatearNumero(solicitado)}, escaneado: ${formatearNumero(escaneadoActual)}.`,
       })
       return
     }
@@ -1863,12 +1931,12 @@ function DetalleSolicitudBodega({
     }))
     setMensajeEscaner({
       tipo: 'ok',
-      texto: `OK: ${cantidad} x ${itemPedido.material_balance || itemPedido.material_vale}`,
+      texto: `OK: ${formatearNumero(cantidadTotal)} x ${itemPedido.material_balance || itemPedido.material_vale}`,
     })
   }
 
   function entregarPedidoActual() {
-    if (entregado || entregando || editando) return
+    if (entregado || denegado || entregando || editando || guardandoCambioMaterial) return
 
     if (requiereEscaneo && !pedidoEscaneadoCompleto) {
       const confirmar = window.confirm(
@@ -1878,6 +1946,56 @@ function DetalleSolicitudBodega({
     }
 
     onEntregar?.()
+  }
+
+  async function cambiarMaterialPorEscaneo(indice, materialResuelto) {
+    const itemOriginal = itemsPedido[indice]
+    if (!itemOriginal) {
+      setIndiceCambioMaterial(null)
+      setMensajeEscaner({ tipo: 'error', texto: 'No se encontró el material seleccionado para cambiar.' })
+      return
+    }
+
+    const codigoNuevo = materialResuelto.codigo || ''
+    const descripcionNueva = materialResuelto.descripcion || codigoNuevo
+    if (!codigoNuevo && !descripcionNueva) {
+      setMensajeEscaner({ tipo: 'error', texto: 'El código escaneado no tiene material asociado.' })
+      return
+    }
+
+    const confirmado = window.confirm(
+      `¿Cambiar "${itemOriginal.material_balance || itemOriginal.material_vale}" por "${descripcionNueva}"?`
+    )
+    if (!confirmado) return
+
+    setGuardandoCambioMaterial(true)
+    setMensajeEscaner({ tipo: 'info', texto: `Cambiando material por ${descripcionNueva}...` })
+    const itemsActualizados = itemsPedido.map((item, i) => (
+      i === indice
+        ? {
+            ...item,
+            material_vale: codigoNuevo || descripcionNueva,
+            material_balance: descripcionNueva,
+          }
+        : item
+    ))
+    const resultado = await onEditar?.(itemsActualizados)
+    setGuardandoCambioMaterial(false)
+
+    if (!resultado) {
+      setMensajeEscaner({ tipo: 'error', texto: 'No se pudo cambiar el material solicitado.' })
+      return
+    }
+
+    setCantidadesEscaneadas({})
+    setIndiceCambioMaterial(null)
+    setMensajeEscaner({ tipo: 'ok', texto: `Material cambiado a ${descripcionNueva}. Escaneos reiniciados.` })
+  }
+
+  function activarCambioMaterial(indice) {
+    setIndiceCambioMaterial(indice)
+    setMensajeEscaner({ tipo: 'info', texto: `Cambio activo: escanea el material que entregarás para reemplazar "${itemsPedido[indice]?.material_balance || itemsPedido[indice]?.material_vale}".` })
+    setTimeout(() => inputEscanerRef.current?.focus(), 0)
   }
 
   return (
@@ -1939,7 +2057,7 @@ function DetalleSolicitudBodega({
                 style={inputStyle}
               />
               <small style={{ color: '#bbb' }}>
-                Puedes escanear directo. Si son varias unidades, usa formato cantidad*código. Mientras no tengas lector, puedes entregar con confirmación manual.
+                Puedes escanear directo. La cantidad se calcula como multiplicador × cantidad por escaneo. Ej: 3*código.
               </small>
             </label>
             <div style={{ flex: '1 1 260px', alignSelf: 'stretch', display: 'grid', alignItems: 'center' }}>
@@ -1948,9 +2066,9 @@ function DetalleSolicitudBodega({
                   style={{
                     padding: '10px',
                     borderRadius: '8px',
-                    border: `1px solid ${mensajeEscaner.tipo === 'ok' ? '#66bb6a' : '#ef5350'}`,
-                    background: mensajeEscaner.tipo === 'ok' ? '#14351a' : '#3a1717',
-                    color: mensajeEscaner.tipo === 'ok' ? '#a5d6a7' : '#ff8a80',
+                    border: `1px solid ${mensajeEscaner.tipo === 'ok' ? '#66bb6a' : mensajeEscaner.tipo === 'error' ? '#ef5350' : '#607d8b'}`,
+                    background: mensajeEscaner.tipo === 'ok' ? '#14351a' : mensajeEscaner.tipo === 'error' ? '#3a1717' : '#263238',
+                    color: mensajeEscaner.tipo === 'ok' ? '#a5d6a7' : mensajeEscaner.tipo === 'error' ? '#ff8a80' : '#d7e3ea',
                     fontWeight: 800,
                   }}
                 >
@@ -1971,6 +2089,7 @@ function DetalleSolicitudBodega({
               <col style={{ width: '190px' }} />
               <col />
               <col style={{ width: '130px' }} />
+              {puedeCambiarMaterialPedido && <col style={{ width: '120px' }} />}
               {requiereEscaneo && <col style={{ width: '150px' }} />}
               {editando && <col style={{ width: '82px' }} />}
             </colgroup>
@@ -1979,6 +2098,7 @@ function DetalleSolicitudBodega({
                 <th style={thStyle}>Código</th>
                 <th style={thStyle}>Material</th>
                 <th style={{ ...thStyle, width: '130px', textAlign: 'right' }}>Cantidad</th>
+                {puedeCambiarMaterialPedido && <th style={{ ...thStyle, width: '120px', textAlign: 'center' }}>Cambiar</th>}
                 {requiereEscaneo && <th style={{ ...thStyle, width: '150px', textAlign: 'right' }}>Escaneado</th>}
                 {editando && <th style={{ ...thStyle, width: '82px', textAlign: 'center' }}>Quitar</th>}
               </tr>
@@ -2063,6 +2183,24 @@ function DetalleSolicitudBodega({
                         formatearNumero(item.cantidad)
                       )}
                     </td>
+                    {puedeCambiarMaterialPedido && (
+                      <td style={{ ...tdStyle, width: '120px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          disabled={guardandoCambioMaterial}
+                          onClick={() => activarCambioMaterial(indice)}
+                          title="Escanear material alternativo para reemplazar este ítem"
+                          style={{
+                            ...botonMiniAzul,
+                            opacity: guardandoCambioMaterial ? 0.7 : 1,
+                            borderColor: indiceCambioMaterial === indice ? '#ffcc80' : botonMiniAzul.border,
+                            background: indiceCambioMaterial === indice ? '#ef6c00' : botonMiniAzul.background,
+                          }}
+                        >
+                          Cambiar
+                        </button>
+                      </td>
+                    )}
                     {requiereEscaneo && (
                       <td
                         style={{
@@ -2120,18 +2258,32 @@ function DetalleSolicitudBodega({
             </>
           )}
           {puedeGestionar && esPedido && (
-            <button
-              type="button"
-              disabled={entregando || entregado || editando}
-              onClick={entregarPedidoActual}
-              style={{
-                ...botonVerde,
-                opacity: entregando || entregado || editando ? 0.7 : 1,
-                cursor: entregando || entregado || editando ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {entregado ? 'Pedido ya entregado' : entregando ? 'Descontando...' : 'Pedido entregado'}
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={entregando || entregado || denegado || editando || guardandoCambioMaterial}
+                onClick={onDenegar}
+                style={{
+                  ...botonRojo,
+                  opacity: entregando || entregado || denegado || editando || guardandoCambioMaterial ? 0.7 : 1,
+                  cursor: entregando || entregado || denegado || editando || guardandoCambioMaterial ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {denegado ? 'Pedido denegado' : 'Denegar pedido'}
+              </button>
+              <button
+                type="button"
+                disabled={entregando || entregado || denegado || editando || guardandoCambioMaterial}
+                onClick={entregarPedidoActual}
+                style={{
+                  ...botonVerde,
+                  opacity: entregando || entregado || denegado || editando || guardandoCambioMaterial ? 0.7 : 1,
+                  cursor: entregando || entregado || denegado || editando || guardandoCambioMaterial ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {denegado ? 'Pedido denegado' : entregado ? 'Pedido ya entregado' : entregando ? 'Descontando...' : 'Pedido entregado'}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -2181,7 +2333,7 @@ function resolverMaterialEscaneado(codigoLeido, materialesInventario = [], codig
   const materialPorCodigoBodega = materialesInventario.find((material) => (
     normalizarBusqueda(material.codigo) === codigoNormalizado
   ))
-  if (materialPorCodigoBodega) return materialPorCodigoBodega
+  if (materialPorCodigoBodega) return { ...materialPorCodigoBodega, cantidadPorEscaneo: 1 }
 
   const equivalencia = codigosBarraBodega.find((item) => (
     normalizarBusqueda(item.codigoBarra) === codigoNormalizado
@@ -2192,9 +2344,12 @@ function resolverMaterialEscaneado(codigoLeido, materialesInventario = [], codig
     normalizarBusqueda(material.codigo) === normalizarBusqueda(equivalencia.codigoBodega)
   ))
 
-  return materialPorEquivalencia || {
+  return {
+    ...(materialPorEquivalencia || {
     codigo: equivalencia.codigoBodega,
     descripcion: equivalencia.descripcion || '',
+    }),
+    cantidadPorEscaneo: Number(equivalencia.cantidadPorEscaneo || 1),
   }
 }
 
@@ -2279,15 +2434,15 @@ function PanelCrearPedido({
   onCerrar,
 }) {
   return (
-    <div style={panelMovimientoStyle}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '10px' }}>
+    <div className="bodega-panel-crear-pedido" style={panelMovimientoStyle}>
+      <div className="bodega-panel-header" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '10px' }}>
         <h3 style={{ margin: 0 }}>Crear pedido de material</h3>
         <button type="button" onClick={onCerrar} style={botonMiniGris}>
           Cerrar
         </button>
       </div>
 
-      <div style={gridPedidoStyle}>
+      <div className="bodega-grid-pedido" style={gridPedidoStyle}>
         <CampoTexto
           label="Fecha"
           type="date"
@@ -2358,10 +2513,11 @@ function PanelCrearPedido({
       )}
 
       <div style={accionesPanelStyle}>
-        <button type="button" onClick={onAgregarMaterial} style={botonGris}>
+        <button className="bodega-boton-secundario-movil" type="button" onClick={onAgregarMaterial} style={botonGris}>
           + Agregar material
         </button>
         <button
+          className="bodega-boton-principal-movil"
           type="button"
           disabled={guardando}
           onClick={onGuardar}
@@ -2572,8 +2728,8 @@ function TablaMovimientoMateriales({
 
   return (
     <>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse' }}>
+      <div className="bodega-tabla-movimiento-wrap" style={{ overflowX: 'auto' }}>
+        <table className="bodega-tabla-movimiento" style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#333' }}>
               <th style={thStyle}>Código</th>
@@ -2586,7 +2742,7 @@ function TablaMovimientoMateriales({
           <tbody>
             {filas.map((fila, indice) => (
               <tr key={`${datalistId}-${indice}`}>
-                <td style={tdStyle}>
+                <td data-label="Código" style={tdStyle}>
                   <input
                     type="text"
                     value={fila.codigo}
@@ -2594,7 +2750,7 @@ function TablaMovimientoMateriales({
                     style={inputTablaStyle}
                   />
                 </td>
-                <td style={tdStyle}>
+                <td data-label="Material" style={tdStyle}>
                   <div style={{ position: 'relative' }}>
                     <input
                       type="text"
@@ -2633,7 +2789,7 @@ function TablaMovimientoMateriales({
                     )}
                   </div>
                 </td>
-                <td style={tdStyle}>
+                <td data-label={mostrarStock ? 'Stock' : 'Unidad'} style={tdStyle}>
                   <input
                     type="text"
                     value={mostrarStock ? formatearNumero(fila.stock) : fila.unidad}
@@ -2649,7 +2805,7 @@ function TablaMovimientoMateriales({
                     }}
                   />
                 </td>
-                <td style={{ ...tdStyle, textAlign: 'right' }}>
+                <td data-label="Cantidad" style={{ ...tdStyle, textAlign: 'right' }}>
                   <input
                     type="number"
                     min="0"
@@ -2659,7 +2815,7 @@ function TablaMovimientoMateriales({
                     style={{ ...inputTablaStyle, textAlign: 'right' }}
                   />
                 </td>
-                <td style={{ ...tdStyle, textAlign: 'center' }}>
+                <td data-label="Quitar" style={{ ...tdStyle, textAlign: 'center' }}>
                   <button type="button" onClick={() => onQuitarMaterial(indice)} style={botonIconoRojo}>
                     ×
                   </button>
