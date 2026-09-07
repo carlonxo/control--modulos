@@ -3028,7 +3028,7 @@ async function guardarDevolucionBodegaConMateriales(datosDevolucion, materialesD
   return true
 }
 
-async function entregarSolicitudBodega(alerta) {
+async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
   if (!puedeOperarComoBodega || !alerta?.id) return false
   if (String(alerta.estado_bodega || '').toLowerCase() === 'entregado') {
     mostrarNotificacion('Este pedido ya fue marcado como entregado')
@@ -3102,12 +3102,14 @@ async function entregarSolicitudBodega(alerta) {
     }]
   })
 
-  const mensajeConfirmacion = itemsSinDescuento.length > 0
-    ? `¿Confirmar pedido entregado y descontar material del inventario?\n\n` +
-      `Estos ítems quedarán en el pedido/vale, pero no descuentan stock:\n- ${itemsSinDescuento.join('\n- ')}`
-    : '¿Confirmar pedido entregado y descontar material del inventario?'
-  const confirmado = window.confirm(mensajeConfirmacion)
-  if (!confirmado) return false
+  if (itemsSinDescuento.length > 0 || !opcionesEntrega?.omitirConfirmacion) {
+    const mensajeConfirmacion = itemsSinDescuento.length > 0
+      ? `¿Confirmar pedido entregado y descontar material del inventario?\n\n` +
+        `Estos ítems quedarán en el pedido/vale, pero no descuentan stock:\n- ${itemsSinDescuento.join('\n- ')}`
+      : '¿Confirmar pedido entregado y descontar material del inventario?'
+    const confirmado = window.confirm(mensajeConfirmacion)
+    if (!confirmado) return false
+  }
 
   setEntregandoSolicitudBodega(true)
 

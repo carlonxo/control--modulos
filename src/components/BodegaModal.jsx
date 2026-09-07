@@ -409,8 +409,8 @@ function BodegaModal({
             onActualizarAlertasBodega?.()
             return true
           }}
-          onEntregar={async () => {
-            const ok = await onEntregarSolicitudBodega?.(alertaBodegaSeleccionada)
+          onEntregar={async (opcionesEntrega = {}) => {
+            const ok = await onEntregarSolicitudBodega?.(alertaBodegaSeleccionada, opcionesEntrega)
             if (!ok) return
             setAlertaBodegaSeleccionada(null)
             onActualizarAlertasBodega?.()
@@ -1945,7 +1945,9 @@ function DetalleSolicitudBodega({
       if (!confirmar) return
     }
 
-    onEntregar?.()
+    onEntregar?.({
+      omitirConfirmacion: requiereEscaneo && pedidoEscaneadoCompleto,
+    })
   }
 
   async function cambiarMaterialPorEscaneo(indice, materialResuelto) {
