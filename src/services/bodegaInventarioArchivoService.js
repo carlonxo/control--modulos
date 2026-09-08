@@ -72,11 +72,11 @@ function leerInventarioDesdeHoja(hoja, nombreHoja) {
 function detectarColumnasInventario(encabezados) {
   const normalizados = encabezados.map(normalizarTexto)
   const indicesSaldo = normalizados
-    .map((valor, indice) => valor === 'saldo' ? indice : -1)
+    .map((valor, indice) => esColumnaSaldoFinal(valor) ? indice : -1)
     .filter((indice) => indice >= 0)
 
   return {
-    recurso: normalizados.findIndex((valor) => valor === 'recurso'),
+    recurso: normalizados.findIndex((valor) => valor === 'recurso' || valor === 'codigo' || valor === 'codigobodega'),
     descripcion: normalizados.findIndex((valor) => valor === 'descripcion'),
     unidad: normalizados.findIndex((valor) => valor === 'unidad'),
     entradas: normalizados.findIndex((valor) => valor === 'entradas'),
@@ -86,6 +86,13 @@ function detectarColumnasInventario(encabezados) {
     totalInicial: normalizados.findIndex((valor) => valor === 'total'),
     saldoFinal: indicesSaldo.length ? indicesSaldo[indicesSaldo.length - 1] : normalizados.findIndex((valor) => valor === 'total'),
   }
+}
+
+function esColumnaSaldoFinal(valor) {
+  return valor === 'saldo'
+    || valor === 'saldofinal'
+    || valor.startsWith('saldoal')
+    || valor.startsWith('saldoactual')
 }
 
 function normalizarItemInventarioBodega({
