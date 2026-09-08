@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import plantillaProtocolo from '../assets/protocolo-entrega-base.png'
 import './ProtocoloEntrega.css'
 
@@ -266,6 +266,8 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
   const [descargando, setDescargando] = useState(false)
   const [seleccionMaterial, setSeleccionMaterial] = useState(null)
   const [escalaProtocolo, setEscalaProtocolo] = useState(1)
+  const visorProtocoloRef = useRef(null)
+  const toqueProtocoloRef = useRef(null)
   const puedeEditarSerieModulo = moduloEditable
   const puedeEditarDatosModulo = moduloEditable || datosModuloEditables
   const cambiar = (campo, valor) => {
@@ -520,6 +522,45 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
     }
   }, [])
 
+  const iniciarDesplazamientoTactil = (evento) => {
+    if (evento.touches.length !== 1) return
+    const visor = visorProtocoloRef.current
+    if (!visor) return
+    const toque = evento.touches[0]
+    toqueProtocoloRef.current = {
+      x: toque.clientX,
+      y: toque.clientY,
+      scrollLeft: visor.scrollLeft,
+      scrollTop: visor.scrollTop,
+      arrastrando: false,
+    }
+  }
+
+  const desplazarProtocoloTactil = (evento) => {
+    const estado = toqueProtocoloRef.current
+    const visor = visorProtocoloRef.current
+    if (!estado || !visor || evento.touches.length !== 1) return
+
+    const toque = evento.touches[0]
+    const deltaX = toque.clientX - estado.x
+    const deltaY = toque.clientY - estado.y
+
+    if (!estado.arrastrando && Math.hypot(deltaX, deltaY) < 8) return
+    estado.arrastrando = true
+
+    visor.scrollLeft = estado.scrollLeft - deltaX
+    visor.scrollTop = estado.scrollTop - deltaY
+
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+    evento.preventDefault()
+  }
+
+  const finalizarDesplazamientoTactil = () => {
+    toqueProtocoloRef.current = null
+  }
+
   return <div className="protocolo-overlay">
     <div className="protocolo-toolbar">
       {!soloLectura && <button className="protocolo-guardar" onClick={guardar} disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar protocolo'}</button>}
@@ -527,7 +568,14 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
       <button className="protocolo-imprimir" onClick={imprimir}>Imprimir</button>
       <button onClick={onCerrar} disabled={guardando}>Cerrar</button>
     </div>
-    <div className="protocolo-visor"><div className="pdf-protocolo-escala" style={{ width: 1275 * escalaProtocolo, height: 1650 * escalaProtocolo }}><div className="pdf-protocolo-pagina" style={{ backgroundImage: `url(${plantillaProtocolo})`, transform: `scale(${escalaProtocolo})`, transformOrigin: 'top left' }}>
+    <div
+      ref={visorProtocoloRef}
+      className="protocolo-visor"
+      onTouchStart={iniciarDesplazamientoTactil}
+      onTouchMove={desplazarProtocoloTactil}
+      onTouchEnd={finalizarDesplazamientoTactil}
+      onTouchCancel={finalizarDesplazamientoTactil}
+    ><div className="pdf-protocolo-escala" style={{ width: 1275 * escalaProtocolo, height: 1650 * escalaProtocolo }}><div className="pdf-protocolo-pagina" style={{ backgroundImage: `url(${plantillaProtocolo})`, transform: `scale(${escalaProtocolo})`, transformOrigin: 'top left' }}>
       {campo('fecha', { left: 280, top: 190, width: 405, height: 31 }, { type: 'date' })}{puedeEditarSerieModulo ? campo('serie', { left: 959, top: 190, width: 304, height: 31 }) : <input className="pdf-campo" style={{ left: 959, top: 190, width: 304, height: 31 }} value={modulo.serie || ''} disabled />}
       {campo('responsable', { left: 280, top: 221, width: 405, height: 37 })}{puedeEditarDatosModulo ? campo('tipo', { left: 959, top: 221, width: 304, height: 37 }) : <input className="pdf-campo" style={{ left: 959, top: 221, width: 304, height: 37 }} value={modulo.tipo || ''} disabled />}
       {puedeEditarDatosModulo ? campo('linea', { left: 280, top: 258, width: 405, height: 38 }) : <input className="pdf-campo" style={{ left: 280, top: 258, width: 405, height: 38 }} value={modulo.linea || ''} disabled />}{puedeEditarDatosModulo ? campo('proyecto', { left: 959, top: 258, width: 304, height: 38 }) : <input className="pdf-campo" style={{ left: 959, top: 258, width: 304, height: 38 }} value={modulo.proyecto || ''} disabled />}

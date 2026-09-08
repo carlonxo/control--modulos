@@ -4619,6 +4619,31 @@ async function abrirProtocoloEntrega() {
   setMostrarProtocoloEntrega(true)
 }
 
+function prepararRegistroParaVisorProtocolo(registro = {}) {
+  const protocolo = registro.protocolo_entrega || {}
+  const fechaPrueba = registro.fecha_prueba_electrica || protocolo.fecha_prueba_electrica || protocolo.fecha || ''
+
+  return {
+    ...registro,
+    serie: registro.serie || protocolo.serie || '',
+    tipo: registro.tipo || protocolo.tipo || '',
+    proyecto: registro.proyecto || protocolo.proyecto || '',
+    linea: registro.linea || protocolo.linea || '',
+    responsable: registro.responsable || protocolo.responsable || '',
+    fecha_prueba_electrica: fechaPrueba,
+    materiales: registro.materiales || protocolo.materiales || {},
+    protocolo_entrega: {
+      ...protocolo,
+      serie: protocolo.serie || registro.serie || '',
+      tipo: protocolo.tipo || registro.tipo || '',
+      proyecto: protocolo.proyecto || registro.proyecto || '',
+      linea: protocolo.linea || registro.linea || '',
+      responsable: protocolo.responsable || registro.responsable || '',
+      fecha: protocolo.fecha || fechaParaInput(fechaPrueba),
+    },
+  }
+}
+
 async function abrirProtocoloDesdeBusqueda(item) {
   if (!item?.id || !puedeUsarProtocolo) return
 
@@ -4626,20 +4651,16 @@ async function abrirProtocoloDesdeBusqueda(item) {
   setMostrarMenuModulo(false)
 
   if (item.origen === 'manual') {
-    setModuloSeleccionado(item)
+    const moduloVisor = prepararRegistroParaVisorProtocolo(item)
+    setModuloSeleccionado(moduloVisor)
     setFormulariosElectricos((actuales) => ({
       ...actuales,
-      [item.id]: item?.materiales || {},
+      [moduloVisor.id]: moduloVisor.materiales || {},
     }))
     setDatosProtocoloEntrega({
-      ...(item?.protocolo_entrega || {}),
-      serie: item?.protocolo_entrega?.serie || item?.serie || '',
-      tipo: item?.protocolo_entrega?.tipo || item?.tipo || '',
-      proyecto: item?.protocolo_entrega?.proyecto || item?.proyecto || '',
-      responsable: item?.protocolo_entrega?.responsable || item?.responsable || '',
-      fecha: item?.protocolo_entrega?.fecha || fechaParaInput(item?.fecha_prueba_electrica),
+      ...(moduloVisor.protocolo_entrega || {}),
     })
-    setResponsableProtocolo(item?.protocolo_entrega?.responsable || item?.responsable || '')
+    setResponsableProtocolo(moduloVisor.protocolo_entrega?.responsable || moduloVisor.responsable || '')
     setProtocoloSoloLecturaBusqueda(false)
     setProtocoloDesdeHistorial(false)
     setProtocoloManualMensual(true)
@@ -4659,16 +4680,16 @@ async function abrirProtocoloDesdeBusqueda(item) {
       return
     }
 
-    setModuloSeleccionado(modulo)
+    const moduloVisor = prepararRegistroParaVisorProtocolo(modulo)
+    setModuloSeleccionado(moduloVisor)
     setFormulariosElectricos((actuales) => ({
       ...actuales,
-      [modulo.id]: modulo?.materiales || {},
+      [moduloVisor.id]: moduloVisor.materiales || {},
     }))
     setDatosProtocoloEntrega({
-      ...(modulo?.protocolo_entrega || {}),
-      fecha: modulo?.protocolo_entrega?.fecha || fechaParaInput(modulo?.fecha_prueba_electrica),
+      ...(moduloVisor.protocolo_entrega || {}),
     })
-    setResponsableProtocolo(modulo?.protocolo_entrega?.responsable || modulo?.responsable || '')
+    setResponsableProtocolo(moduloVisor.protocolo_entrega?.responsable || moduloVisor.responsable || '')
     setProtocoloSoloLecturaBusqueda(false)
     setProtocoloDesdeHistorial(false)
     setProtocoloManualMensual(false)
@@ -4677,16 +4698,16 @@ async function abrirProtocoloDesdeBusqueda(item) {
     return
   }
 
-  setModuloSeleccionado(item)
+  const moduloVisor = prepararRegistroParaVisorProtocolo(item)
+  setModuloSeleccionado(moduloVisor)
   setFormulariosElectricos((actuales) => ({
     ...actuales,
-    [item.id]: item?.materiales || {},
+    [moduloVisor.id]: moduloVisor.materiales || {},
   }))
   setDatosProtocoloEntrega({
-    ...(item?.protocolo_entrega || {}),
-    fecha: item?.protocolo_entrega?.fecha || fechaParaInput(item?.fecha_prueba_electrica),
+    ...(moduloVisor.protocolo_entrega || {}),
   })
-  setResponsableProtocolo(item?.protocolo_entrega?.responsable || item?.responsable || '')
+  setResponsableProtocolo(moduloVisor.protocolo_entrega?.responsable || moduloVisor.responsable || '')
   setProtocoloSoloLecturaBusqueda(perfil?.rol !== 'admin')
   setProtocoloDesdeHistorial(true)
   setProtocoloManualMensual(false)
@@ -5840,7 +5861,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       {puedeUsarProtocolo && (
         <button
           type="button"
-          onClick={() => abrirProtocoloDesdeBusqueda(item)}
+          onClick={(evento) => {
+            evento.stopPropagation()
+            abrirProtocoloDesdeBusqueda(item)
+          }}
           style={{
             flex: '0 0 118px',
             padding: '10px',

@@ -1,4 +1,4 @@
-.protocolo-overlay { position: fixed; inset: 0; z-index: 4000; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; background: rgba(0,0,0,.86); }
+.protocolo-overlay { position: fixed; inset: 0; z-index: 4000; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; background: rgba(0,0,0,.86); overflow: hidden; }
 .protocolo-toolbar { display: flex; justify-content: center; gap: 10px; padding-bottom: 10px; }
 .protocolo-toolbar button { padding: 10px 18px; }
 .protocolo-toolbar .protocolo-guardar { background: #2e7d32; color: white; }
@@ -6,12 +6,15 @@
 .protocolo-toolbar .protocolo-imprimir { background: #6a1b9a; color: white; }
 .protocolo-visor {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   touch-action: pan-x pan-y pinch-zoom;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
-.pdf-protocolo-escala { position: relative; margin: 0 auto; }
+.pdf-protocolo-escala { position: relative; margin: 0 auto; padding-bottom: 24px; box-sizing: content-box; }
 .pdf-protocolo-pagina { position: relative; width: 1275px; height: 1650px; margin: 0 auto; background-size: 1275px 1650px; background-repeat: no-repeat; }
 .pdf-campo, .pdf-material { position: absolute; box-sizing: border-box; border: 1px solid transparent; border-radius: 0; background: rgba(255,255,210,.34); color: #111; font: 700 15px Arial,sans-serif; text-align: center; }
 .pdf-campo:focus, .pdf-material:focus { outline: 2px solid #1976d2; background: rgba(255,255,255,.92); }
@@ -22,7 +25,45 @@
 .pdf-marca-x { position: absolute; padding: 0; border: 0; border-radius: 0; background: rgba(255,255,210,.28); color: #111; font: 900 20px Arial,sans-serif; cursor: pointer; }
 .pdf-marca-x:focus { outline: 2px solid #1976d2; }
 .pdf-linea-horizontal { position: absolute; height: 1px; background: #111; pointer-events: none; z-index: 3; }
-@media (max-width: 960px) { .pdf-protocolo-escala, .pdf-protocolo-pagina { margin: 0; } .protocolo-toolbar button { flex: 1; } }
+@media (max-width: 960px) {
+  .protocolo-overlay {
+    padding: 6px;
+    height: 100dvh;
+  }
+
+  .protocolo-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0 0 6px;
+    background: rgba(0,0,0,.72);
+    backdrop-filter: blur(3px);
+  }
+
+  .protocolo-toolbar button {
+    min-height: 42px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .protocolo-visor {
+    border-radius: 8px;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .protocolo-visor:active {
+    cursor: grabbing;
+  }
+
+  .pdf-protocolo-escala,
+  .pdf-protocolo-pagina {
+    margin: 0;
+  }
+}
 
 @media print {
   @page { size: letter portrait; margin: 0; }
