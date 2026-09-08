@@ -324,6 +324,7 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
     : compilarMaterialesPedidosPorSerie(pedidos)
   materiales.slice(0, 47).forEach((material, indice) => {
     const fila = 9 + indice
+    sheetXml = setRowHeightExcel(sheetXml, fila, calcularAltoFilaMaterial(material.descripcion))
     sheetXml = setCellValue(sheetXml, `A${fila}`, indice + 1, 'number', sharedStrings)
     sheetXml = setCellValue(sheetXml, `B${fila}`, material.codigo, 'string', sharedStrings)
     sheetXml = setCellValue(sheetXml, `F${fila}`, material.descripcion, 'string', sharedStrings)
@@ -400,18 +401,53 @@ function compilarMaterialesPedidosPorSerie(pedidos = []) {
   return Array.from(mapa.values())
 }
 
+function calcularAltoFilaMaterial(descripcion = '') {
+  const largo = String(descripcion || '').length
+  if (largo > 70) return 45
+  if (largo > 38) return 32
+  return 24
+}
+
 function obtenerMaterialPedidoParaImpresion(item = {}) {
-  const codigo = String(item.material_vale || item.codigo || '').trim()
+  const materialVale = String(item.material_vale || '').trim()
+  const materialBalance = String(item.material_balance || '').trim()
+  const codigoRespaldo = String(item.codigo || '').trim()
+  const materialValeEsCodigo = esCodigoBodegaImpresion(materialVale)
+  const codigoRespaldoEsCodigo = esCodigoBodegaImpresion(codigoRespaldo)
+  const codigo = materialValeEsCodigo
+    ? materialVale
+    : codigoRespaldoEsCodigo
+      ? codigoRespaldo
+      : ''
   const descripcion = String(
-    item.material_balance ||
-    item.descripcion ||
-    item.material ||
-    item.material_vale ||
-    item.codigo ||
-    ''
+    materialVale && !materialValeEsCodigo
+      ? materialVale
+      : materialBalance || item.descripcion || item.material || materialVale || codigoRespaldo || ''
   ).trim()
 
   return { codigo, descripcion }
+}
+
+function esCodigoBodegaImpresion(valor = '') {
+  const limpio = String(valor || '').trim()
+  if (!limpio) return false
+  if (/^MM[A-Z0-9]{4,}$/i.test(limpio)) return true
+  if (/^[A-Z]{2,}[A-Z0-9-]{2,}$/i.test(limpio) && !/\s/.test(limpio)) return true
+  return /^\d{1,6}$/.test(limpio)
+}
+
+function setRowHeightExcel(sheetXml, fila, alto) {
+  const filaTexto = String(fila)
+  const rowRegex = new RegExp(`<row\\s+([^>]*\\br="${filaTexto}"[^>]*)>`)
+  if (!rowRegex.test(sheetXml)) return sheetXml
+
+  return sheetXml.replace(rowRegex, (match, atributos) => {
+    let salida = atributos
+      .replace(/\sht="[^"]*"/g, '')
+      .replace(/\scustomHeight="[^"]*"/g, '')
+    salida += ` ht="${alto}" customHeight="1"`
+    return `<row ${salida.trim()}>`
+  })
 }
 
 function crearEditorSharedStrings(xml) {
