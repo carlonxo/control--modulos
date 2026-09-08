@@ -1990,6 +1990,7 @@ function DetalleSolicitudBodega({
 
     const codigoNuevo = materialResuelto.codigo || ''
     const descripcionNueva = materialResuelto.descripcion || codigoNuevo
+    const claveOriginal = claveItemEscaneoPedido(itemOriginal, materialesInventario)
     if (!codigoNuevo && !descripcionNueva) {
       setMensajeEscaner({ tipo: 'error', texto: 'El código escaneado no tiene material asociado.' })
       return
@@ -2019,9 +2020,13 @@ function DetalleSolicitudBodega({
       return
     }
 
-    setCantidadesEscaneadas({})
+    setCantidadesEscaneadas((actuales) => {
+      const siguiente = { ...actuales }
+      delete siguiente[claveOriginal]
+      return siguiente
+    })
     setIndiceCambioMaterial(null)
-    setMensajeEscaner({ tipo: 'ok', texto: `Material cambiado a ${descripcionNueva}. Escaneos reiniciados.` })
+    setMensajeEscaner({ tipo: 'ok', texto: `Material cambiado a ${descripcionNueva}. Sólo se reinició el escaneo de ese material.` })
   }
 
   function activarCambioMaterial(indice) {
