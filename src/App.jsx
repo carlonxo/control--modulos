@@ -2674,7 +2674,7 @@ function cargarInventariosBodegaLocalesRespaldo() {
   }
 }
 
-async function cargarInventariosBodega() {
+async function cargarInventariosBodega(preferido = null) {
   if (!puedeVerBodega) return
 
   setCargandoInventariosBodega(true)
@@ -2691,7 +2691,13 @@ async function cargarInventariosBodega() {
 
   const inventariosFiltrados = filtrarInventariosPorBodegaAsignada(inventarios, perfil)
   setInventariosBodega(inventariosFiltrados)
-  setInventarioBodegaSeleccionadoId(inventariosFiltrados[0]?.id || '')
+  const inventarioPreferido = preferido
+    ? inventariosFiltrados.find((inventario) => (
+      (!preferido.fecha || inventario.fecha === preferido.fecha) &&
+      (!preferido.hoja || inventario.hoja === preferido.hoja)
+    ))
+    : null
+  setInventarioBodegaSeleccionadoId(inventarioPreferido?.id || inventariosFiltrados[0]?.id || '')
 
   if (inventariosFiltrados.length === 0) {
     cargarInventariosBodegaLocalesRespaldo()
@@ -2733,9 +2739,13 @@ async function leerInventarioBodega() {
     }
 
     localStorage.setItem('inventariosBodega', JSON.stringify(inventarios))
-    mostrarNotificacion(`Se guardaron ${inventarios.length} inventarios de bodega`)
+    const totalItemsImportados = inventarios.reduce((total, inventario) => total + Number(inventario.totalItems || inventario.items?.length || 0), 0)
+    mostrarNotificacion(`Se guardaron ${inventarios.length} inventarios de bodega (${totalItemsImportados.toLocaleString('es-CL')} materiales)`)
     setArchivoInventarioBodega(null)
-    await cargarInventariosBodega()
+    await cargarInventariosBodega({
+      fecha: inventarios[0]?.fecha || '',
+      hoja: inventarios[0]?.hoja || '',
+    })
   } catch (error) {
     console.error(error)
     mostrarNotificacion(error.message || 'No se pudo leer el inventario de bodega')
