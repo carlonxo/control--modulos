@@ -240,6 +240,7 @@ export async function guardarValeBodega({
   solicitanteNombre,
   tipoIngreso = 'archivo',
   observacion = '',
+  estadoBodega = '',
   items,
 }) {
   const { data: vale, error: errorVale } = await supabase
@@ -253,6 +254,7 @@ export async function guardarValeBodega({
       solicitante_nombre: solicitanteNombre || '',
       tipo_ingreso: tipoIngreso || 'archivo',
       observacion: observacion || '',
+      estado_bodega: estadoBodega || null,
     }])
     .select('id')
     .single()

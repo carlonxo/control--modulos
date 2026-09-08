@@ -705,6 +705,7 @@ const [inventariosBodega, setInventariosBodega] = useState([])
 const [inventarioBodegaSeleccionadoId, setInventarioBodegaSeleccionadoId] = useState('')
 const [cargandoInventariosBodega, setCargandoInventariosBodega] = useState(false)
 const [leyendoInventarioBodega, setLeyendoInventarioBodega] = useState(false)
+const [solicitudMaterialBodegaInicial, setSolicitudMaterialBodegaInicial] = useState(0)
 const [guardandoPedidoBodega, setGuardandoPedidoBodega] = useState(false)
 const [guardandoDevolucionBodega, setGuardandoDevolucionBodega] = useState(false)
 const [guardandoRecepcionBodega, setGuardandoRecepcionBodega] = useState(false)
@@ -764,10 +765,11 @@ const puedeEditarPedidosBodega = tienePermiso(perfil?.rol, 'editarPedidosBodega'
 const puedeEditarPedidosEntregadosBodega = perfil?.rol === 'admin'
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
-const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales
+const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales || puedeVerBodega
 const puedeVerMenuModulo = tienePermiso(perfil?.rol, 'verMenuModulo')
 const esRolBodega = perfil?.rol === 'bodega'
 const puedeOperarComoBodega = esRolBodega || perfil?.rol === 'analista'
+const puedeRevisarSolicitudesBodega = ['admin', 'operador'].includes(perfil?.rol)
 const puedeAdministrarUsuariosBodega = perfil?.rol === 'admin'
 const puedeAdministrarEquivalenciasMateriales = perfil?.rol === 'admin'
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
@@ -2028,9 +2030,17 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
     vale.tipo_ingreso === 'pedido_app' || vale.tipo_ingreso === 'devolucion_app'
   ))
   const solicitudesFiltradas = filtrarSolicitudesPorBodegaAsignada(solicitudesApp, perfil)
+  const esSolicitudPendienteRevision = (vale) => String(vale.estado_bodega || '').toLowerCase() === 'solicitado'
+  const esSolicitudCerrada = (vale) => ['entregado', 'denegado'].includes(String(vale.estado_bodega || '').toLowerCase())
+  const solicitudesVisibles = puedeRevisarSolicitudesBodega
+    ? solicitudesFiltradas
+    : solicitudesFiltradas.filter((vale) => !esSolicitudPendienteRevision(vale))
+  const alertasVisibles = puedeRevisarSolicitudesBodega
+    ? solicitudesFiltradas.filter((vale) => esSolicitudPendienteRevision(vale))
+    : solicitudesFiltradas.filter((vale) => !esSolicitudPendienteRevision(vale) && !esSolicitudCerrada(vale))
 
-  setPedidosBodegaHoy(solicitudesFiltradas.filter((vale) => vale.tipo_ingreso === 'pedido_app'))
-  setAlertasBodega(solicitudesFiltradas.filter((vale) => !['entregado', 'denegado'].includes(String(vale.estado_bodega || '').toLowerCase())))
+  setPedidosBodegaHoy(solicitudesVisibles.filter((vale) => vale.tipo_ingreso === 'pedido_app'))
+  setAlertasBodega(alertasVisibles)
 }
 
 async function cargarHistorialValesBodega(fecha = fechaHistorialValesBodega) {
@@ -2704,10 +2714,13 @@ async function cargarInventariosBodega(preferido = null) {
   }
 }
 
-async function abrirBodega() {
+async function abrirBodega({ abrirSolicitudMaterial = false } = {}) {
   if (!puedeVerBodega) return
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
+  if (abrirSolicitudMaterial) {
+    setSolicitudMaterialBodegaInicial((actual) => actual + 1)
+  }
   setMostrarBodega(true)
   await cargarSolicitantesValesBodega()
   await cargarInventariosBodega()
@@ -2887,6 +2900,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     solicitanteNombre: pedido.retiraNombre,
     tipoIngreso: 'pedido_app',
     observacion: observacionPedido,
+    estadoBodega: perfil?.rol === 'electrico' ? 'solicitado' : 'pendiente',
     items,
   })
   setGuardandoPedidoBodega(false)
@@ -2900,7 +2914,11 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     return false
   }
 
-  mostrarNotificacion('Pedido guardado como vale de bodega')
+  mostrarNotificacion(
+    perfil?.rol === 'electrico'
+      ? 'Solicitud de material enviada para revisión'
+      : 'Pedido guardado como vale de bodega'
+  )
   if (mostrarValesBodega && fechaValeBodega === pedido.fecha) {
     await cargarValesBodegaDia(pedido.fecha)
   }
@@ -3211,7 +3229,7 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
 }
 
 async function denegarSolicitudBodega(alerta) {
-  if (!puedeOperarComoBodega || !alerta?.id) return false
+  if ((!puedeOperarComoBodega && !puedeRevisarSolicitudesBodega) || !alerta?.id) return false
   const estadoActual = String(alerta.estado_bodega || '').toLowerCase()
   if (estadoActual === 'entregado') {
     mostrarNotificacion('No se puede denegar un pedido ya entregado')
@@ -3230,7 +3248,7 @@ async function denegarSolicitudBodega(alerta) {
 
   setEntregandoSolicitudBodega(true)
   const marcaDenegacion = [
-    `Denegado por bodega: ${perfil?.nombre || perfil?.email || session?.user?.email || 'bodega'}`,
+    `Denegado por ${puedeRevisarSolicitudesBodega ? 'revisión' : 'bodega'}: ${perfil?.nombre || perfil?.email || session?.user?.email || 'usuario'}`,
     motivo.trim() ? `Motivo denegación: ${motivo.trim()}` : '',
   ].filter(Boolean).join(' | ')
   const observacionActualizada = agregarMarcaObservacionVale(alerta.observacion, marcaDenegacion)
@@ -3256,6 +3274,49 @@ async function denegarSolicitudBodega(alerta) {
 
   mostrarNotificacion('Pedido denegado')
   const pedidoActualizado = { ...alerta, ...datosDenegacion }
+  setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
+    vale.id === alerta.id ? pedidoActualizado : vale
+  )))
+  setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== alerta.id))
+  await cargarAlertasBodega()
+  return true
+}
+
+async function aprobarSolicitudBodega(alerta) {
+  if (!puedeRevisarSolicitudesBodega || !alerta?.id) return false
+  const estadoActual = String(alerta.estado_bodega || '').toLowerCase()
+
+  if (estadoActual !== 'solicitado') {
+    mostrarNotificacion('Este pedido ya fue aprobado o cerrado')
+    return true
+  }
+
+  const confirmado = window.confirm('¿Aprobar esta solicitud y enviarla a bodega para entrega?')
+  if (!confirmado) return false
+
+  setEntregandoSolicitudBodega(true)
+  const marcaAprobacion = `Aprobado por revisión: ${perfil?.nombre || perfil?.email || session?.user?.email || 'usuario'}`
+  const observacionActualizada = agregarMarcaObservacionVale(alerta.observacion, marcaAprobacion)
+  const datosAprobacion = {
+    estado_bodega: 'pendiente',
+    observacion: observacionActualizada,
+  }
+
+  const { error } = await supabase
+    .from('vales_bodega')
+    .update(datosAprobacion)
+    .eq('id', alerta.id)
+
+  setEntregandoSolicitudBodega(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudo aprobar la solicitud: ' + error.message)
+    await cargarAlertasBodega()
+    return false
+  }
+
+  mostrarNotificacion('Solicitud aprobada y enviada a bodega')
+  const pedidoActualizado = { ...alerta, ...datosAprobacion }
   setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
     vale.id === alerta.id ? pedidoActualizado : vale
   )))
@@ -5339,6 +5400,25 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     Precios materiales
                   </button>
                 )}
+                {puedeVerBodega && (
+                  <button
+                    type="button"
+                    onClick={() => abrirBodega({ abrirSolicitudMaterial: perfil?.rol === 'electrico' })}
+                    style={{
+                      width: '100%',
+                      marginTop: (puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales) ? '8px' : 0,
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #555',
+                      background: perfil?.rol === 'electrico' ? '#1565c0' : '#5d4037',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {perfil?.rol === 'electrico' ? 'Solicitar material' : 'Bodega'}
+                  </button>
+                )}
                 {puedeAdministrarEquivalenciasMateriales && (
                   <button
                     type="button"
@@ -6676,6 +6756,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     puedeEditarPedidos={puedeEditarPedidosBodega}
     puedeEditarPedidosEntregados={puedeEditarPedidosEntregadosBodega}
     puedeGestionarPedidos={puedeOperarComoBodega}
+    puedeAprobarPedidos={puedeRevisarSolicitudesBodega}
     archivo={archivoInventarioBodega}
     inventarios={inventariosBodega}
     solicitantes={solicitantesValeBodega}
@@ -6707,6 +6788,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     codigosBarraBodega={codigosBarraBodega}
     cargandoCodigosBarraBodega={cargandoCodigosBarraBodega}
     guardandoCodigoBarraBodega={guardandoCodigoBarraBodega}
+    solicitudMaterialInicial={solicitudMaterialBodegaInicial}
+    soloSolicitarMaterial={perfil?.rol === 'electrico'}
     onCambiarArchivo={setArchivoInventarioBodega}
     onLeerArchivo={leerInventarioBodega}
     onGuardarPedido={guardarPedidoBodega}
@@ -6714,6 +6797,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarRecepcion={guardarRecepcionBodega}
     onGuardarSalida={guardarDespachoBodega}
     onEntregarSolicitudBodega={entregarSolicitudBodega}
+    onAprobarSolicitudBodega={aprobarSolicitudBodega}
     onDenegarSolicitudBodega={denegarSolicitudBodega}
     onEditarSolicitudBodega={editarSolicitudBodega}
     onExportarInventario={exportarInventarioBodegaActual}

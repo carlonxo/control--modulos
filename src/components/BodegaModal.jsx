@@ -23,6 +23,7 @@ function BodegaModal({
   puedeEditarPedidos,
   puedeEditarPedidosEntregados,
   puedeGestionarPedidos,
+  puedeAprobarPedidos,
   archivo,
   inventarios = [],
   solicitantes = [],
@@ -54,6 +55,8 @@ function BodegaModal({
   codigosBarraBodega = [],
   cargandoCodigosBarraBodega = false,
   guardandoCodigoBarraBodega = false,
+  solicitudMaterialInicial = 0,
+  soloSolicitarMaterial = false,
   onCambiarArchivo,
   onLeerArchivo,
   onGuardarPedido,
@@ -61,6 +64,7 @@ function BodegaModal({
   onGuardarRecepcion,
   onGuardarSalida,
   onEntregarSolicitudBodega,
+  onAprobarSolicitudBodega,
   onDenegarSolicitudBodega,
   onEditarSolicitudBodega,
   onExportarInventario,
@@ -143,6 +147,18 @@ function BodegaModal({
   const materialesInventario = inventarioSeleccionado?.items || []
   const mostrarPedidosHoy = Boolean(puedeVerPedidosHoy)
   const puedeVerHistorialVales = Boolean(puedeAdministrar || modoSoloBodega || puedeVerPedidosHoy)
+
+  useEffect(() => {
+    if (!solicitudMaterialInicial) return
+    setMostrarCrearPedido(true)
+    setMostrarCrearDevolucion(false)
+    setMostrarRecepcionarMaterial(false)
+    setMostrarSalidaMaterial(false)
+    setMostrarIngresoProveedor(false)
+    setMostrarCargaExcel(false)
+    setMostrarCodigosBarra(false)
+  }, [solicitudMaterialInicial])
+
   const electricosDisponibles = useMemo(() => (
     (solicitantes || [])
       .filter((item) => normalizarBusqueda(item.rol).includes('electrico'))
@@ -382,7 +398,7 @@ function BodegaModal({
         </button>
       </div>
 
-      {puedeOperarBodega && (
+      {(puedeOperarBodega || puedeAprobarPedidos) && (
         <CampanaBodega
           alertas={alertasBodega}
           visible={mostrarAlertasBodega}
@@ -401,6 +417,7 @@ function BodegaModal({
           puedeEditar={puedeEditarPedidos}
           puedeEditarEntregados={puedeEditarPedidosEntregados}
           puedeGestionar={puedeGestionarPedidos}
+          puedeAprobar={puedeAprobarPedidos}
           onEditar={async (itemsEditados) => {
             const resultado = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
             if (!resultado) return false
@@ -412,6 +429,12 @@ function BodegaModal({
           }}
           onEntregar={async (opcionesEntrega = {}) => {
             const ok = await onEntregarSolicitudBodega?.(alertaBodegaSeleccionada, opcionesEntrega)
+            if (!ok) return
+            setAlertaBodegaSeleccionada(null)
+            onActualizarAlertasBodega?.()
+          }}
+          onAprobar={async () => {
+            const ok = await onAprobarSolicitudBodega?.(alertaBodegaSeleccionada)
             if (!ok) return
             setAlertaBodegaSeleccionada(null)
             onActualizarAlertasBodega?.()
@@ -720,19 +743,21 @@ function BodegaModal({
                   }}
                   style={botonAzul}
                 >
-                  Crear pedido
+                  {soloSolicitarMaterial ? 'Solicitar material' : 'Crear pedido'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMostrarCrearDevolucion((actual) => !actual)
-                    setMostrarCrearPedido(false)
-                    setMostrarRecepcionarMaterial(false)
-                  }}
-                  style={botonAzul}
-                >
-                  Crear devolución
-                </button>
+                {!soloSolicitarMaterial && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarCrearDevolucion((actual) => !actual)
+                      setMostrarCrearPedido(false)
+                      setMostrarRecepcionarMaterial(false)
+                    }}
+                    style={botonAzul}
+                  >
+                    Crear devolución
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1138,8 +1163,7 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar, onImprimir, onImprimirG
         <div style={{ display: 'grid', gap: '8px' }}>
           {pedidos.map((pedido) => {
             const total = (pedido.items || []).length
-            const entregado = String(pedido.estado_bodega || '').toLowerCase() === 'entregado'
-            const etiquetaEstado = entregado ? 'Entregado' : 'Pendiente'
+            const estadoVisual = obtenerEstadoVisualPedidoBodega(pedido)
             const solicitante = pedido.solicitante_nombre || pedido.usuario_nombre || 'Sin usuario'
             const detalle = [
               pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
@@ -1164,14 +1188,14 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar, onImprimir, onImprimirG
                   </small>
                 </span>
                 <strong style={{
-                  color: entregado ? '#66bb6a' : '#ffcc80',
-                  border: `1px solid ${entregado ? '#2e7d32' : '#f9a825'}`,
+                  color: estadoVisual.color,
+                  border: `1px solid ${estadoVisual.borde}`,
                   borderRadius: '999px',
                   padding: '5px 10px',
                   whiteSpace: 'nowrap',
-                  background: entregado ? '#15351c' : '#3a2b10',
+                  background: estadoVisual.fondo,
                 }}>
-                  {etiquetaEstado}
+                  {estadoVisual.etiqueta}
                 </strong>
               </button>
             )
@@ -1243,8 +1267,7 @@ function PanelHistorialValesBodega({
         <div style={{ display: 'grid', gap: '8px' }}>
           {pedidos.map((pedido) => {
             const total = (pedido.items || []).length
-            const entregado = String(pedido.estado_bodega || '').toLowerCase() === 'entregado'
-            const etiquetaEstado = entregado ? 'Entregado' : 'Pendiente'
+            const estadoVisual = obtenerEstadoVisualPedidoBodega(pedido)
             const solicitante = pedido.solicitante_nombre || pedido.usuario_nombre || 'Sin usuario'
             const detalle = [
               pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
@@ -1269,14 +1292,14 @@ function PanelHistorialValesBodega({
                   </small>
                 </span>
                 <strong style={{
-                  color: entregado ? '#66bb6a' : '#ffcc80',
-                  border: `1px solid ${entregado ? '#2e7d32' : '#f9a825'}`,
+                  color: estadoVisual.color,
+                  border: `1px solid ${estadoVisual.borde}`,
                   borderRadius: '999px',
                   padding: '5px 10px',
                   whiteSpace: 'nowrap',
-                  background: entregado ? '#15351c' : '#3a2b10',
+                  background: estadoVisual.fondo,
                 }}>
-                  {etiquetaEstado}
+                  {estadoVisual.etiqueta}
                 </strong>
               </button>
             )
@@ -1802,7 +1825,9 @@ function DetalleSolicitudBodega({
   puedeEditar,
   puedeEditarEntregados,
   puedeGestionar,
+  puedeAprobar,
   onEditar,
+  onAprobar,
   onEntregar,
   onDenegar,
   onCerrar,
@@ -1818,12 +1843,16 @@ function DetalleSolicitudBodega({
   const [guardandoCambioMaterial, setGuardandoCambioMaterial] = useState(false)
   const inputEscanerRef = useRef(null)
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
-  const entregado = String(alerta?.estado_bodega || '').toLowerCase() === 'entregado'
-  const denegado = String(alerta?.estado_bodega || '').toLowerCase() === 'denegado'
+  const estadoPedido = String(alerta?.estado_bodega || '').toLowerCase()
+  const solicitado = estadoPedido === 'solicitado'
+  const entregado = estadoPedido === 'entregado'
+  const denegado = estadoPedido === 'denegado'
   const puedeEditarEstePedido = puedeEditar && esPedido && (!entregado || puedeEditarEntregados)
   const fueModificadoPorBodega = tieneMarcaModificacionBodega(alerta.observacion)
   const itemsPedido = alerta.items || []
-  const requiereEscaneo = puedeGestionar && esPedido && !entregado && !denegado && !editando && itemsPedido.length > 0
+  const puedeRevisarSolicitud = puedeAprobar && esPedido && solicitado && !entregado && !denegado
+  const puedeGestionarEntrega = puedeGestionar && esPedido && !solicitado && !entregado && !denegado
+  const requiereEscaneo = puedeGestionarEntrega && !editando && itemsPedido.length > 0
   const puedeCambiarMaterialPedido = requiereEscaneo
   const resumenEscaneo = calcularResumenEscaneoPedido(itemsPedido, cantidadesEscaneadas, materialesInventario)
   const pedidoEscaneadoCompleto = resumenEscaneo.every((fila) => !fila.requiereEscaneo || fila.escaneado >= fila.cantidad)
@@ -2260,7 +2289,35 @@ function DetalleSolicitudBodega({
               </button>
             </>
           )}
-          {puedeGestionar && esPedido && (
+          {puedeRevisarSolicitud && !editando && (
+            <>
+              <button
+                type="button"
+                disabled={entregando || denegado || guardandoCambioMaterial}
+                onClick={onDenegar}
+                style={{
+                  ...botonRojo,
+                  opacity: entregando || denegado || guardandoCambioMaterial ? 0.7 : 1,
+                  cursor: entregando || denegado || guardandoCambioMaterial ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {denegado ? 'Solicitud denegada' : 'Denegar solicitud'}
+              </button>
+              <button
+                type="button"
+                disabled={entregando || denegado || guardandoCambioMaterial}
+                onClick={onAprobar}
+                style={{
+                  ...botonVerde,
+                  opacity: entregando || denegado || guardandoCambioMaterial ? 0.7 : 1,
+                  cursor: entregando || denegado || guardandoCambioMaterial ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {entregando ? 'Aprobando...' : 'Aprobar pedido'}
+              </button>
+            </>
+          )}
+          {puedeGestionarEntrega && (
             <>
               <button
                 type="button"
@@ -2883,6 +2940,44 @@ function obtenerEtiquetaAlertaBodega(alerta = {}) {
   if (alerta.tipo_ingreso === 'devolucion_app') return 'Devolución'
   if (alerta.tipo_ingreso === 'pedido_app') return 'Pedido'
   return 'Movimiento'
+}
+
+function obtenerEstadoVisualPedidoBodega(pedido = {}) {
+  const estado = String(pedido.estado_bodega || '').toLowerCase()
+
+  if (estado === 'solicitado') {
+    return {
+      etiqueta: 'Solicitado',
+      color: '#90caf9',
+      borde: '#1976d2',
+      fondo: '#102b45',
+    }
+  }
+
+  if (estado === 'entregado') {
+    return {
+      etiqueta: 'Entregado',
+      color: '#66bb6a',
+      borde: '#2e7d32',
+      fondo: '#15351c',
+    }
+  }
+
+  if (estado === 'denegado') {
+    return {
+      etiqueta: 'Denegado',
+      color: '#ef9a9a',
+      borde: '#c62828',
+      fondo: '#3b1111',
+    }
+  }
+
+  return {
+    etiqueta: 'Pendiente',
+    color: '#ffcc80',
+    borde: '#f9a825',
+    fondo: '#3a2b10',
+  }
 }
 
 function limpiarObservacionSolicitudBodega(observacion = '') {
