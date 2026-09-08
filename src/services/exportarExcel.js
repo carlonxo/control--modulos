@@ -320,8 +320,8 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
   }
 
   const materiales = modo === 'general'
-    ? compilarMaterialesPedidosGeneral(pedidos, opciones.materialesInventario)
-    : compilarMaterialesPedidosPorSerie(pedidos, opciones.materialesInventario)
+    ? compilarMaterialesPedidosGeneral(pedidos)
+    : compilarMaterialesPedidosPorSerie(pedidos)
   materiales.slice(0, 47).forEach((material, indice) => {
     const fila = 9 + indice
     sheetXml = setCellValue(sheetXml, `A${fila}`, indice + 1, 'number', sharedStrings)
@@ -345,14 +345,12 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
   })
 }
 
-function compilarMaterialesPedidosGeneral(pedidos = [], materialesInventario = []) {
+function compilarMaterialesPedidosGeneral(pedidos = []) {
   const mapa = new Map()
 
   pedidos.forEach((pedido) => {
     ;(pedido.items || []).forEach((item) => {
-      const codigoOriginal = String(item.material_vale || item.codigo || '').trim()
-      const descripcion = String(item.material_balance || item.material_vale || '').trim()
-      const codigo = resolverCodigoBodegaVale(codigoOriginal, descripcion, materialesInventario)
+      const { codigo, descripcion } = obtenerMaterialPedidoParaImpresion(item)
       const unidad = String(item.unidad || '').trim()
       const clave = `${normalizarClaveVale(codigo)}|${normalizarClaveVale(descripcion)}`
 
@@ -373,14 +371,12 @@ function compilarMaterialesPedidosGeneral(pedidos = [], materialesInventario = [
   return Array.from(mapa.values())
 }
 
-function compilarMaterialesPedidosPorSerie(pedidos = [], materialesInventario = []) {
+function compilarMaterialesPedidosPorSerie(pedidos = []) {
   const mapa = new Map()
 
   pedidos.forEach((pedido, indicePedido) => {
     ;(pedido.items || []).forEach((item) => {
-      const codigoOriginal = String(item.material_vale || item.codigo || '').trim()
-      const descripcion = String(item.material_balance || item.material_vale || '').trim()
-      const codigo = resolverCodigoBodegaVale(codigoOriginal, descripcion, materialesInventario)
+      const { codigo, descripcion } = obtenerMaterialPedidoParaImpresion(item)
       const unidad = String(item.unidad || '').trim()
       const clave = `${normalizarClaveVale(codigo)}|${normalizarClaveVale(descripcion)}`
 
@@ -404,27 +400,18 @@ function compilarMaterialesPedidosPorSerie(pedidos = [], materialesInventario = 
   return Array.from(mapa.values())
 }
 
-function resolverCodigoBodegaVale(codigoOriginal = '', descripcion = '', materialesInventario = []) {
-  const codigo = String(codigoOriginal || '').trim()
-  const materialPorCodigo = materialesInventario.find((material) => (
-    normalizarClaveVale(material.codigo) === normalizarClaveVale(codigo)
-  ))
+function obtenerMaterialPedidoParaImpresion(item = {}) {
+  const codigo = String(item.material_vale || item.codigo || '').trim()
+  const descripcion = String(
+    item.material_balance ||
+    item.descripcion ||
+    item.material ||
+    item.material_vale ||
+    item.codigo ||
+    ''
+  ).trim()
 
-  if (materialPorCodigo && !esCodigoCatalogoNoBodega(codigo)) return codigo
-
-  const materialPorDescripcion = materialesInventario.find((material) => (
-    normalizarClaveVale(material.descripcion) === normalizarClaveVale(descripcion) ||
-    normalizarClaveVale(material.codigo) === normalizarClaveVale(descripcion)
-  ))
-
-  if (materialPorDescripcion?.codigo) return String(materialPorDescripcion.codigo).trim()
-
-  return codigo
-}
-
-function esCodigoCatalogoNoBodega(codigo = '') {
-  const limpio = String(codigo || '').trim()
-  return /^\d{1,5}$/.test(limpio)
+  return { codigo, descripcion }
 }
 
 function crearEditorSharedStrings(xml) {
