@@ -10,18 +10,22 @@ export async function cargarInventariosBodega({ supabase, limite = 30 }) {
   const ids = (inventarios || []).map((item) => item.id).filter(Boolean)
   if (ids.length === 0) return { inventarios: [], error: null }
 
-  const { data: items, error: errorItems } = await supabase
-    .from('bodega_inventario_items')
-    .select('*')
-    .in('inventario_id', ids)
-    .order('descripcion', { ascending: true })
+  const { data: items, error: errorItems } = await seleccionarTodoPaginado({
+    supabase,
+    tabla: 'bodega_inventario_items',
+    columnas: '*',
+    filtro: (consulta) => consulta.in('inventario_id', ids),
+    ordenar: (consulta) => consulta.order('descripcion', { ascending: true }),
+  })
 
   if (errorItems) return { inventarios: [], error: errorItems }
 
-  const { data: movimientos, error: errorMovimientos } = await supabase
-    .from('bodega_movimientos_excel')
-    .select('inventario_id, codigo_bodega')
-    .in('inventario_id', ids)
+  const { data: movimientos, error: errorMovimientos } = await seleccionarTodoPaginado({
+    supabase,
+    tabla: 'bodega_movimientos_excel',
+    columnas: 'inventario_id, codigo_bodega',
+    filtro: (consulta) => consulta.in('inventario_id', ids),
+  })
 
   if (errorMovimientos) return { inventarios: [], error: errorMovimientos }
 
@@ -54,6 +58,38 @@ export async function cargarInventariosBodega({ supabase, limite = 30 }) {
       }
     }),
     error: null,
+  }
+}
+
+async function seleccionarTodoPaginado({
+  supabase,
+  tabla,
+  columnas = '*',
+  filtro = (consulta) => consulta,
+  ordenar = (consulta) => consulta,
+  tamanoPagina = 1000,
+}) {
+  const datos = []
+
+  for (let desde = 0; ; desde += tamanoPagina) {
+    const hasta = desde + tamanoPagina - 1
+    const consultaBase = supabase
+      .from(tabla)
+      .select(columnas)
+      .range(desde, hasta)
+
+    const consultaFiltrada = filtro(consultaBase)
+    const consultaOrdenada = ordenar(consultaFiltrada)
+    const { data, error } = await consultaOrdenada
+
+    if (error) return { data: datos, error }
+
+    const filas = data || []
+    datos.push(...filas)
+
+    if (filas.length < tamanoPagina) {
+      return { data: datos, error: null }
+    }
   }
 }
 
