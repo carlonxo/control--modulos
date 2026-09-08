@@ -2808,10 +2808,18 @@ function exportarInventarioBodegaActual() {
   exportarInventarioBodegaExcel(inventarioActual)
 }
 
+function obtenerMaterialesInventarioBodegaActual() {
+  const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+  return inventarioActual?.items || []
+}
+
 async function imprimirPedidosBodegaHoy() {
   if (!puedeVerPedidosBodegaHoy) return
   try {
-    await exportarPedidosBodegaExcel(pedidosBodegaHoy, { modo: 'detalle' })
+    await exportarPedidosBodegaExcel(pedidosBodegaHoy, {
+      modo: 'detalle',
+      materialesInventario: obtenerMaterialesInventarioBodegaActual(),
+    })
   } catch (error) {
     console.error(error)
     mostrarNotificacion('No se pudo generar el vale de bodega')
@@ -2847,7 +2855,10 @@ async function imprimirPedidosBodegaHoyGeneral() {
   try {
     const pedidosEntregados = filtrarPedidosEntregadosParaImpresionGeneral(pedidosBodegaHoy)
     if (pedidosEntregados.length === 0) return
-    await exportarPedidosBodegaExcel(pedidosEntregados, { modo: 'general' })
+    await exportarPedidosBodegaExcel(pedidosEntregados, {
+      modo: 'general',
+      materialesInventario: obtenerMaterialesInventarioBodegaActual(),
+    })
   } catch (error) {
     console.error(error)
     mostrarNotificacion('No se pudo generar el vale general de bodega')
@@ -2857,7 +2868,10 @@ async function imprimirPedidosBodegaHoyGeneral() {
 async function imprimirHistorialValesBodega() {
   if (!puedeVerPedidosBodegaHoy) return
   try {
-    await exportarPedidosBodegaExcel(historialValesBodega, { modo: 'detalle' })
+    await exportarPedidosBodegaExcel(historialValesBodega, {
+      modo: 'detalle',
+      materialesInventario: obtenerMaterialesInventarioBodegaActual(),
+    })
   } catch (error) {
     console.error(error)
     mostrarNotificacion('No se pudo generar el vale de bodega del historial')
@@ -2869,7 +2883,10 @@ async function imprimirHistorialValesBodegaGeneral() {
   try {
     const pedidosEntregados = filtrarPedidosEntregadosParaImpresionGeneral(historialValesBodega)
     if (pedidosEntregados.length === 0) return
-    await exportarPedidosBodegaExcel(pedidosEntregados, { modo: 'general' })
+    await exportarPedidosBodegaExcel(pedidosEntregados, {
+      modo: 'general',
+      materialesInventario: obtenerMaterialesInventarioBodegaActual(),
+    })
   } catch (error) {
     console.error(error)
     mostrarNotificacion('No se pudo generar el vale general de bodega del historial')

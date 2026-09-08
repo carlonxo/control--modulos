@@ -181,7 +181,7 @@ export async function exportarPedidosBodegaExcel(pedidos = [], opciones = {}) {
   const fecha = pedidosValidos[0]?.fecha || new Date().toISOString().slice(0, 10)
 
   if (grupos.length === 1) {
-    const blob = await crearValePedidosGrupoDesdePlantilla(grupos[0], { modo })
+    const blob = await crearValePedidosGrupoDesdePlantilla(grupos[0], opciones)
     const sufijoModo = modo === 'general' ? '_general' : ''
     descargarBlob(blob, `vale_${nombreArchivoSeguro(grupos[0].proyecto || fecha)}${sufijoModo}.xlsx`)
     return
@@ -189,7 +189,7 @@ export async function exportarPedidosBodegaExcel(pedidos = [], opciones = {}) {
 
   const zip = new JSZip()
   for (const [indice, grupo] of grupos.entries()) {
-    const blob = await crearValePedidosGrupoDesdePlantilla(grupo, { modo })
+    const blob = await crearValePedidosGrupoDesdePlantilla(grupo, opciones)
     const sufijo = grupo.bloque > 1 ? `_parte_${grupo.bloque}` : ''
     const sufijoModo = modo === 'general' ? '_general' : ''
     const nombre = `vale_${nombreArchivoSeguro(grupo.proyecto || `vale_${indice + 1}`)}${sufijo}${sufijoModo}.xlsx`
@@ -320,8 +320,8 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
   }
 
   const materiales = modo === 'general'
-    ? compilarMaterialesPedidosGeneral(pedidos)
-    : compilarMaterialesPedidosPorSerie(pedidos)
+    ? compilarMaterialesPedidosGeneral(pedidos, opciones.materialesInventario)
+    : compilarMaterialesPedidosPorSerie(pedidos, opciones.materialesInventario)
   materiales.slice(0, 47).forEach((material, indice) => {
     const fila = 9 + indice
     sheetXml = setCellValue(sheetXml, `A${fila}`, indice + 1, 'number', sharedStrings)
@@ -345,13 +345,14 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
   })
 }
 
-function compilarMaterialesPedidosGeneral(pedidos = []) {
+function compilarMaterialesPedidosGeneral(pedidos = [], materialesInventario = []) {
   const mapa = new Map()
 
   pedidos.forEach((pedido) => {
     ;(pedido.items || []).forEach((item) => {
-      const codigo = String(item.material_vale || item.codigo || '').trim()
+      const codigoOriginal = String(item.material_vale || item.codigo || '').trim()
       const descripcion = String(item.material_balance || item.material_vale || '').trim()
+      const codigo = resolverCodigoBodegaVale(codigoOriginal, descripcion, materialesInventario)
       const unidad = String(item.unidad || '').trim()
       const clave = `${normalizarClaveVale(codigo)}|${normalizarClaveVale(descripcion)}`
 
@@ -372,13 +373,14 @@ function compilarMaterialesPedidosGeneral(pedidos = []) {
   return Array.from(mapa.values())
 }
 
-function compilarMaterialesPedidosPorSerie(pedidos = []) {
+function compilarMaterialesPedidosPorSerie(pedidos = [], materialesInventario = []) {
   const mapa = new Map()
 
   pedidos.forEach((pedido, indicePedido) => {
     ;(pedido.items || []).forEach((item) => {
-      const codigo = String(item.material_vale || item.codigo || '').trim()
+      const codigoOriginal = String(item.material_vale || item.codigo || '').trim()
       const descripcion = String(item.material_balance || item.material_vale || '').trim()
+      const codigo = resolverCodigoBodegaVale(codigoOriginal, descripcion, materialesInventario)
       const unidad = String(item.unidad || '').trim()
       const clave = `${normalizarClaveVale(codigo)}|${normalizarClaveVale(descripcion)}`
 
@@ -400,6 +402,29 @@ function compilarMaterialesPedidosPorSerie(pedidos = []) {
   })
 
   return Array.from(mapa.values())
+}
+
+function resolverCodigoBodegaVale(codigoOriginal = '', descripcion = '', materialesInventario = []) {
+  const codigo = String(codigoOriginal || '').trim()
+  const materialPorCodigo = materialesInventario.find((material) => (
+    normalizarClaveVale(material.codigo) === normalizarClaveVale(codigo)
+  ))
+
+  if (materialPorCodigo && !esCodigoCatalogoNoBodega(codigo)) return codigo
+
+  const materialPorDescripcion = materialesInventario.find((material) => (
+    normalizarClaveVale(material.descripcion) === normalizarClaveVale(descripcion) ||
+    normalizarClaveVale(material.codigo) === normalizarClaveVale(descripcion)
+  ))
+
+  if (materialPorDescripcion?.codigo) return String(materialPorDescripcion.codigo).trim()
+
+  return codigo
+}
+
+function esCodigoCatalogoNoBodega(codigo = '') {
+  const limpio = String(codigo || '').trim()
+  return /^\d{1,5}$/.test(limpio)
 }
 
 function crearEditorSharedStrings(xml) {
