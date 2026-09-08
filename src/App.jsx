@@ -372,6 +372,29 @@ function agregarMarcaObservacionVale(observacion = '', marca = '') {
   return partes.join(' | ')
 }
 
+function agregarMarcaRevisionVale(observacion = '', marca = '') {
+  const partes = String(observacion || '')
+    .split('|')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+    .filter((parte) => !normalizarTextoComparacion(parte).startsWith('revision'))
+
+  if (marca) partes.push(marca)
+  return partes.join(' | ')
+}
+
+function esSolicitudPendienteRevisionBodega(vale = {}) {
+  const estado = String(vale.estado_bodega || '').toLowerCase()
+  if (estado === 'solicitado') return true
+  return String(vale.observacion || '')
+    .split('|')
+    .some((parte) => normalizarTextoComparacion(parte).startsWith('revisionsolicitado'))
+}
+
+function esSolicitudCerradaBodega(vale = {}) {
+  return ['entregado', 'denegado'].includes(String(vale.estado_bodega || '').toLowerCase())
+}
+
 function obtenerBodegaInventario(inventario = {}) {
   return normalizarBodega([
     inventario.bodega,
@@ -790,6 +813,10 @@ const datosFiltradosPorProyecto = proyectosFiltroActivos.length
 const llamadosPendientes = datos.filter(
   (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
 )
+const solicitudesMaterialPendientesRevision = puedeRevisarSolicitudesBodega
+  ? alertasBodega.filter((vale) => vale.tipo_ingreso === 'pedido_app' && esSolicitudPendienteRevisionBodega(vale))
+  : []
+const totalAvisosPendientes = llamadosPendientes.length + solicitudesMaterialPendientesRevision.length
 const ingresosProtocolosMensuales = protocolosMensuales.reduce(
   (total, registro) => total + Number(registro.valorTotal || 0),
   0
@@ -1223,23 +1250,28 @@ useEffect(() => {
 }, [datos, recibeAvisosPrueba])
 
 useEffect(() => {
-  if (!puedeVerBodega || (!esRolBodega && !mostrarBodega)) return
+  const debeCargarBodega = esRolBodega || mostrarBodega || puedeRevisarSolicitudesBodega
+  if (!puedeVerBodega || !debeCargarBodega) return
 
   if (esRolBodega) setMostrarBodega(true)
   cargarInventariosBodega()
   cargarAlertasBodega()
-  cargarRecepcionesBodega()
-  cargarDespachosBodega()
-  cargarCodigosBarraBodega()
+  if (esRolBodega || mostrarBodega) {
+    cargarRecepcionesBodega()
+    cargarDespachosBodega()
+    cargarCodigosBarraBodega()
+  }
 
   const intervalo = setInterval(() => {
     cargarAlertasBodega()
-    cargarRecepcionesBodega()
-    cargarDespachosBodega()
+    if (esRolBodega || mostrarBodega) {
+      cargarRecepcionesBodega()
+      cargarDespachosBodega()
+    }
   }, 7000)
 
   return () => clearInterval(intervalo)
-}, [esRolBodega, puedeVerBodega, mostrarBodega])
+}, [esRolBodega, puedeVerBodega, mostrarBodega, puedeRevisarSolicitudesBodega])
 
 if (!session) {
   return <Login supabase={supabase} />
@@ -2030,14 +2062,13 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
     vale.tipo_ingreso === 'pedido_app' || vale.tipo_ingreso === 'devolucion_app'
   ))
   const solicitudesFiltradas = filtrarSolicitudesPorBodegaAsignada(solicitudesApp, perfil)
-  const esSolicitudPendienteRevision = (vale) => String(vale.estado_bodega || '').toLowerCase() === 'solicitado'
-  const esSolicitudCerrada = (vale) => ['entregado', 'denegado'].includes(String(vale.estado_bodega || '').toLowerCase())
+    .map((vale) => esSolicitudPendienteRevisionBodega(vale) ? { ...vale, estado_bodega: 'solicitado' } : vale)
   const solicitudesVisibles = puedeRevisarSolicitudesBodega
     ? solicitudesFiltradas
-    : solicitudesFiltradas.filter((vale) => !esSolicitudPendienteRevision(vale))
+    : solicitudesFiltradas.filter((vale) => !esSolicitudPendienteRevisionBodega(vale))
   const alertasVisibles = puedeRevisarSolicitudesBodega
-    ? solicitudesFiltradas.filter((vale) => esSolicitudPendienteRevision(vale))
-    : solicitudesFiltradas.filter((vale) => !esSolicitudPendienteRevision(vale) && !esSolicitudCerrada(vale))
+    ? solicitudesFiltradas.filter((vale) => esSolicitudPendienteRevisionBodega(vale))
+    : solicitudesFiltradas.filter((vale) => !esSolicitudPendienteRevisionBodega(vale) && !esSolicitudCerradaBodega(vale))
 
   setPedidosBodegaHoy(solicitudesVisibles.filter((vale) => vale.tipo_ingreso === 'pedido_app'))
   setAlertasBodega(alertasVisibles)
@@ -2061,8 +2092,12 @@ async function cargarHistorialValesBodega(fecha = fechaHistorialValesBodega) {
 
   const solicitudesApp = (vales || []).filter((vale) => vale.tipo_ingreso === 'pedido_app')
   const solicitudesFiltradas = filtrarSolicitudesPorBodegaAsignada(solicitudesApp, perfil)
-  setHistorialValesBodega(solicitudesFiltradas)
-  return solicitudesFiltradas
+    .map((vale) => esSolicitudPendienteRevisionBodega(vale) ? { ...vale, estado_bodega: 'solicitado' } : vale)
+  const solicitudesVisibles = puedeRevisarSolicitudesBodega
+    ? solicitudesFiltradas
+    : solicitudesFiltradas.filter((vale) => !esSolicitudPendienteRevisionBodega(vale))
+  setHistorialValesBodega(solicitudesVisibles)
+  return solicitudesVisibles
 }
 
 function alternarPanelPedidosBodegaHoy() {
@@ -2882,12 +2917,16 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     return false
   }
 
-  const observacionPedido = [
+  const solicitudRequiereRevision = perfil?.rol === 'electrico'
+  const observacionPedidoBase = [
     pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
     pedido.tipoModulo ? `Tipo modulo: ${pedido.tipoModulo}` : '',
     pedido.serie ? `Serie: ${pedido.serie}` : '',
     pedido.bodega ? `Bodega: ${pedido.bodega}` : '',
   ].filter(Boolean).join(' | ')
+  const observacionPedido = solicitudRequiereRevision
+    ? agregarMarcaRevisionVale(observacionPedidoBase, 'Revision: solicitado')
+    : observacionPedidoBase
 
   setGuardandoPedidoBodega(true)
   const { error, etapa } = await guardarValeBodegaSupabase({
@@ -2900,7 +2939,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     solicitanteNombre: pedido.retiraNombre,
     tipoIngreso: 'pedido_app',
     observacion: observacionPedido,
-    estadoBodega: perfil?.rol === 'electrico' ? 'solicitado' : 'pendiente',
+    estadoBodega: solicitudRequiereRevision ? 'solicitado' : 'pendiente',
     items,
   })
   setGuardandoPedidoBodega(false)
@@ -2915,7 +2954,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
   }
 
   mostrarNotificacion(
-    perfil?.rol === 'electrico'
+    solicitudRequiereRevision
       ? 'Solicitud de material enviada para revisión'
       : 'Pedido guardado como vale de bodega'
   )
@@ -3286,7 +3325,7 @@ async function aprobarSolicitudBodega(alerta) {
   if (!puedeRevisarSolicitudesBodega || !alerta?.id) return false
   const estadoActual = String(alerta.estado_bodega || '').toLowerCase()
 
-  if (estadoActual !== 'solicitado') {
+  if (estadoActual !== 'solicitado' && !esSolicitudPendienteRevisionBodega(alerta)) {
     mostrarNotificacion('Este pedido ya fue aprobado o cerrado')
     return true
   }
@@ -3295,8 +3334,8 @@ async function aprobarSolicitudBodega(alerta) {
   if (!confirmado) return false
 
   setEntregandoSolicitudBodega(true)
-  const marcaAprobacion = `Aprobado por revisión: ${perfil?.nombre || perfil?.email || session?.user?.email || 'usuario'}`
-  const observacionActualizada = agregarMarcaObservacionVale(alerta.observacion, marcaAprobacion)
+  const marcaAprobacion = `Revision: aprobado por ${perfil?.nombre || perfil?.email || session?.user?.email || 'usuario'}`
+  const observacionActualizada = agregarMarcaRevisionVale(alerta.observacion, marcaAprobacion)
   const datosAprobacion = {
     estado_bodega: 'pendiente',
     observacion: observacionActualizada,
@@ -5200,10 +5239,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           />
         )}
 
-        {recibeAvisosPrueba && (
+        {(recibeAvisosPrueba || puedeRevisarSolicitudesBodega) && (
           <>
             <button
-              aria-label="Ver llamados a prueba eléctrica pendientes"
+              aria-label="Ver avisos pendientes"
               onClick={(e) => {
                 e.stopPropagation()
                 const abrir = !mostrarLlamadosPendientes
@@ -5227,7 +5266,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
               }}
             >
               {'\u{1F514}'}
-              {llamadosPendientes.length > 0 && (
+              {totalAvisosPendientes > 0 && (
                 <span
                   style={{
                     position: 'absolute',
@@ -5245,7 +5284,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     fontWeight: 700,
                   }}
                 >
-                  {llamadosPendientes.length}
+                  {totalAvisosPendientes}
                 </span>
               )}
             </button>
@@ -5272,24 +5311,73 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                   boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
                 }}
               >
-                <h3 style={{ margin: '0 0 12px' }}>Pruebas pendientes</h3>
+                <h3 style={{ margin: '0 0 12px' }}>Avisos pendientes</h3>
 
-                {llamadosPendientes.length === 0 ? (
-                  <p>No hay llamados pendientes.</p>
+                {totalAvisosPendientes === 0 ? (
+                  <p>No hay avisos pendientes.</p>
                 ) : (
-                  llamadosPendientes.map((modulo) => (
-                    <div
-                      key={modulo.id}
-                      style={{ padding: '9px 0', borderBottom: '1px solid #444' }}
-                    >
-                      <strong style={{ display: 'block' }}>
-                        LÍNEA {modulo.linea}
-                      </strong>
-                      <span style={{ display: 'block', marginTop: '2px', fontSize: '13px', color: '#ccc' }}>
-                        {solicitantesPendientes[modulo.id] || 'Cargando...'} - {modulo.serie}
-                      </span>
-                    </div>
-                  ))
+                  <>
+                    {recibeAvisosPrueba && (
+                      <div style={{ marginBottom: solicitudesMaterialPendientesRevision.length > 0 ? '14px' : 0 }}>
+                        <h4 style={{ margin: '0 0 8px', color: '#90caf9' }}>Pruebas eléctricas</h4>
+                        {llamadosPendientes.length === 0 ? (
+                          <p style={{ color: '#bbb', margin: 0 }}>Sin llamados pendientes.</p>
+                        ) : (
+                          llamadosPendientes.map((modulo) => (
+                            <div
+                              key={modulo.id}
+                              style={{ padding: '9px 0', borderBottom: '1px solid #444' }}
+                            >
+                              <strong style={{ display: 'block' }}>
+                                LÍNEA {modulo.linea}
+                              </strong>
+                              <span style={{ display: 'block', marginTop: '2px', fontSize: '13px', color: '#ccc' }}>
+                                {solicitantesPendientes[modulo.id] || 'Cargando...'} - {modulo.serie}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+
+                    {puedeRevisarSolicitudesBodega && (
+                      <div>
+                        <h4 style={{ margin: '0 0 8px', color: '#ffcc80' }}>Solicitudes de material</h4>
+                        {solicitudesMaterialPendientesRevision.length === 0 ? (
+                          <p style={{ color: '#bbb', margin: 0 }}>Sin solicitudes pendientes.</p>
+                        ) : (
+                          solicitudesMaterialPendientesRevision.map((pedido) => (
+                            <button
+                              key={pedido.id}
+                              type="button"
+                              onClick={() => {
+                                setMostrarLlamadosPendientes(false)
+                                abrirBodega()
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '9px 0',
+                                border: 0,
+                                borderBottom: '1px solid #444',
+                                background: 'transparent',
+                                color: 'white',
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <strong style={{ display: 'block' }}>
+                                {pedido.solicitante_nombre || pedido.usuario_nombre || 'Sin solicitante'}
+                              </strong>
+                              <span style={{ display: 'block', marginTop: '2px', fontSize: '13px', color: '#ccc' }}>
+                                Serie {pedido.serie || '-'} · {(pedido.items || []).length} material(es)
+                              </span>
+                              <small style={{ color: '#90caf9' }}>Presiona para revisar en Bodega</small>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

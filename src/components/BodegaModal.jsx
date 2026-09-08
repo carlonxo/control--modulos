@@ -2986,6 +2986,7 @@ function limpiarObservacionSolicitudBodega(observacion = '') {
     .map((parte) => parte.trim())
     .filter((parte) => parte && normalizarBusqueda(parte) !== 'pedido generado desde app')
     .filter((parte) => !normalizarBusqueda(parte).startsWith('modificado por bodega'))
+    .filter((parte) => !normalizarBusqueda(parte).startsWith('revision'))
     .join(' | ')
 }
 
