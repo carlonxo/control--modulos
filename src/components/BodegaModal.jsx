@@ -560,28 +560,6 @@ function BodegaModal({
         <>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'end', flexWrap: 'wrap', marginBottom: '12px' }}>
             <label style={{ display: 'grid', gap: '5px', flex: '1 1 420px' }}>
-              <strong>Inventario seleccionado</strong>
-              <select
-                value={inventarioSeleccionado?.id || ''}
-                onChange={(e) => onSeleccionarInventario?.(e.target.value)}
-                style={inputStyle}
-              >
-                {inventarios.map((inventario) => (
-                  <option key={inventario.id} value={inventario.id}>
-                    {inventario.fecha || 'Sin fecha'} · {inventario.hoja || inventario.archivoNombre || 'Inventario'} · {inventario.totalItems || 0} materiales
-                  </option>
-                ))}
-              </select>
-            </label>
-            {inventarioSeleccionado && (
-              <div style={{ color: '#bbb', fontSize: '13px', paddingBottom: '10px' }}>
-                Mostrando: {inventarioSeleccionado.totalItems || 0} materiales
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'end', flexWrap: 'wrap', marginBottom: '12px' }}>
-            <label style={{ display: 'grid', gap: '5px', flex: '1 1 420px' }}>
               <strong>Buscar material</strong>
               <input
                 type="text"
