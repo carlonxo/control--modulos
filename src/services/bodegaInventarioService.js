@@ -203,15 +203,61 @@ export async function guardarEquivalenciaBodega({
   return { error }
 }
 
-async function insertarPorLotes({ supabase, tabla, filas = [], tamanoLote = 500 }) {
+async function insertarPorLotes({ supabase, tabla, filas = [], tamanoLote = 150 }) {
   for (let inicio = 0; inicio < filas.length; inicio += tamanoLote) {
     const lote = filas.slice(inicio, inicio + tamanoLote)
     if (lote.length === 0) continue
     const { error } = await supabase.from(tabla).insert(lote)
-    if (error) return { error }
+    if (error) {
+      const resultadoIndividual = await insertarFilasUnaPorUna({
+        supabase,
+        tabla,
+        filas: lote,
+        inicio,
+        errorLote: error,
+      })
+      if (resultadoIndividual.error) return resultadoIndividual
+    }
   }
 
   return { error: null }
+}
+
+async function insertarFilasUnaPorUna({ supabase, tabla, filas = [], inicio = 0, errorLote = null }) {
+  const errores = []
+
+  for (let indice = 0; indice < filas.length; indice += 1) {
+    const fila = filas[indice]
+    const { error } = await supabase.from(tabla).insert(fila)
+    if (error) {
+      errores.push({
+        indice: inicio + indice + 1,
+        filaExcel: fila.fila_excel || null,
+        codigo: fila.codigo_bodega || '',
+        mensaje: error.message,
+      })
+    }
+  }
+
+  if (errores.length === 0) return { error: null }
+
+  const detalle = errores
+    .slice(0, 8)
+    .map((item) => {
+      const ubicacion = item.filaExcel ? `fila Excel ${item.filaExcel}` : `ítem ${item.indice}`
+      return `${ubicacion}${item.codigo ? ` (${item.codigo})` : ''}: ${item.mensaje}`
+    })
+    .join(' | ')
+  const restantes = errores.length > 8 ? ` | y ${errores.length - 8} más` : ''
+
+  return {
+    error: new Error(
+      `No se pudieron insertar ${errores.length} fila(s) en ${tabla}. ` +
+      `Error del lote: ${errorLote?.message || 'sin detalle'}. ` +
+      `Detalle: ${detalle}${restantes}`
+    ),
+    errores,
+  }
 }
 
 function normalizarItemBodegaDesdeSupabase(item) {
