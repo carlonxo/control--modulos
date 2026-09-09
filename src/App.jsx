@@ -1179,7 +1179,7 @@ useEffect(() => {
 useEffect(() => {
   const intervalo = setInterval(() => {
     cargarTablero()
-  }, 5000)
+  }, 30000)
 
   return () => clearInterval(intervalo)
 }, [])
@@ -1268,7 +1268,7 @@ useEffect(() => {
       cargarRecepcionesBodega()
       cargarDespachosBodega()
     }
-  }, 7000)
+  }, 60000)
 
   return () => clearInterval(intervalo)
 }, [esRolBodega, puedeVerBodega, mostrarBodega, puedeRevisarSolicitudesBodega])

@@ -1,4 +1,4 @@
-export async function cargarInventariosBodega({ supabase, limite = 30 }) {
+export async function cargarInventariosBodega({ supabase, limite = 1 }) {
   const { data: inventarios, error } = await supabase
     .from('bodega_inventarios')
     .select('*')

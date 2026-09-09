@@ -283,8 +283,9 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
   const zip = await JSZip.loadAsync(buffer)
   await limpiarReferenciasCalculoExcel(zip)
   let sheetXml = await zip.file('xl/worksheets/sheet1.xml').async('string')
-  let sharedStringsXml = await zip.file('xl/sharedStrings.xml').async('string')
-  const sharedStrings = crearEditorSharedStrings(sharedStringsXml)
+  const archivoSharedStrings = zip.file('xl/sharedStrings.xml')
+  const sharedStringsXml = archivoSharedStrings ? await archivoSharedStrings.async('string') : ''
+  const sharedStrings = sharedStringsXml ? crearEditorSharedStrings(sharedStringsXml) : null
   const modo = opciones.modo || 'detalle'
 
   const pedidos = grupo.pedidos || []
@@ -314,7 +315,7 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
   })
 
   for (let fila = 9; fila <= 55; fila += 1) {
-    ;['A', 'B', 'F', 'Q', 'T', 'W', 'Z', 'AD', 'AG', 'AH'].forEach((columna) => {
+    ;['A', 'B', 'F', 'T', 'W', 'Z', 'AD', 'AG', 'AH'].forEach((columna) => {
       sheetXml = setCellValue(sheetXml, `${columna}${fila}`, '', 'blank', sharedStrings)
     })
   }
@@ -324,11 +325,9 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
     : compilarMaterialesPedidosPorSerie(pedidos)
   materiales.slice(0, 47).forEach((material, indice) => {
     const fila = 9 + indice
-    sheetXml = setRowHeightExcel(sheetXml, fila, calcularAltoFilaMaterial(material.descripcion))
     sheetXml = setCellValue(sheetXml, `A${fila}`, indice + 1, 'number', sharedStrings)
     sheetXml = setCellValue(sheetXml, `B${fila}`, material.codigo, 'string', sharedStrings)
     sheetXml = setCellValue(sheetXml, `F${fila}`, material.descripcion, 'string', sharedStrings)
-    sheetXml = setCellValue(sheetXml, `Q${fila}`, material.unidad, material.unidad ? 'string' : 'blank', sharedStrings)
 
     columnasSeries.forEach((columna, indiceSerie) => {
       const cantidad = modo === 'general' ? 0 : (material.cantidades[indiceSerie] || 0)
@@ -338,7 +337,9 @@ async function crearValePedidosGrupoDesdePlantilla(grupo = {}, opciones = {}) {
     sheetXml = setCellValue(sheetXml, `AH${fila}`, material.total, material.total ? 'number' : 'blank', sharedStrings)
   })
 
-  zip.file('xl/sharedStrings.xml', sharedStrings.finalizar())
+  if (sharedStrings) {
+    zip.file('xl/sharedStrings.xml', sharedStrings.finalizar())
+  }
   zip.file('xl/worksheets/sheet1.xml', sheetXml)
   return zip.generateAsync({
     type: 'blob',
@@ -401,13 +402,6 @@ function compilarMaterialesPedidosPorSerie(pedidos = []) {
   return Array.from(mapa.values())
 }
 
-function calcularAltoFilaMaterial(descripcion = '') {
-  const largo = String(descripcion || '').length
-  if (largo > 70) return 45
-  if (largo > 38) return 32
-  return 24
-}
-
 function obtenerMaterialPedidoParaImpresion(item = {}) {
   const materialVale = String(item.material_vale || '').trim()
   const materialBalance = String(item.material_balance || '').trim()
@@ -434,20 +428,6 @@ function esCodigoBodegaImpresion(valor = '') {
   if (/^MM[A-Z0-9]{4,}$/i.test(limpio)) return true
   if (/^[A-Z]{2,}[A-Z0-9-]{2,}$/i.test(limpio) && !/\s/.test(limpio)) return true
   return /^\d{1,6}$/.test(limpio)
-}
-
-function setRowHeightExcel(sheetXml, fila, alto) {
-  const filaTexto = String(fila)
-  const rowRegex = new RegExp(`<row\\s+([^>]*\\br="${filaTexto}"[^>]*)>`)
-  if (!rowRegex.test(sheetXml)) return sheetXml
-
-  return sheetXml.replace(rowRegex, (match, atributos) => {
-    let salida = atributos
-      .replace(/\sht="[^"]*"/g, '')
-      .replace(/\scustomHeight="[^"]*"/g, '')
-    salida += ` ht="${alto}" customHeight="1"`
-    return `<row ${salida.trim()}>`
-  })
 }
 
 function crearEditorSharedStrings(xml) {
