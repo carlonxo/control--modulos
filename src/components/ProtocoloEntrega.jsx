@@ -523,7 +523,10 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
   }, [])
 
   const iniciarDesplazamientoTactil = (evento) => {
-    if (evento.touches.length !== 1) return
+    if (evento.touches.length !== 1) {
+      toqueProtocoloRef.current = null
+      return
+    }
     const visor = visorProtocoloRef.current
     if (!visor) return
     const toque = evento.touches[0]
@@ -539,7 +542,11 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
   const desplazarProtocoloTactil = (evento) => {
     const estado = toqueProtocoloRef.current
     const visor = visorProtocoloRef.current
-    if (!estado || !visor || evento.touches.length !== 1) return
+    if (evento.touches.length !== 1) {
+      toqueProtocoloRef.current = null
+      return
+    }
+    if (!estado || !visor) return
 
     const toque = evento.touches[0]
     const deltaX = toque.clientX - estado.x
