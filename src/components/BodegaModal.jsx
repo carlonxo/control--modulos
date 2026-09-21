@@ -1854,6 +1854,7 @@ function DetalleSolicitudBodega({
   const puedeGestionarEntrega = puedeGestionar && esPedido && !solicitado && !entregado && !denegado
   const requiereEscaneo = puedeGestionarEntrega && !editando && itemsPedido.length > 0
   const puedeCambiarMaterialPedido = requiereEscaneo
+  const cambioMaterialActivo = indiceCambioMaterial !== null
   const resumenEscaneo = calcularResumenEscaneoPedido(itemsPedido, cantidadesEscaneadas, materialesInventario)
   const pedidoEscaneadoCompleto = resumenEscaneo.every((fila) => !fila.requiereEscaneo || fila.escaneado >= fila.cantidad)
 
@@ -1966,7 +1967,7 @@ function DetalleSolicitudBodega({
   }
 
   function entregarPedidoActual() {
-    if (entregado || denegado || entregando || editando || guardandoCambioMaterial) return
+    if (entregado || denegado || entregando || editando || guardandoCambioMaterial || cambioMaterialActivo) return
 
     if (requiereEscaneo && !pedidoEscaneadoCompleto) {
       const confirmar = window.confirm(
@@ -2035,6 +2036,12 @@ function DetalleSolicitudBodega({
     setTimeout(() => inputEscanerRef.current?.focus(), 0)
   }
 
+  function cancelarCambioMaterial() {
+    setIndiceCambioMaterial(null)
+    setMensajeEscaner({ tipo: 'info', texto: 'Cambio de material cancelado. Puedes seguir escaneando el pedido normalmente.' })
+    setTimeout(() => inputEscanerRef.current?.focus(), 0)
+  }
+
   return (
     <div
       onClick={(e) => e.stopPropagation()}
@@ -2096,6 +2103,26 @@ function DetalleSolicitudBodega({
               <small style={{ color: '#bbb' }}>
                 Puedes escanear directo. La cantidad se calcula como multiplicador × cantidad por escaneo. Ej: 3*código.
               </small>
+              {cambioMaterialActivo && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <small style={{ color: '#ffcc80', fontWeight: 900 }}>
+                    Cambiando: {itemsPedido[indiceCambioMaterial]?.material_balance || itemsPedido[indiceCambioMaterial]?.material_vale}
+                  </small>
+                  <button
+                    type="button"
+                    onClick={cancelarCambioMaterial}
+                    disabled={guardandoCambioMaterial}
+                    style={{
+                      ...botonMiniGris,
+                      borderColor: '#ffcc80',
+                      color: '#ffcc80',
+                      opacity: guardandoCambioMaterial ? 0.7 : 1,
+                    }}
+                  >
+                    Cancelar cambio
+                  </button>
+                </div>
+              )}
             </label>
             <div style={{ flex: '1 1 260px', alignSelf: 'stretch', display: 'grid', alignItems: 'center' }}>
               {mensajeEscaner ? (
@@ -2225,8 +2252,12 @@ function DetalleSolicitudBodega({
                         <button
                           type="button"
                           disabled={guardandoCambioMaterial}
-                          onClick={() => activarCambioMaterial(indice)}
-                          title="Escanear material alternativo para reemplazar este ítem"
+                          onClick={() => (
+                            indiceCambioMaterial === indice
+                              ? cancelarCambioMaterial()
+                              : activarCambioMaterial(indice)
+                          )}
+                          title={indiceCambioMaterial === indice ? 'Cancelar cambio de este material' : 'Escanear material alternativo para reemplazar este ítem'}
                           style={{
                             ...botonMiniAzul,
                             opacity: guardandoCambioMaterial ? 0.7 : 1,
@@ -2234,7 +2265,7 @@ function DetalleSolicitudBodega({
                             background: indiceCambioMaterial === indice ? '#ef6c00' : botonMiniAzul.background,
                           }}
                         >
-                          Cambiar
+                          {indiceCambioMaterial === indice ? 'Cancelar' : 'Cambiar'}
                         </button>
                       </td>
                     )}
@@ -2326,24 +2357,24 @@ function DetalleSolicitudBodega({
             <>
               <button
                 type="button"
-                disabled={entregando || entregado || denegado || editando || guardandoCambioMaterial}
+                disabled={entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo}
                 onClick={onDenegar}
                 style={{
                   ...botonRojo,
-                  opacity: entregando || entregado || denegado || editando || guardandoCambioMaterial ? 0.7 : 1,
-                  cursor: entregando || entregado || denegado || editando || guardandoCambioMaterial ? 'not-allowed' : 'pointer',
+                  opacity: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 0.7 : 1,
+                  cursor: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 'not-allowed' : 'pointer',
                 }}
               >
                 {denegado ? 'Pedido denegado' : 'Denegar pedido'}
               </button>
               <button
                 type="button"
-                disabled={entregando || entregado || denegado || editando || guardandoCambioMaterial}
+                disabled={entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo}
                 onClick={entregarPedidoActual}
                 style={{
                   ...botonVerde,
-                  opacity: entregando || entregado || denegado || editando || guardandoCambioMaterial ? 0.7 : 1,
-                  cursor: entregando || entregado || denegado || editando || guardandoCambioMaterial ? 'not-allowed' : 'pointer',
+                  opacity: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 0.7 : 1,
+                  cursor: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 'not-allowed' : 'pointer',
                 }}
               >
                 {denegado ? 'Pedido denegado' : entregado ? 'Pedido ya entregado' : entregando ? 'Descontando...' : 'Pedido entregado'}
