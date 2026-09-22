@@ -3515,7 +3515,7 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
 
   if (error) {
     mostrarNotificacion(`No se pudo editar el pedido${etapa ? ` (${etapa})` : ''}: ${error.message}`)
-    return false
+    return { error: `${etapa ? `${etapa}: ` : ''}${error.message}` }
   }
 
   if (pedidoEntregado && ajustesInventario.length > 0) {

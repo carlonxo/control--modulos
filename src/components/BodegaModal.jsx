@@ -460,12 +460,14 @@ function BodegaModal({
           puedeAprobar={puedeAprobarPedidos}
           onEditar={async (itemsEditados) => {
             const resultado = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
-            if (!resultado) return false
+            if (!resultado || resultado.error) {
+              return { ok: false, error: resultado?.error || 'No se pudo guardar la modificación.' }
+            }
             if (resultado?.items) {
               setAlertaBodegaSeleccionada((actual) => ({ ...actual, ...resultado }))
             }
             onActualizarAlertasBodega?.()
-            return true
+            return { ok: true }
           }}
           onActualizarPedido={async () => {
             const pedido = await onActualizarPedidoBodega?.(alertaBodegaSeleccionada.id)
@@ -1889,6 +1891,8 @@ function DetalleSolicitudBodega({
   const [textoEscaner, setTextoEscaner] = useState('')
   const [cantidadesEscaneadas, setCantidadesEscaneadas] = useState(() => leerEscaneosPedido(alerta?.id))
   const [mensajeEscaner, setMensajeEscaner] = useState(null)
+  const [ajusteEscaneoPendiente, setAjusteEscaneoPendiente] = useState(null)
+  const [guardandoAjusteEscaneo, setGuardandoAjusteEscaneo] = useState(false)
   const [indiceCambioMaterial, setIndiceCambioMaterial] = useState(null)
   const [guardandoCambioMaterial, setGuardandoCambioMaterial] = useState(false)
   const [verificandoEntrega, setVerificandoEntrega] = useState(false)
@@ -1898,7 +1902,9 @@ function DetalleSolicitudBodega({
   const solicitado = estadoPedido === 'solicitado'
   const entregado = estadoPedido === 'entregado'
   const denegado = estadoPedido === 'denegado'
-  const puedeEditarEstePedido = puedeEditar && esPedido && (!entregado || puedeEditarEntregados)
+  const puedeEditarEstePedido = puedeEditar && esPedido
+    && ((!entregado && !denegado) || puedeEditarEntregados)
+    && (!solicitado || puedeAprobar)
   const fueModificadoPorBodega = tieneMarcaModificacionBodega(alerta.observacion)
   const itemsPedido = alerta.items || []
   const firmaItems = firmaItemsPedido(itemsPedido, materialesInventario)
@@ -1908,6 +1914,7 @@ function DetalleSolicitudBodega({
   const requiereEscaneo = puedeGestionarEntrega && !editando && itemsPedido.length > 0
   const puedeCambiarMaterialPedido = requiereEscaneo
   const cambioMaterialActivo = indiceCambioMaterial !== null
+  const estadoVisualPedido = obtenerEstadoVisualPedidoBodega(alerta)
   const resumenEscaneo = calcularResumenEscaneoPedido(itemsPedido, cantidadesEscaneadas, materialesInventario)
   const pedidoEscaneadoCompleto = resumenEscaneo.every((fila) => !fila.requiereEscaneo || fila.escaneado >= fila.cantidad)
 
@@ -1933,16 +1940,17 @@ function DetalleSolicitudBodega({
     if (esOtroPedido) setMensajeEscaner(null)
     else setMensajeEscaner({ tipo: 'info', texto: 'El pedido fue modificado. Se conservaron las lecturas de los materiales vigentes; revisa las cantidades antes de entregar.' })
     setIndiceCambioMaterial(null)
+    setAjusteEscaneoPendiente(null)
   }, [alerta?.id, firmaItems, itemsPedido, materialesInventario])
 
   useEffect(() => {
-    if (!requiereEscaneo) return undefined
+    if (!requiereEscaneo || ajusteEscaneoPendiente) return undefined
 
     const enfocar = () => inputEscanerRef.current?.focus()
     enfocar()
     const intervalo = setInterval(enfocar, 1500)
     return () => clearInterval(intervalo)
-  }, [requiereEscaneo])
+  }, [requiereEscaneo, ajusteEscaneoPendiente])
 
   function cambiarItem(indice, campo, valor) {
     setItemsEditados((actuales) => actuales.map((item, i) => (
@@ -1978,12 +1986,14 @@ function DetalleSolicitudBodega({
 
   async function guardarEdicion() {
     setGuardandoEdicion(true)
-    const ok = await onEditar?.(itemsEditados.map(({ _uid, ...item }) => item))
+    const resultado = await onEditar?.(itemsEditados.map(({ _uid, ...item }) => item))
     setGuardandoEdicion(false)
-    if (ok) setEditando(false)
+    if (resultado?.ok) setEditando(false)
+    else setMensajeEscaner({ tipo: 'error', texto: resultado?.error || 'No se pudo guardar la modificación.' })
   }
 
   async function procesarEscaneo(valor) {
+    if (ajusteEscaneoPendiente || guardandoAjusteEscaneo) return
     const { cantidad, codigo } = interpretarLecturaEscaner(valor)
     if (!codigo) return
 
@@ -2013,10 +2023,17 @@ function DetalleSolicitudBodega({
     const nuevoTotal = escaneadoActual + cantidadTotal
 
     if (nuevoTotal > solicitado) {
-      setMensajeEscaner({
-        tipo: 'error',
-        texto: `Cantidad excedida para ${itemPedido.material_balance || itemPedido.material_vale}. Solicitado: ${formatearNumero(solicitado)}, escaneado: ${formatearNumero(escaneadoActual)}.`,
+      setAjusteEscaneoPendiente({
+        clave,
+        material: itemPedido.material_balance || itemPedido.material_vale,
+        solicitado,
+        escaneadoActual,
+        cantidadTotal,
+        nuevoTotal,
+        firma: firmaItems,
+        idPedido: alerta.id,
       })
+      setMensajeEscaner({ tipo: 'info', texto: 'La lectura supera lo solicitado. Confirma el ajuste de cantidad para registrar la entrega real.' })
       return
     }
 
@@ -2031,8 +2048,53 @@ function DetalleSolicitudBodega({
     })
   }
 
+  async function confirmarAjusteEscaneo() {
+    const ajuste = ajusteEscaneoPendiente
+    if (!ajuste || guardandoAjusteEscaneo) return
+    setGuardandoAjusteEscaneo(true)
+    try {
+      const pedidoActual = await onActualizarPedido?.()
+      if (!pedidoActual || pedidoActual.id !== ajuste.idPedido) {
+        setMensajeEscaner({ tipo: 'error', texto: 'No se pudo verificar el pedido. Vuelve a intentarlo.' })
+        return
+      }
+      if (String(pedidoActual.estado_bodega || '').toLowerCase() !== estadoPedido
+        || firmaItemsPedido(pedidoActual.items || [], materialesInventario) !== ajuste.firma) {
+        setAjusteEscaneoPendiente(null)
+        setMensajeEscaner({ tipo: 'info', texto: 'El pedido cambió. Revisa las cantidades actualizadas antes de repetir la lectura.' })
+        return
+      }
+
+      const itemsActualizados = itemsPedido.map((item) => (
+        claveItemEscaneoPedido(item, materialesInventario) === ajuste.clave
+          ? { ...item, cantidad: ajuste.nuevoTotal }
+          : item
+      ))
+      const resultado = await onEditar?.(itemsActualizados)
+      if (!resultado?.ok) {
+        setMensajeEscaner({ tipo: 'error', texto: `No se pudo ajustar el pedido: ${resultado?.error || 'Inténtalo nuevamente.'}` })
+        return
+      }
+
+      setCantidadesEscaneadas((actuales) => {
+        const siguientes = { ...actuales, [ajuste.clave]: ajuste.nuevoTotal }
+        guardarEscaneosPedido(ajuste.idPedido, siguientes)
+        return siguientes
+      })
+      setAjusteEscaneoPendiente(null)
+      setMensajeEscaner({
+        tipo: 'ok',
+        texto: `Pedido ajustado a ${formatearNumero(ajuste.nuevoTotal)} unidades de ${ajuste.material}. La lectura quedó registrada.`,
+      })
+    } catch (error) {
+      setMensajeEscaner({ tipo: 'error', texto: `No se pudo ajustar el pedido: ${error?.message || 'Error de conexión'}` })
+    } finally {
+      setGuardandoAjusteEscaneo(false)
+    }
+  }
+
   async function entregarPedidoActual() {
-    if (entregado || denegado || entregando || verificandoEntrega || editando || guardandoCambioMaterial || cambioMaterialActivo) return
+    if (entregado || denegado || entregando || verificandoEntrega || editando || guardandoCambioMaterial || cambioMaterialActivo || ajusteEscaneoPendiente || guardandoAjusteEscaneo) return
 
     setVerificandoEntrega(true)
     let pedidoActual = null
@@ -2117,11 +2179,17 @@ function DetalleSolicitudBodega({
         ? { ...item, material_vale: codigoNuevo || descripcionNueva, material_balance: descripcionNueva }
         : item]
     })
-    const resultado = await onEditar?.(itemsActualizados)
-    setGuardandoCambioMaterial(false)
+    let resultado
+    try {
+      resultado = await onEditar?.(itemsActualizados)
+    } catch (error) {
+      resultado = { ok: false, error: error?.message || 'Error de conexión' }
+    } finally {
+      setGuardandoCambioMaterial(false)
+    }
 
-    if (!resultado) {
-      setMensajeEscaner({ tipo: 'error', texto: 'No se pudo cambiar el material solicitado.' })
+    if (!resultado?.ok) {
+      setMensajeEscaner({ tipo: 'error', texto: `No se pudo cambiar el material: ${resultado?.error || 'No se pudo guardar la modificación.'}` })
       return
     }
 
@@ -2164,11 +2232,16 @@ function DetalleSolicitudBodega({
             <p style={{ margin: '6px 0 0', color: '#ccc' }}>
               {alerta.solicitante_nombre || alerta.usuario_nombre || 'Sin usuario'} | {alerta.fecha || ''}
             </p>
+            {esPedido && (
+              <span style={{ display: 'inline-block', marginTop: '8px', padding: '3px 9px', borderRadius: '999px', color: estadoVisualPedido.color, border: `1px solid ${estadoVisualPedido.borde}`, background: estadoVisualPedido.fondo, fontWeight: 800 }}>
+                Estado: {estadoVisualPedido.etiqueta}
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {puedeEditarEstePedido && !editando && (
               <button type="button" onClick={() => setEditando(true)} style={botonMiniAzul}>
-                Editar
+                {puedeGestionarEntrega ? 'Ajustar cantidades' : 'Editar'}
               </button>
             )}
             <button type="button" onClick={onCerrar} style={botonMiniGris}>
@@ -2176,6 +2249,22 @@ function DetalleSolicitudBodega({
             </button>
           </div>
         </div>
+
+        {puedeGestionar && esPedido && solicitado && (
+          <p style={{ color: '#90caf9', margin: '0 0 12px' }}>
+            Este pedido espera aprobación de admin u operador. Bodega podrá cambiar y escanear materiales cuando pase a Pendiente.
+          </p>
+        )}
+        {puedeGestionar && esPedido && denegado && (
+          <p style={{ color: '#ef9a9a', margin: '0 0 12px' }}>
+            Este pedido fue denegado. No se pueden cambiar ni entregar sus materiales.
+          </p>
+        )}
+        {editando && puedeGestionarEntrega && (
+          <p style={{ color: '#bbdefb', margin: '0 0 12px' }}>
+            Ajusta la columna Cantidad a lo que entregarás y presiona Guardar edición. Las lecturas ya realizadas de los materiales vigentes se conservan.
+          </p>
+        )}
 
         {(limpiarObservacionSolicitudBodega(alerta.observacion) || fueModificadoPorBodega) && (
           <div
@@ -2199,13 +2288,14 @@ function DetalleSolicitudBodega({
                 ref={inputEscanerRef}
                 type="text"
                 value={textoEscaner}
+                disabled={Boolean(ajusteEscaneoPendiente) || guardandoAjusteEscaneo}
                 onChange={(e) => setTextoEscaner(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key !== 'Enter') return
                   e.preventDefault()
                   procesarEscaneo(textoEscaner)
                   setTextoEscaner('')
-                  setTimeout(() => inputEscanerRef.current?.focus(), 0)
+                  if (!ajusteEscaneoPendiente) setTimeout(() => inputEscanerRef.current?.focus(), 0)
                 }}
                 placeholder="Escanea código o escribe cantidad*código, ej: 5*7801234567890"
                 style={inputStyle}
@@ -2253,6 +2343,43 @@ function DetalleSolicitudBodega({
                   Esperando lectura...
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {requiereEscaneo && ajusteEscaneoPendiente && (
+          <div
+            role="dialog"
+            aria-label="Confirmar cantidad escaneada"
+            style={{ padding: '16px', marginBottom: '14px', border: '2px solid #ffb74d', borderRadius: '10px', background: '#30251b' }}
+          >
+            <strong style={{ display: 'block', marginBottom: '8px', color: '#ffcc80' }}>Confirmar cantidad entregada</strong>
+            <p style={{ margin: '0 0 8px' }}>{ajusteEscaneoPendiente.material}</p>
+            <p style={{ margin: '0 0 12px', color: '#eee' }}>
+              Pedido: {formatearNumero(ajusteEscaneoPendiente.solicitado)} · Ya escaneado: {formatearNumero(ajusteEscaneoPendiente.escaneadoActual)} · Esta lectura: {formatearNumero(ajusteEscaneoPendiente.cantidadTotal)}.
+              {' '}Si entregas la bolsa completa, el pedido aumentará a <strong>{formatearNumero(ajusteEscaneoPendiente.nuevoTotal)}</strong> unidades.
+              Esa será la cantidad descontada del inventario al confirmar la entrega.
+            </p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={guardandoAjusteEscaneo}
+                onClick={confirmarAjusteEscaneo}
+                style={{ ...botonVerde, opacity: guardandoAjusteEscaneo ? 0.7 : 1 }}
+              >
+                {guardandoAjusteEscaneo ? 'Guardando...' : `Sí, ajustar a ${formatearNumero(ajusteEscaneoPendiente.nuevoTotal)} y registrar lectura`}
+              </button>
+              <button
+                type="button"
+                disabled={guardandoAjusteEscaneo}
+                onClick={() => {
+                  setAjusteEscaneoPendiente(null)
+                  setMensajeEscaner({ tipo: 'info', texto: 'Lectura cancelada. El pedido y el inventario no cambiaron.' })
+                }}
+                style={botonMiniGris}
+              >
+                Cancelar lectura
+              </button>
             </div>
           </div>
         )}
@@ -2467,24 +2594,24 @@ function DetalleSolicitudBodega({
             <>
               <button
                 type="button"
-                disabled={entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo}
+                disabled={entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo || Boolean(ajusteEscaneoPendiente) || guardandoAjusteEscaneo}
                 onClick={onDenegar}
                 style={{
                   ...botonRojo,
-                  opacity: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 0.7 : 1,
-                  cursor: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 'not-allowed' : 'pointer',
+                  opacity: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo || ajusteEscaneoPendiente || guardandoAjusteEscaneo ? 0.7 : 1,
+                  cursor: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo || ajusteEscaneoPendiente || guardandoAjusteEscaneo ? 'not-allowed' : 'pointer',
                 }}
               >
                 {denegado ? 'Pedido denegado' : 'Denegar pedido'}
               </button>
               <button
                 type="button"
-                disabled={entregando || verificandoEntrega || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo}
+                disabled={entregando || verificandoEntrega || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo || Boolean(ajusteEscaneoPendiente) || guardandoAjusteEscaneo}
                 onClick={entregarPedidoActual}
                 style={{
                   ...botonVerde,
-                  opacity: entregando || verificandoEntrega || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 0.7 : 1,
-                  cursor: entregando || verificandoEntrega || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 'not-allowed' : 'pointer',
+                  opacity: entregando || verificandoEntrega || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo || ajusteEscaneoPendiente || guardandoAjusteEscaneo ? 0.7 : 1,
+                  cursor: entregando || verificandoEntrega || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo || ajusteEscaneoPendiente || guardandoAjusteEscaneo ? 'not-allowed' : 'pointer',
                 }}
               >
                 {denegado ? 'Pedido denegado' : entregado ? 'Pedido ya entregado' : entregando ? 'Descontando...' : verificandoEntrega ? 'Verificando...' : 'Pedido entregado'}
