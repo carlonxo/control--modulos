@@ -89,6 +89,7 @@ function BodegaModal({
   onGuardarCodigoBarraBodega,
   onEliminarCodigoBarraBodega,
   onActualizarAlertasBodega,
+  onActualizarPedidoBodega,
   onSeleccionarInventario,
   onCerrar,
   onClickFondo,
@@ -103,6 +104,7 @@ function BodegaModal({
   const [mostrarRecepcionarMaterial, setMostrarRecepcionarMaterial] = useState(false)
   const [mostrarCodigosBarra, setMostrarCodigosBarra] = useState(false)
   const [alertaBodegaSeleccionada, setAlertaBodegaSeleccionada] = useState(null)
+  const actualizarPedidoBodegaRef = useRef(onActualizarPedidoBodega)
   const [recepcionSeleccionada, setRecepcionSeleccionada] = useState(null)
   const [despachoSeleccionado, setDespachoSeleccionado] = useState(null)
   const [facturaIngreso, setFacturaIngreso] = useState({
@@ -147,6 +149,44 @@ function BodegaModal({
   const materialesInventario = inventarioSeleccionado?.items || []
   const mostrarPedidosHoy = Boolean(puedeVerPedidosHoy)
   const puedeVerHistorialVales = Boolean(puedeAdministrar || modoSoloBodega || puedeVerPedidosHoy)
+
+  useEffect(() => {
+    actualizarPedidoBodegaRef.current = onActualizarPedidoBodega
+  }, [onActualizarPedidoBodega])
+
+  useEffect(() => {
+    if (!alertaBodegaSeleccionada?.id) return undefined
+    let activo = true
+    let consultando = false
+    const id = alertaBodegaSeleccionada.id
+
+    async function actualizarPedidoAbierto() {
+      if (consultando) return
+      consultando = true
+      try {
+        const pedido = await actualizarPedidoBodegaRef.current?.(id)
+        if (activo && pedido?.id === id && pedido.items?.length) {
+          if (['entregado', 'denegado'].includes(String(pedido.estado_bodega || '').toLowerCase())) {
+            limpiarEscaneosPedido(id)
+          }
+          setAlertaBodegaSeleccionada((actual) => (
+            actual?.id === id && JSON.stringify(actual) !== JSON.stringify(pedido) ? pedido : actual
+          ))
+        }
+      } catch (error) {
+        console.error('No se pudo actualizar el pedido abierto', error)
+      } finally {
+        consultando = false
+      }
+    }
+
+    actualizarPedidoAbierto()
+    const intervalo = setInterval(actualizarPedidoAbierto, 15000)
+    return () => {
+      activo = false
+      clearInterval(intervalo)
+    }
+  }, [alertaBodegaSeleccionada?.id])
 
   useEffect(() => {
     if (!solicitudMaterialInicial) return
@@ -427,9 +467,17 @@ function BodegaModal({
             onActualizarAlertasBodega?.()
             return true
           }}
+          onActualizarPedido={async () => {
+            const pedido = await onActualizarPedidoBodega?.(alertaBodegaSeleccionada.id)
+            if (pedido?.id === alertaBodegaSeleccionada.id && pedido.items?.length) {
+              setAlertaBodegaSeleccionada(pedido)
+            }
+            return pedido
+          }}
           onEntregar={async (opcionesEntrega = {}) => {
             const ok = await onEntregarSolicitudBodega?.(alertaBodegaSeleccionada, opcionesEntrega)
             if (!ok) return
+            limpiarEscaneosPedido(alertaBodegaSeleccionada.id)
             setAlertaBodegaSeleccionada(null)
             onActualizarAlertasBodega?.()
           }}
@@ -442,6 +490,7 @@ function BodegaModal({
           onDenegar={async () => {
             const ok = await onDenegarSolicitudBodega?.(alertaBodegaSeleccionada)
             if (!ok) return
+            limpiarEscaneosPedido(alertaBodegaSeleccionada.id)
             setAlertaBodegaSeleccionada(null)
             onActualizarAlertasBodega?.()
           }}
@@ -1827,6 +1876,7 @@ function DetalleSolicitudBodega({
   puedeGestionar,
   puedeAprobar,
   onEditar,
+  onActualizarPedido,
   onAprobar,
   onEntregar,
   onDenegar,
@@ -1837,10 +1887,11 @@ function DetalleSolicitudBodega({
   const [itemsEditados, setItemsEditados] = useState([])
   const [filaSugerenciasEdicion, setFilaSugerenciasEdicion] = useState(null)
   const [textoEscaner, setTextoEscaner] = useState('')
-  const [cantidadesEscaneadas, setCantidadesEscaneadas] = useState({})
+  const [cantidadesEscaneadas, setCantidadesEscaneadas] = useState(() => leerEscaneosPedido(alerta?.id))
   const [mensajeEscaner, setMensajeEscaner] = useState(null)
   const [indiceCambioMaterial, setIndiceCambioMaterial] = useState(null)
   const [guardandoCambioMaterial, setGuardandoCambioMaterial] = useState(false)
+  const [verificandoEntrega, setVerificandoEntrega] = useState(false)
   const inputEscanerRef = useRef(null)
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
   const estadoPedido = String(alerta?.estado_bodega || '').toLowerCase()
@@ -1850,6 +1901,8 @@ function DetalleSolicitudBodega({
   const puedeEditarEstePedido = puedeEditar && esPedido && (!entregado || puedeEditarEntregados)
   const fueModificadoPorBodega = tieneMarcaModificacionBodega(alerta.observacion)
   const itemsPedido = alerta.items || []
+  const firmaItems = firmaItemsPedido(itemsPedido, materialesInventario)
+  const pedidoObservadoRef = useRef({ id: null, firma: '' })
   const puedeRevisarSolicitud = puedeAprobar && esPedido && solicitado && !entregado && !denegado
   const puedeGestionarEntrega = puedeGestionar && esPedido && !solicitado && !entregado && !denegado
   const requiereEscaneo = puedeGestionarEntrega && !editando && itemsPedido.length > 0
@@ -1859,17 +1912,28 @@ function DetalleSolicitudBodega({
   const pedidoEscaneadoCompleto = resumenEscaneo.every((fila) => !fila.requiereEscaneo || fila.escaneado >= fila.cantidad)
 
   useEffect(() => {
-    setItemsEditados((alerta?.items || []).map((item, indice) => ({
+    const anterior = pedidoObservadoRef.current
+    if (anterior.id === alerta?.id && anterior.firma === firmaItems) return
+    const esOtroPedido = anterior.id !== alerta?.id
+    pedidoObservadoRef.current = { id: alerta?.id, firma: firmaItems }
+
+    setItemsEditados(itemsPedido.map((item, indice) => ({
       _uid: item.id || crearIdFilaEdicionPedido(`pedido-${alerta?.id || 'sin-id'}-${indice}`),
       id: item.id,
       material_vale: item.material_vale || item.material_balance || '',
       material_balance: item.material_balance || item.material_vale || '',
       cantidad: item.cantidad || '',
     })))
-    setCantidadesEscaneadas({})
-    setMensajeEscaner(null)
+    setCantidadesEscaneadas((actuales) => {
+      const base = esOtroPedido ? leerEscaneosPedido(alerta?.id) : actuales
+      const conciliadas = conciliarEscaneosPedido(base, itemsPedido, materialesInventario)
+      guardarEscaneosPedido(alerta?.id, conciliadas)
+      return conciliadas
+    })
+    if (esOtroPedido) setMensajeEscaner(null)
+    else setMensajeEscaner({ tipo: 'info', texto: 'El pedido fue modificado. Se conservaron las lecturas de los materiales vigentes; revisa las cantidades antes de entregar.' })
     setIndiceCambioMaterial(null)
-  }, [alerta?.id])
+  }, [alerta?.id, firmaItems, itemsPedido, materialesInventario])
 
   useEffect(() => {
     if (!requiereEscaneo) return undefined
@@ -1956,18 +2020,38 @@ function DetalleSolicitudBodega({
       return
     }
 
-    setCantidadesEscaneadas((actuales) => ({
-      ...actuales,
-      [clave]: nuevoTotal,
-    }))
+    setCantidadesEscaneadas((actuales) => {
+      const siguientes = { ...actuales, [clave]: nuevoTotal }
+      guardarEscaneosPedido(alerta.id, siguientes)
+      return siguientes
+    })
     setMensajeEscaner({
       tipo: 'ok',
       texto: `OK: ${formatearNumero(cantidadTotal)} x ${itemPedido.material_balance || itemPedido.material_vale}`,
     })
   }
 
-  function entregarPedidoActual() {
-    if (entregado || denegado || entregando || editando || guardandoCambioMaterial || cambioMaterialActivo) return
+  async function entregarPedidoActual() {
+    if (entregado || denegado || entregando || verificandoEntrega || editando || guardandoCambioMaterial || cambioMaterialActivo) return
+
+    setVerificandoEntrega(true)
+    let pedidoActual = null
+    try {
+      pedidoActual = await onActualizarPedido?.()
+    } catch (error) {
+      console.error('No se pudo verificar el pedido antes de entregarlo', error)
+    } finally {
+      setVerificandoEntrega(false)
+    }
+    if (!pedidoActual) {
+      setMensajeEscaner({ tipo: 'error', texto: 'No se pudo verificar el pedido actualizado. Inténtalo nuevamente.' })
+      return
+    }
+    if (String(pedidoActual.estado_bodega || '').toLowerCase() !== estadoPedido
+      || firmaItemsPedido(pedidoActual.items || [], materialesInventario) !== firmaItems) {
+      setMensajeEscaner({ tipo: 'info', texto: 'El pedido cambió mientras escaneabas. Revisa el detalle actualizado antes de confirmar la entrega.' })
+      return
+    }
 
     if (requiereEscaneo && !pedidoEscaneadoCompleto) {
       const confirmar = window.confirm(
@@ -1992,27 +2076,47 @@ function DetalleSolicitudBodega({
     const codigoNuevo = materialResuelto.codigo || ''
     const descripcionNueva = materialResuelto.descripcion || codigoNuevo
     const claveOriginal = claveItemEscaneoPedido(itemOriginal, materialesInventario)
+    const claveNueva = normalizarBusqueda(codigoNuevo || descripcionNueva)
     if (!codigoNuevo && !descripcionNueva) {
       setMensajeEscaner({ tipo: 'error', texto: 'El código escaneado no tiene material asociado.' })
       return
     }
+    if (claveOriginal === claveNueva) {
+      setIndiceCambioMaterial(null)
+      setMensajeEscaner({ tipo: 'info', texto: 'El código escaneado corresponde al mismo material. No se modificó el pedido.' })
+      return
+    }
+
+    const indicesDestino = itemsPedido.flatMap((item, i) => (
+      i !== indice && claveItemEscaneoPedido(item, materialesInventario) === claveNueva ? [i] : []
+    ))
+    const indiceDestino = indicesDestino[0]
+    const cantidadDestino = Number(itemOriginal.cantidad || 0)
+      + indicesDestino.reduce((total, i) => total + Number(itemsPedido[i].cantidad || 0), 0)
 
     const confirmado = window.confirm(
       `¿Cambiar "${itemOriginal.material_balance || itemOriginal.material_vale}" por "${descripcionNueva}"?`
+      + (indicesDestino.length ? `\n\nYa existe en el pedido: quedará una sola línea con ${formatearNumero(cantidadDestino)} unidades.` : '')
     )
     if (!confirmado) return
 
     setGuardandoCambioMaterial(true)
     setMensajeEscaner({ tipo: 'info', texto: `Cambiando material por ${descripcionNueva}...` })
-    const itemsActualizados = itemsPedido.map((item, i) => (
-      i === indice
-        ? {
-            ...item,
-            material_vale: codigoNuevo || descripcionNueva,
-            material_balance: descripcionNueva,
-          }
-        : item
-    ))
+    const itemsActualizados = itemsPedido.flatMap((item, i) => {
+      if (indicesDestino.length) {
+        if (i === indice || (indicesDestino.includes(i) && i !== indiceDestino)) return []
+        if (i === indiceDestino) return [{
+          ...item,
+          material_vale: codigoNuevo || descripcionNueva,
+          material_balance: descripcionNueva,
+          cantidad: cantidadDestino,
+        }]
+        return [item]
+      }
+      return [i === indice
+        ? { ...item, material_vale: codigoNuevo || descripcionNueva, material_balance: descripcionNueva }
+        : item]
+    })
     const resultado = await onEditar?.(itemsActualizados)
     setGuardandoCambioMaterial(false)
 
@@ -2024,10 +2128,16 @@ function DetalleSolicitudBodega({
     setCantidadesEscaneadas((actuales) => {
       const siguiente = { ...actuales }
       delete siguiente[claveOriginal]
+      guardarEscaneosPedido(alerta.id, siguiente)
       return siguiente
     })
     setIndiceCambioMaterial(null)
-    setMensajeEscaner({ tipo: 'ok', texto: `Material cambiado a ${descripcionNueva}. Sólo se reinició el escaneo de ese material.` })
+    setMensajeEscaner({
+      tipo: 'ok',
+      texto: indicesDestino.length
+        ? `Material cambiado a ${descripcionNueva}. Se sumaron las cantidades y se conservó el escaneo previo de ${descripcionNueva}.`
+        : `Material cambiado a ${descripcionNueva}. Sólo se reinició el escaneo de ese material.`,
+    })
   }
 
   function activarCambioMaterial(indice) {
@@ -2369,15 +2479,15 @@ function DetalleSolicitudBodega({
               </button>
               <button
                 type="button"
-                disabled={entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo}
+                disabled={entregando || verificandoEntrega || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo}
                 onClick={entregarPedidoActual}
                 style={{
                   ...botonVerde,
-                  opacity: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 0.7 : 1,
-                  cursor: entregando || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 'not-allowed' : 'pointer',
+                  opacity: entregando || verificandoEntrega || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 0.7 : 1,
+                  cursor: entregando || verificandoEntrega || entregado || denegado || editando || guardandoCambioMaterial || cambioMaterialActivo ? 'not-allowed' : 'pointer',
                 }}
               >
-                {denegado ? 'Pedido denegado' : entregado ? 'Pedido ya entregado' : entregando ? 'Descontando...' : 'Pedido entregado'}
+                {denegado ? 'Pedido denegado' : entregado ? 'Pedido ya entregado' : entregando ? 'Descontando...' : verificandoEntrega ? 'Verificando...' : 'Pedido entregado'}
               </button>
             </>
           )}
@@ -2426,27 +2536,27 @@ function resolverMaterialEscaneado(codigoLeido, materialesInventario = [], codig
   const codigoNormalizado = normalizarBusqueda(codigoLeido)
   if (!codigoNormalizado) return null
 
-  const materialPorCodigoBodega = materialesInventario.find((material) => (
-    normalizarBusqueda(material.codigo) === codigoNormalizado
-  ))
-  if (materialPorCodigoBodega) return { ...materialPorCodigoBodega, cantidadPorEscaneo: 1 }
-
   const equivalencia = codigosBarraBodega.find((item) => (
     normalizarBusqueda(item.codigoBarra) === codigoNormalizado
   ))
-  if (!equivalencia?.codigoBodega) return null
+  if (equivalencia?.codigoBodega) {
+    const materialPorEquivalencia = materialesInventario.find((material) => (
+      normalizarBusqueda(material.codigo) === normalizarBusqueda(equivalencia.codigoBodega)
+    ))
 
-  const materialPorEquivalencia = materialesInventario.find((material) => (
-    normalizarBusqueda(material.codigo) === normalizarBusqueda(equivalencia.codigoBodega)
-  ))
-
-  return {
-    ...(materialPorEquivalencia || {
-    codigo: equivalencia.codigoBodega,
-    descripcion: equivalencia.descripcion || '',
-    }),
-    cantidadPorEscaneo: Number(equivalencia.cantidadPorEscaneo || 1),
+    return {
+      ...(materialPorEquivalencia || {
+        codigo: equivalencia.codigoBodega,
+        descripcion: equivalencia.descripcion || '',
+      }),
+      cantidadPorEscaneo: Number(equivalencia.cantidadPorEscaneo || 1),
+    }
   }
+
+  const materialPorCodigoBodega = materialesInventario.find((material) => (
+    normalizarBusqueda(material.codigo) === codigoNormalizado
+  ))
+  return materialPorCodigoBodega ? { ...materialPorCodigoBodega, cantidadPorEscaneo: 1 } : null
 }
 
 function buscarItemPedidoPorMaterial(material, itemsPedido = [], materialesInventario = []) {
@@ -2469,6 +2579,59 @@ function claveItemEscaneoPedido(item = {}, materialesInventario = []) {
   return normalizarBusqueda(obtenerCodigoMaterialPedido(item, materialesInventario))
     || normalizarBusqueda(item.material_vale)
     || normalizarBusqueda(item.material_balance)
+}
+
+function firmaItemsPedido(items = [], materialesInventario = []) {
+  return JSON.stringify(items.map((item) => [
+    claveItemEscaneoPedido(item, materialesInventario),
+    normalizarBusqueda(item.material_vale),
+    normalizarBusqueda(item.material_balance),
+    Number(item.cantidad || 0),
+  ].join('|')).sort())
+}
+
+function conciliarEscaneosPedido(escaneos = {}, items = [], materialesInventario = []) {
+  const siguientes = {}
+  for (const item of items) {
+    const clave = claveItemEscaneoPedido(item, materialesInventario)
+    const escaneado = Number(escaneos[clave] || 0)
+    const solicitado = Number(item.cantidad || 0)
+    if (clave && escaneado > 0 && solicitado > 0) {
+      siguientes[clave] = Math.min(escaneado, solicitado)
+    }
+  }
+  return siguientes
+}
+
+function claveEscaneosGuardadosPedido(id) {
+  return `bodega-escaneos-pedido:${id}`
+}
+
+function leerEscaneosPedido(id) {
+  if (!id) return {}
+  try {
+    return JSON.parse(sessionStorage.getItem(claveEscaneosGuardadosPedido(id)) || '{}') || {}
+  } catch {
+    return {}
+  }
+}
+
+function guardarEscaneosPedido(id, escaneos) {
+  if (!id) return
+  try {
+    sessionStorage.setItem(claveEscaneosGuardadosPedido(id), JSON.stringify(escaneos))
+  } catch {
+    // El escaneo sigue funcionando en memoria si el navegador restringe el almacenamiento.
+  }
+}
+
+function limpiarEscaneosPedido(id) {
+  if (!id) return
+  try {
+    sessionStorage.removeItem(claveEscaneosGuardadosPedido(id))
+  } catch {
+    // El almacenamiento puede estar deshabilitado en este navegador.
+  }
 }
 
 function calcularResumenEscaneoPedido(itemsPedido = [], cantidadesEscaneadas = {}, materialesInventario = []) {

@@ -63,6 +63,7 @@ import {
 } from './services/balanceMaterialesConfigService'
 import {
   cargarItemsValesBodegaPorRango,
+  cargarValeBodegaPorId as cargarValeBodegaPorIdSupabase,
   cargarValesBodegaDia as cargarValesBodegaDiaSupabase,
   guardarValeBodega as guardarValeBodegaSupabase,
   actualizarItemsValeBodega as actualizarItemsValeBodegaSupabase,
@@ -6934,6 +6935,11 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarCodigoBarraBodega={guardarCodigoBarraBodega}
     onEliminarCodigoBarraBodega={eliminarCodigoBarraBodega}
     onActualizarAlertasBodega={cargarAlertasBodega}
+    onActualizarPedidoBodega={async (id) => {
+      const { vale, error } = await cargarValeBodegaPorIdSupabase({ supabase, id })
+      if (error) console.error('No se pudo actualizar el pedido abierto', error)
+      return vale
+    }}
     onSeleccionarInventario={setInventarioBodegaSeleccionadoId}
     onCerrar={() => {
       if (esRolBodega) {

@@ -230,6 +230,26 @@ export async function cargarValesBodegaDia({
   }
 }
 
+export async function cargarValeBodegaPorId({ supabase, id }) {
+  if (!id) return { vale: null, error: new Error('Falta el pedido') }
+
+  const { data: vale, error: errorVale } = await supabase
+    .from('vales_bodega')
+    .select('id, fecha, serie, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (errorVale || !vale) return { vale: null, error: errorVale }
+
+  const { data: items, error: errorItems } = await supabase
+    .from('vales_bodega_items')
+    .select('id, vale_id, serie, material_vale, material_balance, cantidad, solicitante_id, solicitante_nombre, tipo_ingreso')
+    .eq('vale_id', id)
+
+  if (errorItems) return { vale: null, error: errorItems }
+  return { vale: { ...vale, items: deduplicarItemsValeBodega(items || []) }, error: null }
+}
+
 export async function guardarValeBodega({
   supabase,
   fecha,
@@ -316,6 +336,23 @@ function deduplicarItemsValeBodega(items = []) {
   return resultado
 }
 
+function consolidarItemsParaGuardar(items = []) {
+  const agrupados = new Map()
+  for (const item of items) {
+    const codigo = String(item.material_vale || item.material_balance || '').trim()
+    const descripcion = String(item.material_balance || item.material_vale || '').trim()
+    const cantidad = Number(item.cantidad || 0)
+    if (!descripcion || cantidad <= 0) continue
+
+    const clave = normalizarTextoValeBodega(codigo || descripcion)
+    const anterior = agrupados.get(clave)
+    agrupados.set(clave, anterior
+      ? { ...anterior, cantidad: Number(anterior.cantidad || 0) + cantidad }
+      : { ...item, material_vale: codigo, material_balance: descripcion, cantidad })
+  }
+  return [...agrupados.values()]
+}
+
 function normalizarTextoValeBodega(valor = '') {
   return String(valor || '')
     .normalize('NFD')
@@ -332,7 +369,7 @@ export async function actualizarItemsValeBodega({
 }) {
   if (!vale?.id) return { error: new Error('Falta el pedido para editar'), etapa: 'vale' }
 
-  const filas = deduplicarItemsValeBodega(items)
+  const filas = consolidarItemsParaGuardar(items)
     .map((item) => ({
       id: item.id || null,
       vale_id: vale.id,
