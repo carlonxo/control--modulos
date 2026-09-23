@@ -24,6 +24,7 @@ import BalanceMaterialesModal from './components/BalanceMaterialesModal'
 import BalanceMantencionModal from './components/BalanceMantencionModal'
 import ValesBodegaModal from './components/ValesBodegaModal'
 import BodegaModal from './components/BodegaModal'
+import ProyeccionMaterialesModal from './components/ProyeccionMaterialesModal'
 import UsuariosBodegaModal from './components/UsuariosBodegaModal'
 import EquivalenciasMaterialesModal from './components/EquivalenciasMaterialesModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
@@ -63,6 +64,7 @@ import {
 } from './services/balanceMaterialesConfigService'
 import {
   cargarItemsValesBodegaPorRango,
+  cargarPedidosEntregadosBodegaPorRango,
   cargarValeBodegaPorId as cargarValeBodegaPorIdSupabase,
   cargarValesBodegaDia as cargarValesBodegaDiaSupabase,
   guardarValeBodega as guardarValeBodegaSupabase,
@@ -666,6 +668,12 @@ const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
 const [mostrarBalanceMantencion, setMostrarBalanceMantencion] = useState(false)
 const [mostrarValesBodega, setMostrarValesBodega] = useState(false)
 const [mostrarBodega, setMostrarBodega] = useState(false)
+const [mostrarProyeccionMateriales, setMostrarProyeccionMateriales] = useState(false)
+const [pedidosProyeccionMateriales, setPedidosProyeccionMateriales] = useState([])
+const [periodosProyeccionMateriales, setPeriodosProyeccionMateriales] = useState([])
+const [periodosFuturosProyeccion, setPeriodosFuturosProyeccion] = useState([])
+const [cargandoProyeccionMateriales, setCargandoProyeccionMateriales] = useState(false)
+const [errorProyeccionMateriales, setErrorProyeccionMateriales] = useState('')
 const [preciosMateriales, setPreciosMateriales] = useState({})
 const [preciosCompraMateriales, setPreciosCompraMateriales] = useState({})
 const [codigosBodegaMateriales, setCodigosBodegaMateriales] = useState({})
@@ -782,6 +790,7 @@ const puedeVerBalanceMateriales = tienePermiso(perfil?.rol, 'verBalanceMateriale
 const puedeVerBalanceMantencion = tienePermiso(perfil?.rol, 'verBalanceMantencion')
 const puedeVerValesBodega = tienePermiso(perfil?.rol, 'verValesBodega')
 const puedeVerBodega = tienePermiso(perfil?.rol, 'verBodega')
+const puedeVerProyeccionMateriales = puedeVerBodega && perfil?.rol !== 'electrico'
 const puedeExportarInventarioBodega = tienePermiso(perfil?.rol, 'exportarInventarioBodega')
 const puedeAdministrarBodega = tienePermiso(perfil?.rol, 'administrarBodega')
 const puedeVerPedidosBodegaHoy = tienePermiso(perfil?.rol, 'verPedidosBodegaHoy')
@@ -1142,6 +1151,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
     setMostrarBalanceMantencion,
     setMostrarValesBodega,
     setMostrarBodega,
+    setMostrarProyeccionMateriales,
   ])
   setPrecioMaterialEnEdicion(null)
   setDetalleCobroSeleccionado(null)
@@ -2721,7 +2731,7 @@ function cargarInventariosBodegaLocalesRespaldo() {
 }
 
 async function cargarInventariosBodega(preferido = null) {
-  if (!puedeVerBodega) return
+  if (!puedeVerBodega) return []
 
   setCargandoInventariosBodega(true)
   const { inventarios, error } = await cargarInventariosBodegaSupabase({
@@ -2732,7 +2742,7 @@ async function cargarInventariosBodega(preferido = null) {
   if (error) {
     mostrarNotificacion('No se pudieron cargar los inventarios de bodega: ' + error.message)
     cargarInventariosBodegaLocalesRespaldo()
-    return
+    return []
   }
 
   const inventariosFiltrados = filtrarInventariosPorBodegaAsignada(inventarios, perfil)
@@ -2748,6 +2758,7 @@ async function cargarInventariosBodega(preferido = null) {
   if (inventariosFiltrados.length === 0) {
     cargarInventariosBodegaLocalesRespaldo()
   }
+  return inventariosFiltrados
 }
 
 async function abrirBodega({ abrirSolicitudMaterial = false } = {}) {
@@ -2762,6 +2773,51 @@ async function abrirBodega({ abrirSolicitudMaterial = false } = {}) {
   await cargarInventariosBodega()
   await cargarAlertasBodega()
   await cargarRecepcionesBodega()
+}
+
+function periodoMesDesplazado(desplazamiento) {
+  const hoy = new Date()
+  const fecha = new Date(hoy.getFullYear(), hoy.getMonth() + desplazamiento, 1)
+  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`
+}
+
+async function cargarProyeccionMateriales(inventariosDisponibles = inventariosBodega) {
+  if (!puedeVerProyeccionMateriales) return
+  const periodos = [-3, -2, -1].map(periodoMesDesplazado)
+  const periodosFuturos = [1, 2, 3].map(periodoMesDesplazado)
+  setPeriodosProyeccionMateriales(periodos)
+  setPeriodosFuturosProyeccion(periodosFuturos)
+  setCargandoProyeccionMateriales(true)
+  setErrorProyeccionMateriales('')
+
+  const { pedidos, error } = await cargarPedidosEntregadosBodegaPorRango({
+    supabase,
+    fechaInicio: `${periodos[0]}-01`,
+    fechaFin: `${periodoMesDesplazado(0)}-01`,
+  })
+  setCargandoProyeccionMateriales(false)
+  if (error) {
+    setPedidosProyeccionMateriales([])
+    setErrorProyeccionMateriales(`No se pudo calcular la proyección: ${error.message}`)
+    return
+  }
+
+  const inventarioActual = inventariosDisponibles.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosDisponibles[0]
+  const bodegaActual = obtenerBodegaInventario(inventarioActual)
+  setPedidosProyeccionMateriales(
+    bodegaActual
+      ? pedidos.filter((pedido) => obtenerBodegaDesdeObservacion(pedido.observacion) === bodegaActual)
+      : pedidos
+  )
+}
+
+async function abrirProyeccionMateriales() {
+  if (!puedeVerProyeccionMateriales) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setMostrarProyeccionMateriales(true)
+  const inventariosDisponibles = inventariosBodega.length > 0 ? inventariosBodega : await cargarInventariosBodega()
+  await cargarProyeccionMateriales(inventariosDisponibles)
 }
 
 async function leerInventarioBodega() {
@@ -5506,23 +5562,42 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     Precios materiales
                   </button>
                 )}
-                {puedeVerBodega && (
+                {puedeVerBodega && perfil?.rol === 'electrico' && (
                   <button
                     type="button"
-                    onClick={() => abrirBodega({ abrirSolicitudMaterial: perfil?.rol === 'electrico' })}
+                    onClick={() => abrirBodega({ abrirSolicitudMaterial: true })}
                     style={{
                       width: '100%',
                       marginTop: (puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales) ? '8px' : 0,
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #555',
-                      background: perfil?.rol === 'electrico' ? '#1565c0' : '#5d4037',
+                      background: '#1565c0',
                       color: 'white',
                       cursor: 'pointer',
                       fontWeight: 700,
                     }}
                   >
-                    {perfil?.rol === 'electrico' ? 'Solicitar material' : 'Bodega'}
+                    Solicitar material
+                  </button>
+                )}
+                {puedeVerProyeccionMateriales && (
+                  <button
+                    type="button"
+                    onClick={abrirProyeccionMateriales}
+                    style={{
+                      width: '100%',
+                      marginTop: '8px',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #78909c',
+                      background: '#37474f',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Proyección materiales
                   </button>
                 )}
                 {puedeAdministrarEquivalenciasMateriales && (
@@ -5600,16 +5675,6 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   >
     {mostrarKPI ? 'Ocultar indicadores' : 'Ver indicadores'}
   </button>
-  <button
-    onClick={() => setMostrarVistaGeneral(!mostrarVistaGeneral)}
-    style={{
-      padding: '10px 20px',
-      borderRadius: '8px',
-      cursor: 'pointer',
-    }}
-  >
-    {mostrarVistaGeneral ? 'Ver por línea' : 'Vista general'}
-  </button>
   {puedeVerProtocolosMensuales && (
     <button
       onClick={abrirProtocolosMensuales}
@@ -5659,24 +5724,6 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       }}
     >
       Balance mantención
-    </button>
-  )}
-  {puedeVerValesBodega && (
-    <button
-      onClick={(e) => {
-        e.stopPropagation()
-        abrirValesBodega()
-      }}
-      style={{
-        padding: '10px 20px',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        background: '#4e342e',
-        color: 'white',
-        border: '1px solid #8d6e63',
-      }}
-    >
-      Vales bodega
     </button>
   )}
   {puedeVerBodega && (
@@ -6850,6 +6897,19 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardar={guardarValeBodega}
     onCerrar={() => setMostrarValesBodega(false)}
     onClickFondo={cerrarPanelesFlotantes}
+  />
+)}
+
+{mostrarProyeccionMateriales && puedeVerProyeccionMateriales && (
+  <ProyeccionMaterialesModal
+    pedidos={pedidosProyeccionMateriales}
+    periodos={periodosProyeccionMateriales}
+    periodosFuturos={periodosFuturosProyeccion}
+    inventario={(inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0])?.items || []}
+    cargando={cargandoProyeccionMateriales}
+    error={errorProyeccionMateriales}
+    onActualizar={() => cargarProyeccionMateriales()}
+    onCerrar={() => setMostrarProyeccionMateriales(false)}
   />
 )}
 

@@ -53,6 +53,40 @@ export async function cargarItemsValesBodegaPorRango({
   }
 }
 
+export async function cargarPedidosEntregadosBodegaPorRango({
+  supabase,
+  fechaInicio,
+  fechaFin,
+}) {
+  const { data: vales, error } = await supabase
+    .from('vales_bodega')
+    .select('id, fecha, serie, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega')
+    .eq('tipo_ingreso', 'pedido_app')
+    .eq('estado_bodega', 'entregado')
+    .gte('fecha_entrega_bodega', fechaInicio)
+    .lt('fecha_entrega_bodega', fechaFin)
+    .order('fecha_entrega_bodega', { ascending: true })
+
+  if (error) return { pedidos: [], error }
+  if (!vales?.length) return { pedidos: [], error: null }
+
+  const { items, error: errorItems } = await cargarItemsPorVales({ supabase, vales })
+  if (errorItems) return { pedidos: [], error: errorItems }
+
+  const itemsPorVale = (items || []).reduce((mapa, item) => {
+    mapa[item.vale_id] = [...(mapa[item.vale_id] || []), item]
+    return mapa
+  }, {})
+
+  return {
+    pedidos: vales.map((vale) => ({
+      ...vale,
+      items: deduplicarItemsValeBodega(itemsPorVale[vale.id] || []),
+    })),
+    error: null,
+  }
+}
+
 async function cargarValesBodegaCabeceraPorRango({
   supabase,
   fechaInicio,
