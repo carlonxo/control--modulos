@@ -50,12 +50,16 @@ export async function guardarCodigoBarraBodega({
       .from('bodega_codigos_barra')
       .update(payload)
       .eq('id', id)
+      .select('id, codigo_bodega, codigo_barra, descripcion, cantidad_por_escaneo, created_at')
+      .single()
     : await supabase
       .from('bodega_codigos_barra')
       .upsert(payload, { onConflict: 'codigo_barra' })
+      .select('id, codigo_bodega, codigo_barra, descripcion, cantidad_por_escaneo, created_at')
+      .single()
 
   return {
-    data: normalizarCodigoBarraBodega({ id, ...payload }),
+    data: normalizarCodigoBarraBodega(respuesta.data || { id, ...payload }),
     error: respuesta.error,
   }
 }

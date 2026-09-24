@@ -54,6 +54,30 @@ body {
   margin: 0;
 }
 
+.bodega-modal {
+  scrollbar-width: auto;
+  scrollbar-color: #8a8a8a #25272d;
+}
+
+.bodega-modal::-webkit-scrollbar {
+  width: 14px;
+}
+
+.bodega-modal::-webkit-scrollbar-track {
+  background: #25272d;
+}
+
+.bodega-modal::-webkit-scrollbar-thumb {
+  min-height: 48px;
+  border: 3px solid #25272d;
+  border-radius: 10px;
+  background: #8a8a8a;
+}
+
+.bodega-modal::-webkit-scrollbar-thumb:hover {
+  background: #b0b0b0;
+}
+
 .indicadores-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));

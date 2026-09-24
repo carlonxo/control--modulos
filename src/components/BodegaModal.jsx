@@ -121,6 +121,18 @@ function BodegaModal({
     destino: '',
     observacion: '',
   })
+
+  useEffect(() => {
+    const overflowBodyAnterior = document.body.style.overflow
+    const overflowHtmlAnterior = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = overflowBodyAnterior
+      document.documentElement.style.overflow = overflowHtmlAnterior
+    }
+  }, [])
   const [pedidoMaterial, setPedidoMaterial] = useState({
     fecha: fechaActualInput(),
     proyecto: '',
@@ -400,7 +412,7 @@ function BodegaModal({
 
   return (
     <div
-      className="bodega-modal"
+      className="bodega-modal-overlay"
       onClick={(e) => {
         e.stopPropagation()
         onClickFondo?.()
@@ -408,11 +420,8 @@ function BodegaModal({
       style={{
         position: 'fixed',
         inset: 0,
-        width: '100vw',
-        height: '100vh',
-        overflowY: 'auto',
+        overflow: 'hidden',
         boxSizing: 'border-box',
-        padding: '24px',
         background: '#111318',
         border: 'none',
         borderRadius: 0,
@@ -421,6 +430,20 @@ function BodegaModal({
         textAlign: 'left',
       }}
     >
+      <div
+        className="bodega-modal"
+        style={{
+          width: '100%',
+          height: '100%',
+          overflowY: 'scroll',
+          overflowX: 'hidden',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarGutter: 'stable',
+          boxSizing: 'border-box',
+          padding: '24px',
+        }}
+      >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '18px' }}>
         <div>
           <h2 style={{ margin: 0 }}>Bodega</h2>
@@ -921,7 +944,7 @@ function BodegaModal({
           )}
 
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
               <thead>
                 <tr style={{ background: '#333' }}>
                   <th style={thStyle}>Código bodega</th>
@@ -929,7 +952,6 @@ function BodegaModal({
                   <th style={thStyle}>Unidad</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Entradas</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Salidas</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Saldo inicial</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Saldo final</th>
                 </tr>
               </thead>
@@ -941,7 +963,6 @@ function BodegaModal({
                     <td style={tdStyle}>{item.unidad}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{formatearNumero(item.entradas)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{formatearNumero(item.salidas)}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{formatearNumero(item.saldoInicial)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>{formatearNumero(item.saldoFinal)}</td>
                   </tr>
                 ))}
@@ -956,6 +977,7 @@ function BodegaModal({
           )}
         </>
       )}
+      </div>
     </div>
   )
 }
@@ -1638,18 +1660,97 @@ function PanelCodigosBarraBodega({
     cantidadPorEscaneo: '1',
   })
   const [busqueda, setBusqueda] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('todos')
   const [mensaje, setMensaje] = useState(null)
+  const [mostrarSugerenciasCodigo, setMostrarSugerenciasCodigo] = useState(false)
+  const formularioCodigoRef = useRef(null)
+
+  function desplazarAFormularioCodigo() {
+    window.requestAnimationFrame(() => {
+      formularioCodigoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
+  const filasCodigos = useMemo(() => {
+    const inventarioPorCodigo = new Map()
+    const codigosPorMaterial = new Map()
+
+    for (const material of materialesInventario) {
+      const clave = normalizarBusqueda(material.codigo)
+      if (clave) inventarioPorCodigo.set(clave, material)
+    }
+
+    for (const codigo of codigos) {
+      const clave = normalizarBusqueda(codigo.codigoBodega)
+      if (!clave) continue
+      const actuales = codigosPorMaterial.get(clave) || []
+      actuales.push(codigo)
+      codigosPorMaterial.set(clave, actuales)
+    }
+
+    const filasInventario = materialesInventario.flatMap((material, indiceInventario) => {
+      const clave = normalizarBusqueda(material.codigo)
+      const equivalencias = codigosPorMaterial.get(clave) || []
+      if (equivalencias.length === 0) {
+        return [{
+          id: '',
+          codigoBodega: material.codigo || '',
+          codigoBarra: material.codigo || '',
+          descripcion: material.descripcion || '',
+          cantidadPorEscaneo: 1,
+          estado: 'sin_configurar',
+          indiceInventario,
+        }]
+      }
+
+      return equivalencias.map((item) => ({
+        ...item,
+        descripcion: material.descripcion || item.descripcion || '',
+        estado: normalizarBusqueda(item.codigoBarra) === clave ? 'codigo_bodega' : 'externo',
+        indiceInventario,
+      }))
+    })
+
+    const filasFueraInventario = codigos
+      .filter((item) => !inventarioPorCodigo.has(normalizarBusqueda(item.codigoBodega)))
+      .map((item) => ({
+        ...item,
+        estado: 'fuera_inventario',
+        indiceInventario: Number.MAX_SAFE_INTEGER,
+      }))
+
+    return [...filasInventario, ...filasFueraInventario]
+  }, [codigos, materialesInventario])
 
   const codigosFiltrados = useMemo(() => {
     const texto = normalizarBusqueda(busqueda)
-    if (!texto) return codigos
+    return filasCodigos.filter((item) => {
+      if (filtroEstado !== 'todos' && item.estado !== filtroEstado) return false
+      if (!texto) return true
+      return normalizarBusqueda(item.codigoBarra).includes(texto) ||
+        normalizarBusqueda(item.codigoBodega).includes(texto) ||
+        normalizarBusqueda(item.descripcion).includes(texto)
+    })
+  }, [busqueda, filasCodigos, filtroEstado])
 
-    return codigos.filter((item) => (
-      normalizarBusqueda(item.codigoBarra).includes(texto) ||
-      normalizarBusqueda(item.codigoBodega).includes(texto) ||
-      normalizarBusqueda(item.descripcion).includes(texto)
-    ))
-  }, [busqueda, codigos])
+  const codigosInventario = useMemo(
+    () => new Set(materialesInventario.map((item) => normalizarBusqueda(item.codigo)).filter(Boolean)),
+    [materialesInventario],
+  )
+  const materialesConCodigoExterno = useMemo(() => new Set(
+    codigos
+      .filter((item) => (
+        codigosInventario.has(normalizarBusqueda(item.codigoBodega)) &&
+        normalizarBusqueda(item.codigoBarra) !== normalizarBusqueda(item.codigoBodega)
+      ))
+      .map((item) => normalizarBusqueda(item.codigoBodega)),
+  ).size, [codigos, codigosInventario])
+  const materialesConfigurados = useMemo(() => new Set(
+    codigos
+      .filter((item) => codigosInventario.has(normalizarBusqueda(item.codigoBodega)))
+      .map((item) => normalizarBusqueda(item.codigoBodega)),
+  ).size, [codigos, codigosInventario])
+  const materialesSinConfigurar = Math.max(0, materialesInventario.length - materialesConfigurados)
 
   function cambiarFormulario(campo, valor) {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
@@ -1661,6 +1762,7 @@ function PanelCodigosBarraBodega({
       codigoBodega: material.codigo || '',
       descripcion: material.descripcion || '',
     }))
+    setMostrarSugerenciasCodigo(false)
   }
 
   async function guardarActual() {
@@ -1679,6 +1781,7 @@ function PanelCodigosBarraBodega({
       descripcion: '',
       cantidadPorEscaneo: '1',
     })
+    setMostrarSugerenciasCodigo(false)
     setMensaje({ tipo: 'ok', texto: formulario.id ? 'Código de barra actualizado correctamente.' : 'Código de barra guardado correctamente.' })
   }
 
@@ -1690,7 +1793,29 @@ function PanelCodigosBarraBodega({
       descripcion: item.descripcion || obtenerDescripcionMaterialPorCodigo(item.codigoBodega, materialesInventario) || '',
       cantidadPorEscaneo: String(item.cantidadPorEscaneo || 1),
     })
+    setMostrarSugerenciasCodigo(false)
     setMensaje({ tipo: 'info', texto: 'Editando código de barra. Modifica los datos y presiona Actualizar código.' })
+    desplazarAFormularioCodigo()
+  }
+
+  function configurarCodigoInventario(item) {
+    if (item.id) {
+      editarCodigo(item)
+      return
+    }
+    setFormulario({
+      id: '',
+      codigoBarra: item.codigoBodega || '',
+      codigoBodega: item.codigoBodega || '',
+      descripcion: item.descripcion || '',
+      cantidadPorEscaneo: String(item.cantidadPorEscaneo || 1),
+    })
+    setMostrarSugerenciasCodigo(false)
+    setMensaje({
+      tipo: 'info',
+      texto: 'Configura la cantidad por escaneo. Si el producto tiene un código externo, reemplaza el código de barra antes de guardar.',
+    })
+    desplazarAFormularioCodigo()
   }
 
   function cancelarEdicion() {
@@ -1701,6 +1826,7 @@ function PanelCodigosBarraBodega({
       descripcion: '',
       cantidadPorEscaneo: '1',
     })
+    setMostrarSugerenciasCodigo(false)
     setMensaje(null)
   }
 
@@ -1723,7 +1849,7 @@ function PanelCodigosBarraBodega({
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr) minmax(150px, 1fr) minmax(240px, 2fr) minmax(120px, 0.7fr) auto', gap: '10px', alignItems: 'end', marginBottom: '12px' }}>
+      <div ref={formularioCodigoRef} style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr) minmax(150px, 1fr) minmax(240px, 2fr) minmax(120px, 0.7fr) auto', gap: '10px', alignItems: 'end', marginBottom: '12px', scrollMarginTop: '14px' }}>
         <CampoTexto
           label="Código de barra"
           value={formulario.codigoBarra}
@@ -1741,11 +1867,16 @@ function PanelCodigosBarraBodega({
           <input
             type="text"
             value={formulario.descripcion}
-            onChange={(e) => cambiarFormulario('descripcion', e.target.value)}
+            onChange={(e) => {
+              cambiarFormulario('descripcion', e.target.value)
+              setMostrarSugerenciasCodigo(true)
+            }}
+            onFocus={() => setMostrarSugerenciasCodigo(true)}
+            onBlur={() => setMostrarSugerenciasCodigo(false)}
             placeholder="Buscar material"
             style={inputStyle}
           />
-          {(formulario.descripcion || formulario.codigoBodega) && sugerencias.length > 0 && (
+          {mostrarSugerenciasCodigo && (formulario.descripcion || formulario.codigoBodega) && sugerencias.length > 0 && (
             <div style={{ ...sugerenciasMaterialStyle, position: 'absolute', top: '70px', left: 0, right: 0, zIndex: 2100 }}>
               {sugerencias.map((material) => (
                 <button
@@ -1811,42 +1942,66 @@ function PanelCodigosBarraBodega({
         </div>
       )}
 
-      <label style={{ display: 'grid', gap: '5px', marginBottom: '10px' }}>
-        <strong>Buscar equivalencia</strong>
-        <input
-          type="text"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar por código de barra, código bodega o material"
-          style={inputStyle}
-        />
-      </label>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+        <div style={cardResumenCodigoStyle}><small>Materiales del inventario</small><strong>{materialesInventario.length}</strong></div>
+        <div style={cardResumenCodigoStyle}><small>Con código externo</small><strong style={{ color: '#81d4fa' }}>{materialesConCodigoExterno}</strong></div>
+        <div style={cardResumenCodigoStyle}><small>Sin configurar</small><strong style={{ color: '#ffe082' }}>{materialesSinConfigurar}</strong></div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) minmax(190px, 260px)', gap: '10px', marginBottom: '10px' }}>
+        <label style={{ display: 'grid', gap: '5px' }}>
+          <strong>Buscar material</strong>
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por código de barra, código bodega o material"
+            style={inputStyle}
+          />
+        </label>
+        <label style={{ display: 'grid', gap: '5px' }}>
+          <strong>Mostrar</strong>
+          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={inputStyle}>
+            <option value="todos">Todos los materiales</option>
+            <option value="externo">Código externo</option>
+            <option value="codigo_bodega">Código bodega configurado</option>
+            <option value="sin_configurar">Sin configurar</option>
+            <option value="fuera_inventario">Fuera del inventario</option>
+          </select>
+        </label>
+      </div>
 
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px' }}>
           <thead>
             <tr style={{ background: '#333' }}>
-              <th style={thStyle}>Código de barra</th>
               <th style={thStyle}>Código bodega</th>
               <th style={thStyle}>Material</th>
+              <th style={thStyle}>Código de lectura</th>
+              <th style={{ ...thStyle, width: '170px' }}>Tipo</th>
               <th style={{ ...thStyle, width: '130px', textAlign: 'right' }}>Cant. escaneo</th>
-              <th style={{ ...thStyle, width: '160px', textAlign: 'center' }}>Acciones</th>
+              <th style={{ ...thStyle, width: '170px', textAlign: 'center' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {codigosFiltrados.map((item) => (
-              <tr key={item.id || `${item.codigoBarra}-${item.codigoBodega}`}>
-                <td style={{ ...tdStyle, fontWeight: 900 }}>{item.codigoBarra}</td>
+              <tr key={item.id || `${item.estado}-${item.codigoBarra}-${item.codigoBodega}-${item.indiceInventario}`}>
                 <td style={tdStyle}>{item.codigoBodega}</td>
                 <td style={tdStyle}>{item.descripcion || obtenerDescripcionMaterialPorCodigo(item.codigoBodega, materialesInventario)}</td>
+                <td style={{ ...tdStyle, fontWeight: 900 }}>{item.codigoBarra || item.codigoBodega}</td>
+                <td style={tdStyle}>
+                  <span style={estiloEstadoCodigo(item.estado)}>{etiquetaEstadoCodigo(item.estado)}</span>
+                </td>
                 <td style={{ ...tdStyle, width: '130px', textAlign: 'right', fontWeight: 900 }}>{formatearNumero(item.cantidadPorEscaneo || 1)}</td>
-                <td style={{ ...tdStyle, width: '160px', textAlign: 'center' }}>
-                  <button type="button" onClick={() => editarCodigo(item)} style={{ ...botonMiniAzul, marginRight: '8px' }}>
-                    Editar
+                <td style={{ ...tdStyle, width: '170px', textAlign: 'center' }}>
+                  <button type="button" onClick={() => configurarCodigoInventario(item)} style={{ ...botonMiniAzul, marginRight: item.id ? '8px' : 0 }}>
+                    {item.id ? 'Editar' : 'Configurar'}
                   </button>
-                  <button type="button" onClick={() => onEliminar?.(item.id)} style={botonIconoRojo}>
-                    ×
-                  </button>
+                  {item.id && (
+                    <button type="button" onClick={() => onEliminar?.(item.id)} style={botonIconoRojo}>
+                      ×
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -1855,7 +2010,7 @@ function PanelCodigosBarraBodega({
       </div>
 
       {!cargando && codigosFiltrados.length === 0 && (
-        <p style={{ color: '#bbb', marginBottom: 0 }}>No hay códigos de barra asociados.</p>
+        <p style={{ color: '#bbb', marginBottom: 0 }}>No hay materiales que coincidan con la búsqueda o el filtro.</p>
       )}
     </div>
   )
@@ -1866,6 +2021,35 @@ function obtenerDescripcionMaterialPorCodigo(codigoBodega, materialesInventario 
     normalizarBusqueda(item.codigo) === normalizarBusqueda(codigoBodega)
   ))
   return encontrado?.descripcion || ''
+}
+
+function etiquetaEstadoCodigo(estado) {
+  if (estado === 'externo') return 'Código externo'
+  if (estado === 'codigo_bodega') return 'Código bodega'
+  if (estado === 'fuera_inventario') return 'Fuera del inventario'
+  return 'Sin configurar'
+}
+
+function estiloEstadoCodigo(estado) {
+  const colores = estado === 'externo'
+    ? { fondo: '#0d47a1', borde: '#64b5f6', texto: '#bbdefb' }
+    : estado === 'codigo_bodega'
+      ? { fondo: '#1b5e20', borde: '#66bb6a', texto: '#c8e6c9' }
+      : estado === 'fuera_inventario'
+        ? { fondo: '#5d4037', borde: '#bcaaa4', texto: '#efebe9' }
+        : { fondo: '#4e342e', borde: '#ffb74d', texto: '#ffe0b2' }
+
+  return {
+    display: 'inline-block',
+    padding: '4px 8px',
+    border: `1px solid ${colores.borde}`,
+    borderRadius: '999px',
+    background: colores.fondo,
+    color: colores.texto,
+    fontSize: '12px',
+    fontWeight: 900,
+    whiteSpace: 'nowrap',
+  }
 }
 
 function DetalleSolicitudBodega({
@@ -3567,6 +3751,15 @@ const panelMovimientoStyle = {
   borderRadius: '10px',
   background: '#1f2529',
   marginBottom: '14px',
+}
+
+const cardResumenCodigoStyle = {
+  display: 'grid',
+  gap: '5px',
+  padding: '11px 12px',
+  border: '1px solid #546e7a',
+  borderRadius: '8px',
+  background: '#263238',
 }
 
 const gridPedidoStyle = {

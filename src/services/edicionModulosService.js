@@ -61,7 +61,6 @@ export function aplicarDatosPruebaElectricaEnPayload({
   formatearFechaInput,
   completarDatosPruebaEnProtocolo,
 }) {
-  const fechaPruebaInput = formatearFechaInput(new Date())
   const moduloBase = {
     ...moduloSeleccionado,
     ...(moduloAntesCambio || {}),
@@ -74,7 +73,7 @@ export function aplicarDatosPruebaElectricaEnPayload({
     responsable: responsableEditado,
     linea: lineaEditada,
   }
-  const fechaPruebaDb = `${fechaPruebaInput}T00:00:00`
+  const fechaPruebaDb = new Date().toISOString()
 
   return {
     ...payload,

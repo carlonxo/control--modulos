@@ -95,6 +95,77 @@ export function exportarInventarioBodegaExcel(inventario) {
   XLSX.writeFile(libro, `inventario_bodega_${fechaInventario}.xlsx`)
 }
 
+export function exportarProyeccionMaterialesExcel(filas = [], periodos = [], periodosFuturos = []) {
+  if (!filas.length) {
+    alert('No hay materiales para exportar')
+    return
+  }
+
+  const encabezadosMeses = periodos.map((periodo, indice) => {
+    const nombre = nombrePeriodoExcel(periodo)
+    if (indice === 0) return `${nombre} (base ${nombrePeriodoExcel(periodos[1])})`
+    if (indice === 2) return `Estimado ${nombre}`
+    return nombre
+  })
+  const encabezadosFuturos = periodosFuturos.map((periodo) => `Estimado ${nombrePeriodoExcel(periodo)}`)
+  const encabezados = [
+    'Código',
+    'Material',
+    ...encabezadosMeses,
+    'Promedio',
+    ...encabezadosFuturos,
+    'Proyección 3 meses',
+  ]
+  const filasExcel = filas.map((fila) => ([
+    fila.codigo || '',
+    fila.material || '',
+    ...(fila.meses || []).map(numeroExcel),
+    numeroExcel(fila.promedio),
+    ...periodosFuturos.map(() => numeroExcel(fila.estimadoMensual)),
+    numeroExcel(fila.estimadoTresMeses),
+  ]))
+  const fechaExportacion = new Date().toISOString().slice(0, 10)
+  const datos = [
+    ['Proyección de materiales'],
+    [`Generado: ${fechaExportacion}`],
+    ['Basado exclusivamente en pedidos de bodega entregados.'],
+    [],
+    encabezados,
+    ...filasExcel,
+  ]
+  const hoja = XLSX.utils.aoa_to_sheet(datos)
+  const ultimaColumna = XLSX.utils.encode_col(encabezados.length - 1)
+  hoja['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: encabezados.length - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: encabezados.length - 1 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: encabezados.length - 1 } },
+  ]
+  hoja['!cols'] = [
+    { wch: 20 },
+    { wch: 52 },
+    ...encabezados.slice(2).map(() => ({ wch: 19 })),
+  ]
+  hoja['!autofilter'] = { ref: `A5:${ultimaColumna}${datos.length}` }
+  hoja['!rows'] = [{ hpt: 24 }, { hpt: 19 }, { hpt: 19 }, {}, { hpt: 32 }]
+
+  for (let fila = 6; fila <= datos.length; fila += 1) {
+    for (let columna = 2; columna < encabezados.length; columna += 1) {
+      asignarFormatoNumero(hoja, `${XLSX.utils.encode_col(columna)}${fila}`, '#,##0.0')
+    }
+  }
+
+  const libro = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(libro, hoja, 'Proyección')
+  XLSX.writeFile(libro, `proyeccion_materiales_${fechaExportacion}.xlsx`)
+}
+
+function nombrePeriodoExcel(periodo = '') {
+  const [anio, mes] = String(periodo).split('-').map(Number)
+  if (!anio || !mes) return String(periodo || '')
+  const nombreMes = new Intl.DateTimeFormat('es-CL', { month: 'long' }).format(new Date(anio, mes - 1, 1))
+  return `${nombreMes} ${anio}`
+}
+
 export async function exportarDetalleReutilizadosExcel(registros = [], opciones = {}) {
   const registrosConReutilizados = construirDetalleReutilizadosPorRegistro(registros)
 

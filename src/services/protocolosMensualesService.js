@@ -1,3 +1,12 @@
+function formatearFechaLocalIso(valor) {
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return ''
+  const anio = fecha.getFullYear()
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0')
+  const dia = String(fecha.getDate()).padStart(2, '0')
+  return `${anio}-${mes}-${dia}`
+}
+
 export function obtenerTablaDestinoProtocolo(origen) {
   if (origen === 'manual') return 'protocolos_manuales'
   if (origen === 'historial') return 'historial_modulos'
@@ -346,9 +355,15 @@ export async function guardarProtocoloModuloSupabase({
   protocoloDesdeHistorial,
 }) {
   const tablaDestino = protocoloDesdeHistorial ? 'historial_modulos' : 'modulos'
+  const fechaPruebaExistente = moduloSeleccionado?.fecha_prueba_electrica || null
+  const fechaExistenteLocal = fechaPruebaExistente
+    ? formatearFechaLocalIso(fechaPruebaExistente)
+    : ''
   const fechaPruebaProtocolo = protocoloParaGuardar.fecha
-    ? `${protocoloParaGuardar.fecha}T00:00:00`
-    : moduloSeleccionado?.fecha_prueba_electrica || null
+    ? (protocoloParaGuardar.fecha === fechaExistenteLocal
+        ? fechaPruebaExistente
+        : new Date(`${protocoloParaGuardar.fecha}T12:00:00`).toISOString())
+    : fechaPruebaExistente
   const payloadProtocolo = {
     protocolo_entrega: protocoloParaGuardar,
     materiales: protocoloParaGuardar.materiales || {},

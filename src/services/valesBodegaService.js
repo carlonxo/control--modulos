@@ -63,9 +63,9 @@ export async function cargarPedidosEntregadosBodegaPorRango({
     .select('id, fecha, serie, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega')
     .eq('tipo_ingreso', 'pedido_app')
     .eq('estado_bodega', 'entregado')
-    .gte('fecha_entrega_bodega', fechaInicio)
-    .lt('fecha_entrega_bodega', fechaFin)
-    .order('fecha_entrega_bodega', { ascending: true })
+    .gte('fecha', fechaInicio)
+    .lt('fecha', fechaFin)
+    .order('fecha', { ascending: true })
 
   if (error) return { pedidos: [], error }
   if (!vales?.length) return { pedidos: [], error: null }
@@ -85,6 +85,27 @@ export async function cargarPedidosEntregadosBodegaPorRango({
     })),
     error: null,
   }
+}
+
+export async function cargarResumenOperacionalMensual({
+  supabase,
+  periodos = [],
+  bodega = '',
+}) {
+  if (!periodos.length) return { resumen: [], error: null }
+
+  let consulta = supabase
+    .from('resumen_operacional_mensual')
+    .select('periodo, bodega, categoria, codigo, descripcion, cantidad, actualizado_en')
+    .in('periodo', periodos)
+    .in('categoria', ['material', 'pedido'])
+    .order('periodo', { ascending: true })
+    .order('categoria', { ascending: true })
+    .order('codigo', { ascending: true })
+
+  if (bodega) consulta = consulta.in('bodega', [bodega, 'general'])
+  const { data, error } = await consulta
+  return { resumen: data || [], error }
 }
 
 async function cargarValesBodegaCabeceraPorRango({
@@ -127,23 +148,46 @@ async function cargarItemsPorVales({
   const ids = vales.map((vale) => vale.id).filter(Boolean)
   if (ids.length === 0) return { items: [], error: null }
 
-  let { data, error } = await supabase
-    .from('vales_bodega_items')
-    .select('id, vale_id, fecha, serie, material_vale, material_balance, cantidad, solicitante_id, solicitante_nombre, tipo_ingreso')
-    .in('vale_id', ids)
+  async function consultarPaginado(columnas) {
+    const todos = []
+    const tamanoGrupo = 100
+    const tamanoPagina = 1000
+
+    for (let inicioGrupo = 0; inicioGrupo < ids.length; inicioGrupo += tamanoGrupo) {
+      const idsGrupo = ids.slice(inicioGrupo, inicioGrupo + tamanoGrupo)
+      let desde = 0
+      while (true) {
+        const { data: pagina, error: errorPagina } = await supabase
+          .from('vales_bodega_items')
+          .select(columnas)
+          .in('vale_id', idsGrupo)
+          .order('id', { ascending: true })
+          .range(desde, desde + tamanoPagina - 1)
+
+        if (errorPagina) return { data: [], error: errorPagina }
+        todos.push(...(pagina || []))
+        if ((pagina || []).length < tamanoPagina) break
+        desde += tamanoPagina
+      }
+    }
+
+    return { data: todos, error: null }
+  }
+
+  let { data, error } = await consultarPaginado(
+    'id, vale_id, fecha, serie, material_vale, material_balance, cantidad, solicitante_id, solicitante_nombre, tipo_ingreso'
+  )
 
   if (error?.message?.includes('serie')) {
-    ;({ data, error } = await supabase
-      .from('vales_bodega_items')
-      .select('id, vale_id, fecha, material_vale, material_balance, cantidad, solicitante_id, solicitante_nombre, tipo_ingreso')
-      .in('vale_id', ids))
+    ;({ data, error } = await consultarPaginado(
+      'id, vale_id, fecha, material_vale, material_balance, cantidad, solicitante_id, solicitante_nombre, tipo_ingreso'
+    ))
   }
 
   if (error?.message?.includes('solicitante') || error?.message?.includes('tipo_ingreso')) {
-    ;({ data, error } = await supabase
-      .from('vales_bodega_items')
-      .select('id, vale_id, fecha, material_vale, material_balance, cantidad')
-      .in('vale_id', ids))
+    ;({ data, error } = await consultarPaginado(
+      'id, vale_id, fecha, material_vale, material_balance, cantidad'
+    ))
   }
 
   if (error) return { items: [], error }

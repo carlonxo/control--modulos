@@ -65,6 +65,7 @@ import {
 import {
   cargarItemsValesBodegaPorRango,
   cargarPedidosEntregadosBodegaPorRango,
+  cargarResumenOperacionalMensual,
   cargarValeBodegaPorId as cargarValeBodegaPorIdSupabase,
   cargarValesBodegaDia as cargarValesBodegaDiaSupabase,
   guardarValeBodega as guardarValeBodegaSupabase,
@@ -670,6 +671,7 @@ const [mostrarValesBodega, setMostrarValesBodega] = useState(false)
 const [mostrarBodega, setMostrarBodega] = useState(false)
 const [mostrarProyeccionMateriales, setMostrarProyeccionMateriales] = useState(false)
 const [pedidosProyeccionMateriales, setPedidosProyeccionMateriales] = useState([])
+const [resumenProyeccionMateriales, setResumenProyeccionMateriales] = useState([])
 const [periodosProyeccionMateriales, setPeriodosProyeccionMateriales] = useState([])
 const [periodosFuturosProyeccion, setPeriodosFuturosProyeccion] = useState([])
 const [cargandoProyeccionMateriales, setCargandoProyeccionMateriales] = useState(false)
@@ -973,6 +975,22 @@ function fechaActualLocalInput() {
   const fecha = new Date()
   const zonaLocal = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000)
   return zonaLocal.toISOString().slice(0, 10)
+}
+
+async function recalcularResumenOperacionalPorFecha(fecha) {
+  const periodo = String(fecha || fechaActualLocalInput()).slice(0, 7).replace('-', '/')
+  if (!/^\d{4}\/\d{2}$/.test(periodo)) return
+
+  try {
+    const { error } = await supabase.rpc('recalcular_resumen_operacional_mensual', {
+      p_periodo: periodo,
+    })
+    if (error) {
+      console.warn(`No se pudo actualizar el resumen operacional de ${periodo}.`, error)
+    }
+  } catch (error) {
+    console.warn(`No se pudo actualizar el resumen operacional de ${periodo}.`, error)
+  }
 }
 
 function nombreTipoAccion(tipo) {
@@ -2781,19 +2799,43 @@ function periodoMesDesplazado(desplazamiento) {
   return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`
 }
 
+function fechaLocalDesplazadaDias(desplazamiento) {
+  const fecha = new Date()
+  fecha.setDate(fecha.getDate() + desplazamiento)
+  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`
+}
+
 async function cargarProyeccionMateriales(inventariosDisponibles = inventariosBodega) {
   if (!puedeVerProyeccionMateriales) return
-  const periodos = [-3, -2, -1].map(periodoMesDesplazado)
+  const periodos = [-2, -1, 0].map(periodoMesDesplazado)
   const periodosFuturos = [1, 2, 3].map(periodoMesDesplazado)
   setPeriodosProyeccionMateriales(periodos)
   setPeriodosFuturosProyeccion(periodosFuturos)
   setCargandoProyeccionMateriales(true)
   setErrorProyeccionMateriales('')
 
+  const inventarioActual = inventariosDisponibles.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosDisponibles[0]
+  const bodegaActual = obtenerBodegaInventario(inventarioActual)
+  const { resumen, error: errorResumen } = await cargarResumenOperacionalMensual({
+    supabase,
+    periodos: periodos.map((periodo) => periodo.replace('-', '/')),
+    bodega: bodegaActual,
+  })
+
+  if (!errorResumen && resumen.length > 0) {
+    setResumenProyeccionMateriales(resumen)
+    setPedidosProyeccionMateriales([])
+    setCargandoProyeccionMateriales(false)
+    return
+  }
+
+  setResumenProyeccionMateriales([])
+  if (errorResumen) console.warn('La tabla resumen mensual aún no está disponible; se usará el historial paginado.', errorResumen)
+
   const { pedidos, error } = await cargarPedidosEntregadosBodegaPorRango({
     supabase,
     fechaInicio: `${periodos[0]}-01`,
-    fechaFin: `${periodoMesDesplazado(0)}-01`,
+    fechaFin: fechaLocalDesplazadaDias(1),
   })
   setCargandoProyeccionMateriales(false)
   if (error) {
@@ -2802,8 +2844,6 @@ async function cargarProyeccionMateriales(inventariosDisponibles = inventariosBo
     return
   }
 
-  const inventarioActual = inventariosDisponibles.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosDisponibles[0]
-  const bodegaActual = obtenerBodegaInventario(inventarioActual)
   setPedidosProyeccionMateriales(
     bodegaActual
       ? pedidos.filter((pedido) => obtenerBodegaDesdeObservacion(pedido.observacion) === bodegaActual)
@@ -3336,6 +3376,7 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
       : vale
   )))
   setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== alerta.id))
+  await recalcularResumenOperacionalPorFecha(datosEntrega.fecha_entrega_bodega)
   await cargarInventariosBodega()
   await cargarAlertasBodega()
   return true
@@ -3612,6 +3653,9 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
         ? `Pedido entregado corregido. Inventario recalculado${itemsSinDescuento.length > 0 ? `; ${itemsSinDescuento.length} ítems sin descuento.` : '.'}`
         : 'Pedido actualizado correctamente'
   )
+  if (pedidoEntregado) {
+    await recalcularResumenOperacionalPorFecha(alerta.fecha_entrega_bodega || alerta.fecha)
+  }
   if (pedidoEntregado) await cargarInventariosBodega()
   await cargarAlertasBodega()
   return pedidoActualizado
@@ -4532,8 +4576,7 @@ async function aprobarPruebaElectrica() {
     ...(moduloActual || {}),
   }
 
-  const fechaPruebaInput = formatearFechaInput(new Date())
-  const fechaPruebaDb = `${fechaPruebaInput}T00:00:00`
+  const fechaPruebaDb = new Date().toISOString()
   const protocoloActualizado = completarDatosPruebaEnProtocolo(
     moduloParaAprobar?.protocolo_entrega || {},
     moduloParaAprobar,
@@ -5129,6 +5172,9 @@ async function finalizarModulo() {
 
   await cargarTablero()
   await cargarHistorial()
+  await recalcularResumenOperacionalPorFecha(
+    historialCreado?.fecha_salida || historialGuardadoPayload?.fecha_salida
+  )
 
   await registrarAccionModulo({
     tipo: 'finalizacion',
@@ -6903,6 +6949,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 {mostrarProyeccionMateriales && puedeVerProyeccionMateriales && (
   <ProyeccionMaterialesModal
     pedidos={pedidosProyeccionMateriales}
+    resumenMensual={resumenProyeccionMateriales}
     periodos={periodosProyeccionMateriales}
     periodosFuturos={periodosFuturosProyeccion}
     inventario={(inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0])?.items || []}
