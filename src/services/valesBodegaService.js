@@ -1,3 +1,37 @@
+export async function entregarPedidoBodegaTransaccional({
+  supabase,
+  valeId,
+  inventarioId,
+  actualizaciones = [],
+  itemsEsperados = [],
+}) {
+  if (!valeId) return { data: null, error: new Error('Falta el pedido que se debe entregar') }
+  if (!inventarioId) return { data: null, error: new Error('Falta el inventario que se debe descontar') }
+
+  const descuentos = (actualizaciones || []).map((actualizacion) => ({
+    inventario_item_id: actualizacion?.itemInventario?.id || actualizacion?.inventarioItemId || '',
+    vale_item_ids: (actualizacion?.itemsVale || [])
+      .map((item) => item?.id)
+      .filter(Boolean),
+  }))
+
+  const detalleEsperado = (itemsEsperados || []).map((item) => ({
+    id: item.id,
+    cantidad: Number(item.cantidad || 0),
+    material_vale: String(item.material_vale || ''),
+    material_balance: String(item.material_balance || ''),
+  }))
+
+  const { data, error } = await supabase.rpc('entregar_pedido_bodega', {
+    p_vale_id: valeId,
+    p_inventario_id: inventarioId,
+    p_actualizaciones: descuentos,
+    p_items_esperados: detalleEsperado,
+  })
+
+  return { data, error }
+}
+
 export async function cargarItemsValesBodegaPorRango({
   supabase,
   fechaInicio,

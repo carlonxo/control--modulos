@@ -70,6 +70,7 @@ import {
   cargarValesBodegaDia as cargarValesBodegaDiaSupabase,
   guardarValeBodega as guardarValeBodegaSupabase,
   actualizarItemsValeBodega as actualizarItemsValeBodegaSupabase,
+  entregarPedidoBodegaTransaccional,
 } from './services/valesBodegaService'
 import {
   cargarRecepcionesBodegaRango as cargarRecepcionesBodegaRangoSupabase,
@@ -3263,9 +3264,14 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
       itemInventario,
       cantidad: 0,
       nombres: new Set(),
+      itemsVale: [],
     }
     actualizacionesPorItem[clave].cantidad += cantidad
     actualizacionesPorItem[clave].nombres.add(nombreSolicitud)
+    actualizacionesPorItem[clave].itemsVale.push({
+      id: itemSolicitud.id,
+      cantidad,
+    })
   }
 
   const actualizaciones = Object.values(actualizacionesPorItem).flatMap((actualizacion) => {
@@ -3280,6 +3286,7 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
       cantidad,
       nuevoSaldoFinal: saldoActual - cantidad,
       nuevasSalidas: Number(actualizacion.itemInventario.salidas || 0) + cantidad,
+      itemsVale: actualizacion.itemsVale,
     }]
   })
 
@@ -3294,81 +3301,45 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
 
   setEntregandoSolicitudBodega(true)
 
-  const datosEntrega = {
-    estado_bodega: 'entregado',
-    fecha_entrega_bodega: new Date().toISOString(),
-    entregado_por: perfil?.nombre || perfil?.email || session?.user?.email || '',
-  }
-
-  const { data: valeActualizado, error: errorVale } = await supabase
-    .from('vales_bodega')
-    .update(datosEntrega)
-    .eq('id', alerta.id)
-    .select('id, estado_bodega, fecha_entrega_bodega, entregado_por')
-    .single()
-
-  if (errorVale || valeActualizado?.estado_bodega !== 'entregado') {
-    setEntregandoSolicitudBodega(false)
-    mostrarNotificacion(
-      'No se pudo marcar el pedido como entregado, por lo que no se descontó inventario. ' +
-      'Revisa permisos de actualización en vales_bodega. Detalle: ' +
-      (errorVale?.message || 'Supabase no confirmó el cambio de estado')
-    )
-    await cargarAlertasBodega()
-    return false
-  }
-
-  for (const actualizacion of actualizaciones) {
-    const { error } = await supabase
-      .from('bodega_inventario_items')
-      .update({
-        salidas: actualizacion.nuevasSalidas,
-        saldo_final: actualizacion.nuevoSaldoFinal,
-      })
-      .eq('id', actualizacion.itemInventario.id)
-
-    if (error) {
-      await supabase
-        .from('vales_bodega')
-        .update({
-          estado_bodega: 'pendiente',
-          fecha_entrega_bodega: null,
-          entregado_por: '',
-        })
-        .eq('id', alerta.id)
-      setEntregandoSolicitudBodega(false)
-      mostrarNotificacion('No se pudo descontar inventario: ' + error.message)
-      await cargarAlertasBodega()
-      return false
-    }
-  }
-
-  /*
-    .from('vales_bodega')
-    .update({
-      estado_bodega: 'entregado',
-      fecha_entrega_bodega: new Date().toISOString(),
-      entregado_por: perfil?.nombre || perfil?.email || session?.user?.email || '',
-    })
-    .eq('id', alerta.id)
+  const { data: resultadoEntrega, error: errorEntrega } = await entregarPedidoBodegaTransaccional({
+    supabase,
+    valeId: alerta.id,
+    inventarioId: inventarioActual.id,
+    actualizaciones,
+    itemsEsperados: itemsSolicitud,
+  })
 
   setEntregandoSolicitudBodega(false)
 
-  if (errorVale) {
-    mostrarNotificacion('Se descontó inventario, pero no se pudo marcar el pedido como entregado. Ejecuta supabase_vales_bodega_entrega.sql. Detalle: ' + errorVale.message)
+  if (errorEntrega || !resultadoEntrega?.ok) {
+    const detalle = errorEntrega?.message || 'Supabase no confirmó la entrega'
+    const pedidoModificado = detalle.includes('PEDIDO_MODIFICADO')
+    const funcionNoInstalada = errorEntrega?.code === 'PGRST202'
+
+    mostrarNotificacion(
+      pedidoModificado
+        ? 'El pedido cambió mientras se procesaba la entrega. Se conservó el inventario sin cambios; revisa el pedido actualizado.'
+        : funcionNoInstalada
+          ? 'Falta instalar la entrega segura en Supabase. Ejecuta el archivo supabase_vales_bodega_entrega.sql antes de usar esta versión.'
+          : `No se pudo entregar el pedido. No se aplicó ningún descuento. Detalle: ${detalle}`
+    )
     await cargarInventariosBodega()
     await cargarAlertasBodega()
     return false
   }
 
-  */
-
-  setEntregandoSolicitudBodega(false)
+  const datosEntrega = {
+    estado_bodega: resultadoEntrega.estado_bodega || 'entregado',
+    fecha_entrega_bodega: resultadoEntrega.fecha_entrega_bodega,
+    entregado_por: resultadoEntrega.entregado_por || '',
+  }
 
   mostrarNotificacion(
-    itemsSinDescuento.length > 0
-      ? `Pedido entregado. Se omitieron ${itemsSinDescuento.length} ítems sin stock/inventario.`
-      : 'Pedido entregado y descontado del inventario'
+    resultadoEntrega.ya_entregado
+      ? 'Este pedido ya había sido entregado; no se volvió a descontar inventario.'
+      : itemsSinDescuento.length > 0
+        ? `Pedido entregado. Se omitieron ${itemsSinDescuento.length} ítems sin stock/inventario.`
+        : 'Pedido entregado y descontado del inventario'
   )
   setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
     vale.id === alerta.id
@@ -3376,7 +3347,9 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
       : vale
   )))
   setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== alerta.id))
-  await recalcularResumenOperacionalPorFecha(datosEntrega.fecha_entrega_bodega)
+  if (datosEntrega.fecha_entrega_bodega) {
+    await recalcularResumenOperacionalPorFecha(datosEntrega.fecha_entrega_bodega)
+  }
   await cargarInventariosBodega()
   await cargarAlertasBodega()
   return true

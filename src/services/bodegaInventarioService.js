@@ -99,7 +99,17 @@ export async function guardarInventariosBodega({
   archivoNombre = '',
   cargadoPor = '',
 }) {
+  const inventariosPreparados = []
+
   for (const inventario of inventarios) {
+    const resultado = depurarItemsDuplicadosInventario(inventario.items || [])
+    if (resultado.error) {
+      return { error: resultado.error, etapa: 'duplicados' }
+    }
+    inventariosPreparados.push({ ...inventario, items: resultado.items })
+  }
+
+  for (const inventario of inventariosPreparados) {
     const { data: inventarioGuardado, error } = await supabase
       .from('bodega_inventarios')
       .upsert({
@@ -174,6 +184,64 @@ export async function guardarInventariosBodega({
   }
 
   return { error: null, etapa: '' }
+}
+
+function depurarItemsDuplicadosInventario(items = []) {
+  const grupos = new Map()
+
+  for (const item of items) {
+    const codigo = String(item?.codigo || '').trim()
+    const clave = codigo ? codigo.toUpperCase() : '__SIN_CODIGO__'
+    grupos.set(clave, [...(grupos.get(clave) || []), { ...item, codigo }])
+  }
+
+  const depurados = []
+  const conflictos = []
+
+  for (const [codigo, repetidos] of grupos) {
+    if (repetidos.length === 1) {
+      depurados.push(repetidos[0])
+      continue
+    }
+
+    const conValores = repetidos.filter(tieneValoresInventario)
+    if (conValores.length > 1) {
+      conflictos.push({
+        codigo: codigo === '__SIN_CODIGO__' ? 'SIN CODIGO' : codigo,
+        filas: conValores.map((item) => item.filaExcel || '?').join(', '),
+      })
+      continue
+    }
+
+    depurados.push(conValores[0] || repetidos[0])
+  }
+
+  if (conflictos.length > 0) {
+    const detalle = conflictos
+      .slice(0, 8)
+      .map((item) => `${item.codigo} (filas ${item.filas})`)
+      .join('; ')
+    const restantes = conflictos.length > 8 ? `; y ${conflictos.length - 8} mas` : ''
+    return {
+      items: [],
+      error: new Error(
+        `Hay codigos duplicados con cantidades en mas de una fila: ${detalle}${restantes}. ` +
+        'Corrige esas filas en el Excel para evitar perder cantidades.'
+      ),
+    }
+  }
+
+  return { items: depurados, error: null }
+}
+
+function tieneValoresInventario(item = {}) {
+  return [
+    item.entradas,
+    item.salidas,
+    item.saldoInicial,
+    item.stockContainer,
+    item.saldoFinal,
+  ].some((valor) => Number(valor || 0) !== 0)
 }
 
 export async function cargarEquivalenciasBodega({ supabase }) {
