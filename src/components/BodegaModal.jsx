@@ -24,6 +24,7 @@ function BodegaModal({
   puedeEditarPedidosEntregados,
   puedeGestionarPedidos,
   puedeAprobarPedidos,
+  puedeCrearPedido = false,
   archivo,
   inventarios = [],
   solicitantes = [],
@@ -806,7 +807,7 @@ function BodegaModal({
                 </button>
               </div>
             )}
-            {!puedeAdministrar && !modoSoloBodega && (
+            {!puedeAdministrar && !modoSoloBodega && puedeCrearPedido && (
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
                 <button
                   type="button"
@@ -884,7 +885,7 @@ function BodegaModal({
             />
           )}
 
-          {mostrarCrearPedido && (
+          {mostrarCrearPedido && (puedeAdministrar || puedeCrearPedido) && (
             <PanelCrearPedido
               pedido={pedidoMaterial}
               electricos={electricosDisponibles}

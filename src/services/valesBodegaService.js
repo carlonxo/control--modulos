@@ -386,7 +386,7 @@ export async function guardarValeBodega({
       solicitante_nombre: solicitanteNombre || '',
       tipo_ingreso: tipoIngreso || 'archivo',
       observacion: observacion || '',
-      estado_bodega: estadoBodega || null,
+      estado_bodega: estadoBodega || 'pendiente',
     }])
     .select('id')
     .single()

@@ -100,6 +100,7 @@ export async function guardarInventariosBodega({
   cargadoPor = '',
 }) {
   const inventariosPreparados = []
+  const duplicadosDepurados = []
 
   for (const inventario of inventarios) {
     const resultado = depurarItemsDuplicadosInventario(inventario.items || [])
@@ -107,6 +108,7 @@ export async function guardarInventariosBodega({
       return { error: resultado.error, etapa: 'duplicados' }
     }
     inventariosPreparados.push({ ...inventario, items: resultado.items })
+    duplicadosDepurados.push(...resultado.duplicados)
   }
 
   for (const inventario of inventariosPreparados) {
@@ -183,7 +185,12 @@ export async function guardarInventariosBodega({
     if (errorInsertMovimientos) return { error: errorInsertMovimientos, etapa: 'movimientos' }
   }
 
-  return { error: null, etapa: '' }
+  return {
+    error: null,
+    etapa: '',
+    inventarios: inventariosPreparados,
+    duplicados: duplicadosDepurados,
+  }
 }
 
 function depurarItemsDuplicadosInventario(items = []) {
@@ -197,6 +204,7 @@ function depurarItemsDuplicadosInventario(items = []) {
 
   const depurados = []
   const conflictos = []
+  const duplicados = []
 
   for (const [codigo, repetidos] of grupos) {
     if (repetidos.length === 1) {
@@ -214,6 +222,10 @@ function depurarItemsDuplicadosInventario(items = []) {
     }
 
     depurados.push(conValores[0] || repetidos[0])
+    duplicados.push({
+      codigo: codigo === '__SIN_CODIGO__' ? 'SIN CODIGO' : codigo,
+      filasOmitidas: repetidos.length - 1,
+    })
   }
 
   if (conflictos.length > 0) {
@@ -222,16 +234,17 @@ function depurarItemsDuplicadosInventario(items = []) {
       .map((item) => `${item.codigo} (filas ${item.filas})`)
       .join('; ')
     const restantes = conflictos.length > 8 ? `; y ${conflictos.length - 8} mas` : ''
-    return {
-      items: [],
-      error: new Error(
-        `Hay codigos duplicados con cantidades en mas de una fila: ${detalle}${restantes}. ` +
-        'Corrige esas filas en el Excel para evitar perder cantidades.'
-      ),
-    }
+    const error = new Error(
+      `El archivo contiene ${conflictos.length} codigo(s) duplicado(s) con cantidades en mas de una fila: ` +
+      `${detalle}${restantes}. Corrige esas filas en el Excel para evitar perder cantidades.`
+    )
+    error.codigo = 'CODIGOS_DUPLICADOS_CON_CANTIDAD'
+    error.totalCodigos = conflictos.length
+    error.codigos = conflictos.map((item) => item.codigo)
+    return { items: [], duplicados: [], error }
   }
 
-  return { items: depurados, error: null }
+  return { items: depurados, duplicados, error: null }
 }
 
 function tieneValoresInventario(item = {}) {

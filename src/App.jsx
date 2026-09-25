@@ -799,6 +799,7 @@ const puedeAdministrarBodega = tienePermiso(perfil?.rol, 'administrarBodega')
 const puedeVerPedidosBodegaHoy = tienePermiso(perfil?.rol, 'verPedidosBodegaHoy')
 const puedeEditarPedidosBodega = tienePermiso(perfil?.rol, 'editarPedidosBodega')
 const puedeEditarPedidosEntregadosBodega = perfil?.rol === 'admin'
+const puedeCrearPedidoBodega = ['admin', 'operador', 'electrico'].includes(perfil?.rol)
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
 const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales || puedeVerBodega
@@ -956,7 +957,9 @@ const resumenMateriales = Object.entries(materialesModuloSeleccionado)
 useEffect(() => {
   if (!notificacion) return
 
-  const timer = window.setTimeout(() => setNotificacion(null), 3000)
+  const duracion = Number(notificacion.duracion || 3000)
+  if (duracion <= 0) return undefined
+  const timer = window.setTimeout(() => setNotificacion(null), duracion)
 
   return () => window.clearTimeout(timer)
 }, [notificacion])
@@ -968,8 +971,12 @@ useEffect(() => {
   return () => window.clearTimeout(timer)
 }, [avisoPruebaElectrica])
 
-function mostrarNotificacion(mensaje) {
-  setNotificacion(mensaje)
+function mostrarNotificacion(mensaje, opciones = {}) {
+  setNotificacion({
+    mensaje: String(mensaje || ''),
+    tipo: opciones.tipo || 'info',
+    duracion: Number(opciones.duracion || 3000),
+  })
 }
 
 function fechaActualLocalInput() {
@@ -2872,7 +2879,12 @@ async function leerInventarioBodega() {
       return
     }
 
-    const { error, etapa } = await guardarInventariosBodegaSupabase({
+    const {
+      error,
+      etapa,
+      inventarios: inventariosGuardados = [],
+      duplicados: duplicadosDepurados = [],
+    } = await guardarInventariosBodegaSupabase({
       supabase,
       inventarios,
       archivoNombre: archivoInventarioBodega?.name || '',
@@ -2880,17 +2892,38 @@ async function leerInventarioBodega() {
     })
 
     if (error) {
-      mostrarNotificacion(`No se pudo guardar inventario de bodega (${etapa}): ${error.message}`)
+      if (error.codigo === 'CODIGOS_DUPLICADOS_CON_CANTIDAD') {
+        mostrarNotificacion(
+          `No se pudo cargar el inventario porque contiene ${error.totalCodigos} código(s) duplicado(s) con cantidades:\n` +
+          `${(error.codigos || []).join(', ')}\nEl inventario anterior se conservó sin cambios.`,
+          { tipo: 'error', duracion: 12000 }
+        )
+      } else {
+        mostrarNotificacion(`No se pudo guardar inventario de bodega (${etapa}): ${error.message}`, {
+          tipo: 'error',
+          duracion: 8000,
+        })
+      }
       return
     }
 
-    localStorage.setItem('inventariosBodega', JSON.stringify(inventarios))
-    const totalItemsImportados = inventarios.reduce((total, inventario) => total + Number(inventario.totalItems || inventario.items?.length || 0), 0)
-    mostrarNotificacion(`Se guardaron ${inventarios.length} inventarios de bodega (${totalItemsImportados.toLocaleString('es-CL')} materiales)`)
+    const inventariosFinales = inventariosGuardados.length > 0 ? inventariosGuardados : inventarios
+    localStorage.setItem('inventariosBodega', JSON.stringify(inventariosFinales))
+    const totalItemsImportados = inventariosFinales.reduce((total, inventario) => total + Number(inventario.items?.length || 0), 0)
+    mostrarNotificacion(
+      duplicadosDepurados.length > 0
+        ? `Se guardaron ${inventariosFinales.length} inventarios (${totalItemsImportados.toLocaleString('es-CL')} materiales). ` +
+          `Se omitieron ${duplicadosDepurados.length} código(s) duplicado(s) sin cantidades: ` +
+          duplicadosDepurados.map((item) => item.codigo).join(', ')
+        : `Se guardaron ${inventariosFinales.length} inventarios de bodega (${totalItemsImportados.toLocaleString('es-CL')} materiales)`,
+      duplicadosDepurados.length > 0
+        ? { tipo: 'advertencia', duracion: 10000 }
+        : undefined
+    )
     setArchivoInventarioBodega(null)
     await cargarInventariosBodega({
-      fecha: inventarios[0]?.fecha || '',
-      hoja: inventarios[0]?.hoja || '',
+      fecha: inventariosFinales[0]?.fecha || '',
+      hoja: inventariosFinales[0]?.hoja || '',
     })
   } catch (error) {
     console.error(error)
@@ -5268,6 +5301,11 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
   return (
     <>
+      <Notificacion
+        mensaje={notificacion?.mensaje}
+        tipo={notificacion?.tipo}
+        onCerrar={() => setNotificacion(null)}
+      />
       <div
         onClick={cerrarPanelesYModulo}
         style={{
@@ -5280,8 +5318,6 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         }}
       >
         <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Planta Bayona</h1>
-
-        <Notificacion mensaje={notificacion} />
 
         {recibeAvisosPrueba && avisoPruebaElectrica && (
           <button
@@ -6943,6 +6979,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     puedeEditarPedidosEntregados={puedeEditarPedidosEntregadosBodega}
     puedeGestionarPedidos={puedeOperarComoBodega}
     puedeAprobarPedidos={puedeRevisarSolicitudesBodega}
+    puedeCrearPedido={puedeCrearPedidoBodega}
     archivo={archivoInventarioBodega}
     inventarios={inventariosBodega}
     solicitantes={solicitantesValeBodega}
