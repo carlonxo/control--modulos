@@ -133,9 +133,9 @@ function PreciosMaterialesModal({
       ) : (
         <div style={{ display: 'grid', gap: '8px' }}>
           {secciones.map((seccion, index) => (
-            <details
-              key={seccion}
-              defaultOpen={index === 0}
+            <DetalleDesplegable
+              key={`${seccion}-${index}`}
+              abiertoInicial={index === 0}
               style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}
             >
               <summary
@@ -379,7 +379,7 @@ function PreciosMaterialesModal({
                     </div>
                   ))}
               </div>
-            </details>
+            </DetalleDesplegable>
           ))}
         </div>
       )}
@@ -413,6 +413,15 @@ function PreciosMaterialesModal({
         </button>
       </div>
     </div>
+  )
+}
+
+function DetalleDesplegable({ abiertoInicial, children, style }) {
+  const [abierto, setAbierto] = useState(abiertoInicial)
+  return (
+    <details open={abierto} onToggle={(e) => setAbierto(e.currentTarget.open)} style={style}>
+      {children}
+    </details>
   )
 }
 

@@ -26,6 +26,8 @@ import ValesBodegaModal from './components/ValesBodegaModal'
 import BodegaModal from './components/BodegaModal'
 import ProyeccionMaterialesModal from './components/ProyeccionMaterialesModal'
 import UsuariosBodegaModal from './components/UsuariosBodegaModal'
+import AuditoriaModal from './components/AuditoriaModal'
+import MenuLateral from './components/MenuLateral'
 import EquivalenciasMaterialesModal from './components/EquivalenciasMaterialesModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
@@ -36,7 +38,6 @@ import {
   obtenerRangoFechasProtocolos,
   obtenerValorInicialRangoProtocolo,
 } from './utils/fechas'
-import { colorEstado } from './utils/colores'
 import { descargarProtocolosDiariosPdf } from './services/protocolosDiariosPdf'
 import { tienePermiso } from './utils/permisos'
 import {
@@ -163,6 +164,7 @@ import {
   actualizarPlantaAsignadaUsuario,
   obtenerNombrePerfilPorId,
 } from './services/perfilesService'
+import { cargarEventosAuditoria } from './services/auditoriaService'
 import {
   claveProtocoloUnico,
   esEstadoConObservacionAlerta,
@@ -610,6 +612,60 @@ coloresCableBodega.forEach((color) => {
   equivalenciasValeBodega[normalizarTextoComparacion(`CABLE EVA RZ-1 ${color} 6 MM`)] = 'Cable RZ1 6mm (Alimentación)'
 })
 
+function claseEstadoVisualModulo(modulo = {}) {
+  const estado = normalizarTexto(modulo.estado)
+  if (estado === 'en garantia') {
+    return estaDentroDeGarantia(modulo.fecha_prueba_electrica) ? 'garantia' : 'alerta'
+  }
+  return ({
+    'sin iniciar': 'sin-iniciar',
+    canalizado: 'canalizado',
+    cableado: 'cableado',
+    terminaciones: 'terminaciones',
+    'prueba electrica': 'prueba-electrica',
+    'sin instalacion': 'sin-instalacion',
+  })[estado] || 'otro'
+}
+
+function iconoEstadoModulo(modulo = {}) {
+  if (esSolicitudPruebaActiva(modulo.solicitud_prueba)) return '\u26A1'
+  const estado = normalizarTexto(modulo.estado)
+  if (['prueba electrica', 'sin instalacion'].includes(estado)) return '\u2713'
+  if (estado === 'en garantia') return estaDentroDeGarantia(modulo.fecha_prueba_electrica) ? '\u2713' : '!'
+  if (['canalizado', 'cableado', 'terminaciones'].includes(estado)) return '\u2692'
+  return '\u25CB'
+}
+
+function ContenidoTarjetaModulo({ modulo, compacto = false, onMostrarObservacion }) {
+  return (
+    <>
+      <div className="modulo-tarjeta-cabecera">
+        <span className="modulo-estado-icono" aria-label={`Estado: ${modulo.estado || 'sin estado'}`}>
+          {iconoEstadoModulo(modulo)}
+        </span>
+        <span className="modulo-tarjeta-avisos">
+          {modulo.observacion_alerta && (
+            <span
+              title="Ver observación"
+              onClick={(evento) => {
+                evento.stopPropagation()
+                onMostrarObservacion?.(modulo)
+              }}
+            >
+              {'\u{1F6A8}'}
+            </span>
+          )}
+          {modulo.nota && <span title="Este módulo tiene una nota">{'\u{1F4DD}'}</span>}
+        </span>
+      </div>
+      <strong className="modulo-tarjeta-serie">{modulo.serie}</strong>
+      <div className="modulo-tarjeta-dato">{modulo.tipo || '-'}</div>
+      {!compacto && <div className="modulo-tarjeta-dato modulo-tarjeta-proyecto">{modulo.proyecto || '-'}</div>}
+      {!compacto && <div className="modulo-tarjeta-estado">{modulo.estado || 'Sin estado'}</div>}
+    </>
+  )
+}
+
 function App() {
   const [datos, setDatos] = useState([])
 const [moduloSeleccionado, setModuloSeleccionado] = useState(null)
@@ -664,6 +720,11 @@ const [mostrarReintegrar, setMostrarReintegrar] = useState(false)
 const [mostrarDescargaProtocolos, setMostrarDescargaProtocolos] = useState(false)
 const [mostrarPreciosMateriales, setMostrarPreciosMateriales] = useState(false)
 const [mostrarUsuariosBodega, setMostrarUsuariosBodega] = useState(false)
+const [mostrarAuditoria, setMostrarAuditoria] = useState(false)
+const [eventosAuditoria, setEventosAuditoria] = useState([])
+const [cargandoAuditoria, setCargandoAuditoria] = useState(false)
+const [errorAuditoria, setErrorAuditoria] = useState('')
+const [limiteAuditoria, setLimiteAuditoria] = useState(1000)
 const [mostrarEquivalenciasMateriales, setMostrarEquivalenciasMateriales] = useState(false)
 const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(false)
 const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
@@ -740,10 +801,20 @@ const [inventariosBodega, setInventariosBodega] = useState([])
 const [inventarioBodegaSeleccionadoId, setInventarioBodegaSeleccionadoId] = useState('')
 const [cargandoInventariosBodega, setCargandoInventariosBodega] = useState(false)
 const [leyendoInventarioBodega, setLeyendoInventarioBodega] = useState(false)
-const [solicitudMaterialBodegaInicial, setSolicitudMaterialBodegaInicial] = useState(0)
+const [solicitudMaterialBodegaInicial, setSolicitudMaterialBodegaInicial] = useState(null)
 const [guardandoPedidoBodega, setGuardandoPedidoBodega] = useState(false)
 const [guardandoDevolucionBodega, setGuardandoDevolucionBodega] = useState(false)
 const [guardandoRecepcionBodega, setGuardandoRecepcionBodega] = useState(false)
+
+useEffect(() => {
+  const cuadro = window.requestAnimationFrame(() => {
+    document.querySelectorAll('.contenedor-linea-modulos').forEach((contenedor) => {
+      contenedor.scrollLeft = 0
+    })
+  })
+
+  return () => window.cancelAnimationFrame(cuadro)
+}, [perfil?.id, mostrarVistaGeneral])
 const [guardandoDespachoBodega, setGuardandoDespachoBodega] = useState(false)
 const [entregandoSolicitudBodega, setEntregandoSolicitudBodega] = useState(false)
 const [usuariosBodega, setUsuariosBodega] = useState([])
@@ -802,7 +873,8 @@ const puedeEditarPedidosEntregadosBodega = perfil?.rol === 'admin'
 const puedeCrearPedidoBodega = ['admin', 'operador', 'electrico'].includes(perfil?.rol)
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
-const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales || puedeVerBodega
+const puedeVerAuditoria = perfil?.rol === 'admin'
+const puedeVerMenuAcciones = puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales || puedeVerBodega || puedeVerAuditoria
 const puedeVerMenuModulo = tienePermiso(perfil?.rol, 'verMenuModulo')
 const esRolBodega = perfil?.rol === 'bodega'
 const puedeOperarComoBodega = esRolBodega || perfil?.rol === 'analista'
@@ -981,6 +1053,13 @@ function mostrarNotificacion(mensaje, opciones = {}) {
 
 function fechaActualLocalInput() {
   const fecha = new Date()
+  const zonaLocal = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000)
+  return zonaLocal.toISOString().slice(0, 10)
+}
+
+function fechaLocalDiasAtras(dias = 0) {
+  const fecha = new Date()
+  fecha.setDate(fecha.getDate() - Number(dias || 0))
   const zonaLocal = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000)
   return zonaLocal.toISOString().slice(0, 10)
 }
@@ -1172,6 +1251,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
     setMostrarDescargaProtocolos,
     setMostrarPreciosMateriales,
     setMostrarUsuariosBodega,
+    setMostrarAuditoria,
     setMostrarEquivalenciasMateriales,
     setMostrarBalanceMateriales,
     setMostrarBalanceMantencion,
@@ -1455,7 +1535,7 @@ async function crearModulo() {
   setMostrarNuevoModulo(false)
   setCreandoModulo(false)
 
-  alert('Módulo creado correctamente')
+  mostrarNotificacion('Módulo creado correctamente')
 }
 
 function abrirIngresoModuloEnExtremo(linea, extremo) {
@@ -1568,6 +1648,36 @@ async function abrirUsuariosBodega() {
   setMostrarMenuAcciones(false)
   setMostrarUsuariosBodega(true)
   await cargarUsuariosBodega()
+}
+
+async function abrirAuditoria() {
+  if (!puedeVerAuditoria) return
+  cerrarVentanasEmergentes()
+  setMostrarMenuAcciones(false)
+  setMostrarAuditoria(true)
+  await consultarAuditoria({
+    fechaDesde: fechaLocalDiasAtras(30),
+    fechaHasta: fechaActualLocalInput(),
+    tabla: '',
+    accion: '',
+  })
+}
+
+async function consultarAuditoria(filtros = {}) {
+  if (!puedeVerAuditoria) return
+  setCargandoAuditoria(true)
+  setErrorAuditoria('')
+  const { data, error, limite } = await cargarEventosAuditoria({ supabase, ...filtros })
+  setCargandoAuditoria(false)
+  setLimiteAuditoria(limite || 1000)
+
+  if (error) {
+    setEventosAuditoria([])
+    setErrorAuditoria(`No se pudo consultar la auditoría: ${error.message || 'error desconocido'}`)
+    return
+  }
+
+  setEventosAuditoria(data || [])
 }
 
 async function abrirEquivalenciasMateriales() {
@@ -2787,18 +2897,33 @@ async function cargarInventariosBodega(preferido = null) {
   return inventariosFiltrados
 }
 
-async function abrirBodega({ abrirSolicitudMaterial = false } = {}) {
+async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null } = {}) {
   if (!puedeVerBodega) return
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   if (abrirSolicitudMaterial) {
-    setSolicitudMaterialBodegaInicial((actual) => actual + 1)
+    setSolicitudMaterialBodegaInicial({
+      id: Date.now(),
+      proyecto: datosSolicitud?.proyecto || '',
+      tipoModulo: datosSolicitud?.tipoModulo || '',
+      serie: datosSolicitud?.serie || '',
+    })
   }
   setMostrarBodega(true)
   await cargarSolicitantesValesBodega()
   await cargarInventariosBodega()
   await cargarAlertasBodega()
   await cargarRecepcionesBodega()
+}
+
+function abrirSolicitudMaterialDesdeModulo() {
+  if (perfil?.rol !== 'electrico' || !moduloSeleccionado) return
+  const datosSolicitud = {
+    proyecto: moduloSeleccionado.proyecto || '',
+    tipoModulo: moduloSeleccionado.tipo || '',
+    serie: moduloSeleccionado.serie || '',
+  }
+  abrirBodega({ abrirSolicitudMaterial: true, datosSolicitud })
 }
 
 function periodoMesDesplazado(desplazamiento) {
@@ -5297,6 +5422,126 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     ultimosFinalizados,
   } = calcularIndicadoresTablero(datos, historial)
 
+  const inicialesUsuario = String(perfil?.nombre || 'Usuario')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((parte) => parte.charAt(0).toUpperCase())
+    .join('')
+
+  const itemsMenuLateral = [
+    {
+      id: 'inicio',
+      etiqueta: 'Planta Bayona',
+      icono: '\u2302',
+      activo: !mostrarKPI,
+      onClick: () => {
+        cerrarVentanasEmergentes()
+        setMostrarKPI(false)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      },
+    },
+    {
+      id: 'indicadores',
+      etiqueta: 'Indicadores',
+      icono: '\u25A5',
+      activo: mostrarKPI,
+      onClick: () => {
+        cerrarVentanasEmergentes()
+        setMostrarKPI(true)
+      },
+    },
+    {
+      id: 'protocolos',
+      etiqueta: 'Protocolos',
+      icono: '\u25A4',
+      visible: puedeVerProtocolosMensuales,
+      activo: mostrarProtocolosMensuales,
+      onClick: abrirProtocolosMensuales,
+    },
+    {
+      id: 'balance-materiales',
+      etiqueta: 'Balance materiales',
+      icono: '\u25A6',
+      visible: puedeVerBalanceMateriales,
+      activo: mostrarBalanceMateriales,
+      onClick: abrirBalanceMateriales,
+    },
+    {
+      id: 'mantencion',
+      etiqueta: 'Mantención',
+      icono: '\u2692',
+      visible: puedeVerBalanceMantencion,
+      activo: mostrarBalanceMantencion,
+      onClick: abrirBalanceMantencion,
+    },
+    {
+      id: 'bodega',
+      etiqueta: perfil?.rol === 'electrico' ? 'Solicitar material' : 'Bodega',
+      icono: '\u25A3',
+      visible: puedeVerBodega,
+      activo: mostrarBodega,
+      onClick: () => abrirBodega({ abrirSolicitudMaterial: perfil?.rol === 'electrico' }),
+    },
+    {
+      id: 'reintegrar',
+      etiqueta: 'Reintegrar',
+      icono: '\u21BA',
+      visible: puedeAgregarModulos,
+      separadorAntes: true,
+      activo: mostrarReintegrar,
+      onClick: abrirReintegrarModulo,
+    },
+    {
+      id: 'descargar-protocolos',
+      etiqueta: 'Descargar protocolos',
+      icono: '\u21E9',
+      visible: puedeDescargarProtocolosDiarios,
+      activo: mostrarDescargaProtocolos,
+      onClick: descargarProtocolosDiarios,
+    },
+    {
+      id: 'precios',
+      etiqueta: 'Precios materiales',
+      icono: '$',
+      visible: puedeVerPreciosMateriales,
+      activo: mostrarPreciosMateriales,
+      onClick: abrirPreciosMateriales,
+    },
+    {
+      id: 'proyeccion',
+      etiqueta: 'Proyección materiales',
+      icono: '\u2197',
+      visible: puedeVerProyeccionMateriales,
+      activo: mostrarProyeccionMateriales,
+      onClick: abrirProyeccionMateriales,
+    },
+    {
+      id: 'equivalencias',
+      etiqueta: 'Equivalencias',
+      icono: '\u21C4',
+      visible: puedeAdministrarEquivalenciasMateriales,
+      activo: mostrarEquivalenciasMateriales,
+      onClick: abrirEquivalenciasMateriales,
+    },
+    {
+      id: 'usuarios',
+      etiqueta: 'Usuarios',
+      icono: '\u2659',
+      visible: puedeAdministrarUsuariosBodega,
+      activo: mostrarUsuariosBodega,
+      onClick: abrirUsuariosBodega,
+    },
+    {
+      id: 'auditoria',
+      etiqueta: 'Auditoría',
+      icono: '\u25C9',
+      visible: puedeVerAuditoria,
+      activo: mostrarAuditoria,
+      onClick: abrirAuditoria,
+    },
+  ]
+
   
 
   return (
@@ -5307,6 +5552,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         onCerrar={() => setNotificacion(null)}
       />
       <div
+        className="contenido-aplicacion"
         onClick={cerrarPanelesYModulo}
         style={{
           padding: '20px',
@@ -5317,7 +5563,47 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           margin: '0 auto',
         }}
       >
-        <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Planta Bayona</h1>
+        <header className="encabezado-control-modular" onClick={(e) => e.stopPropagation()}>
+          <div className="encabezado-marca">
+            <strong>Planta Bayona</strong>
+            <span className="encabezado-separador" />
+            <span>Control modular</span>
+          </div>
+
+          <div className="encabezado-usuario-acciones">
+            {(recibeAvisosPrueba || puedeRevisarSolicitudesBodega) && (
+              <button
+                type="button"
+                className="encabezado-boton-avisos"
+                aria-label="Ver avisos pendientes"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const abrir = !mostrarLlamadosPendientes
+                  cerrarVentanasEmergentes()
+                  setMostrarLlamadosPendientes(abrir)
+                }}
+              >
+                {'\u{1F514}'}
+                {totalAvisosPendientes > 0 && (
+                  <span className="encabezado-contador-avisos">{totalAvisosPendientes}</span>
+                )}
+              </button>
+            )}
+
+            <div className="encabezado-perfil">
+              <span className="encabezado-avatar">{inicialesUsuario}</span>
+              <span className="encabezado-identidad">
+                <strong>{perfil?.nombre || 'Usuario'}</strong>
+                <small>{perfil?.rol || 'sin rol'}</small>
+              </span>
+            </div>
+
+            <span className="encabezado-separador encabezado-separador-derecho" />
+            <button type="button" className="encabezado-salir" onClick={() => supabase.auth.signOut()}>
+              <span aria-hidden="true">{'\u21AA'}</span> Salir
+            </button>
+          </div>
+        </header>
 
         {recibeAvisosPrueba && avisoPruebaElectrica && (
           <button
@@ -5327,7 +5613,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             }}
             style={{
               position: 'fixed',
-              top: '14px',
+              top: '78px',
               left: '50%',
               transform: 'translateX(-50%)',
               width: 'calc(100vw - 32px)',
@@ -5370,61 +5656,13 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
         {(recibeAvisosPrueba || puedeRevisarSolicitudesBodega) && (
           <>
-            <button
-              aria-label="Ver avisos pendientes"
-              onClick={(e) => {
-                e.stopPropagation()
-                const abrir = !mostrarLlamadosPendientes
-                cerrarVentanasEmergentes()
-                setMostrarLlamadosPendientes(abrir)
-              }}
-              style={{
-                position: 'fixed',
-                left: '12px',
-                bottom: '20px',
-                width: '52px',
-                height: '52px',
-                borderRadius: '50%',
-                border: '2px solid white',
-                background: '#1976d2',
-                color: 'white',
-                fontSize: '24px',
-                zIndex: 2500,
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
-              }}
-            >
-              {'\u{1F514}'}
-              {totalAvisosPendientes > 0 && (
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: '-6px',
-                    right: '-6px',
-                    minWidth: '20px',
-                    height: '20px',
-                    padding: '0 4px',
-                    boxSizing: 'border-box',
-                    borderRadius: '10px',
-                    background: '#d32f2f',
-                    color: 'white',
-                    fontSize: '12px',
-                    lineHeight: '20px',
-                    fontWeight: 700,
-                  }}
-                >
-                  {totalAvisosPendientes}
-                </span>
-              )}
-            </button>
-
             {mostrarLlamadosPendientes && (
               <div
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   position: 'fixed',
-                  left: '12px',
-                  bottom: '82px',
+                  right: '20px',
+                  top: '76px',
                   width: 'calc(100vw - 24px)',
                   maxWidth: '360px',
                   maxHeight: '60vh',
@@ -5513,7 +5751,18 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           </>
         )}
 
-        {puedeVerMenuAcciones && (
+        <MenuLateral
+          abierto={mostrarMenuAcciones}
+          items={itemsMenuLateral}
+          onToggle={() => {
+            const abrir = !mostrarMenuAcciones
+            cerrarVentanasEmergentes()
+            setMostrarMenuAcciones(abrir)
+          }}
+          onCerrar={() => setMostrarMenuAcciones(false)}
+        />
+
+        {false && puedeVerMenuAcciones && (
           <>
             <button
               aria-label="Abrir menú de acciones"
@@ -5570,7 +5819,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #555',
-                      background: '#1565c0',
+                      background: '#00695c',
                       color: 'white',
                       cursor: 'pointer',
                       fontWeight: 700,
@@ -5589,7 +5838,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #555',
-                      background: '#2e7d32',
+                      background: '#00695c',
                       color: 'white',
                       cursor: 'pointer',
                       fontWeight: 700,
@@ -5608,7 +5857,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #555',
-                      background: '#6a1b9a',
+                      background: '#00695c',
                       color: 'white',
                       cursor: 'pointer',
                       fontWeight: 700,
@@ -5627,7 +5876,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #555',
-                      background: '#1565c0',
+                      background: '#00695c',
                       color: 'white',
                       cursor: 'pointer',
                       fontWeight: 700,
@@ -5646,7 +5895,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #78909c',
-                      background: '#37474f',
+                      background: '#00695c',
                       color: 'white',
                       cursor: 'pointer',
                       fontWeight: 700,
@@ -5684,7 +5933,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #555',
-                      background: '#455a64',
+                      background: '#00695c',
                       color: 'white',
                       cursor: 'pointer',
                       fontWeight: 700,
@@ -5693,33 +5942,31 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     Usuarios
                   </button>
                 )}
+                {puedeVerAuditoria && (
+                  <button
+                    type="button"
+                    onClick={abrirAuditoria}
+                    style={{
+                      width: '100%',
+                      marginTop: '8px',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #78909c',
+                      background: '#00695c',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Auditoría
+                  </button>
+                )}
               </div>
             )}
           </>
         )}
 
-        <button
-  onClick={() => supabase.auth.signOut()}
-  style={{
-    marginBottom: '20px',
-  }}
->
-  Cerrar sesión
-</button>
-
-        
-             <div
-  style={{
-    marginBottom: '15px',
-    color: '#ccc',
-  }}
->
-  Usuario: {perfil?.nombre}
-  {' | '}
-  Rol: {perfil?.rol}
-</div>
-
-<div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+<div className="navegacion-superior-antigua" style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
   <button
     onClick={() => setMostrarKPI(!mostrarKPI)}
     style={{
@@ -6185,6 +6432,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
 </div>
 
+<section className="tablero-lineas">
 {mostrarVistaGeneral ? (
   <div onClick={cerrarPanelesYModulo} style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 1.2 }}>
     <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Vista general de todas las líneas</h2>
@@ -6201,6 +6449,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         </h3>
 
         <div
+          className="contenedor-linea-modulos"
           onDragOver={(e) => {
             if (!moduloEnDrag) return
             e.preventDefault()
@@ -6229,9 +6478,9 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 flex: '0 0 34px',
                 minHeight: '60px',
                 borderRadius: '5px',
-                border: '1px dashed #90caf9',
-                background: '#0d47a1',
-                color: 'white',
+                border: '1px dashed #607d8b',
+                background: '#111d24',
+                color: '#cfd8dc',
                 fontSize: '20px',
                 fontWeight: 800,
                 cursor: 'pointer',
@@ -6247,7 +6496,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
-                className={esSolicitudPruebaActiva(pos.solicitud_prueba) ? 'modulo-prueba-pendiente' : undefined}
+                className={`tarjeta-modulo-tablero tarjeta-modulo-compacta estado-${claseEstadoVisualModulo(pos)}${esSolicitudPruebaActiva(pos.solicitud_prueba) ? ' modulo-prueba-pendiente' : ''}`}
                 draggable={puedeMoverModulos && pos.serie ? true : false}
                 onDragStart={() => puedeMoverModulos && pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
@@ -6305,68 +6554,19 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                   }
                 }}
                 style={{
-                  width: '70px',
-                  minHeight: '60px',
-                  padding: '3px',
+                  width: '78px',
+                  minHeight: '76px',
+                  padding: '5px',
                   borderRadius: '5px',
                   cursor: puedeMoverModulos && pos.serie ? 'grab' : 'pointer',
-                  backgroundColor: pos.estado
-                    ? colorEstado(pos.estado, pos)
-                    : '#222',
                   color: 'white',
                   boxSizing: 'border-box',
-                  flex: '0 0 70px',
+                  flex: '0 0 78px',
                   fontSize: '9px',
                   transition: 'opacity 0.2s',
                 }}
               >
-                {pos.serie ? (
-                  <>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <strong>{pos.serie}</strong>
-
-                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                        {pos.observacion_alerta && (
-                          <span
-                            title="Ver observación"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              mostrarObservacionAlerta(pos)
-                            }}
-                            style={{
-                              fontSize: '18px',
-                              cursor: 'pointer',
-                              lineHeight: 1,
-                            }}
-                          >
-                            {'\u{1F6A8}'}
-                          </span>
-                        )}
-
-                        {pos.nota && (
-                          <span
-                            title="Este módulo tiene una nota"
-                            style={{
-                              fontSize: '18px',
-                              lineHeight: 1,
-                            }}
-                          >
-                            {'\u{1F4DD}'}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div>{pos.tipo}</div>
-                  </>
-                ) : (
-                  <div>Vacío</div>
-                )}
+                <ContenidoTarjetaModulo modulo={pos} compacto onMostrarObservacion={mostrarObservacionAlerta} />
               </div>
             ))}
           {puedeAgregarModulos && (
@@ -6380,9 +6580,9 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 flex: '0 0 34px',
                 minHeight: '60px',
                 borderRadius: '5px',
-                border: '1px dashed #90caf9',
-                background: '#0d47a1',
-                color: 'white',
+                border: '1px dashed #607d8b',
+                background: '#111d24',
+                color: '#cfd8dc',
                 fontSize: '20px',
                 fontWeight: 800,
                 cursor: 'pointer',
@@ -6410,6 +6610,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         </h2>
 
         <div
+          className="contenedor-linea-modulos"
           onDragOver={(e) => {
             if (!moduloEnDrag) return
             e.preventDefault()
@@ -6438,9 +6639,9 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 flex: '0 0 54px',
                 minHeight: '120px',
                 borderRadius: '8px',
-                border: '1px dashed #90caf9',
-                background: '#0d47a1',
-                color: 'white',
+                border: '1px dashed #607d8b',
+                background: '#111d24',
+                color: '#cfd8dc',
                 fontSize: '30px',
                 fontWeight: 800,
                 cursor: 'pointer',
@@ -6456,7 +6657,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             .map((pos) => (
               <div
                 key={`${pos.linea}-${pos.posicion}`}
-                className={esSolicitudPruebaActiva(pos.solicitud_prueba) ? 'modulo-prueba-pendiente' : undefined}
+                className={`tarjeta-modulo-tablero estado-${claseEstadoVisualModulo(pos)}${esSolicitudPruebaActiva(pos.solicitud_prueba) ? ' modulo-prueba-pendiente' : ''}`}
                 draggable={puedeMoverModulos && pos.serie ? true : false}
                 onDragStart={() => puedeMoverModulos && pos.serie && setModuloEnDrag(pos)}
                 onDragOver={(e) => {
@@ -6520,69 +6721,18 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   }
 }}
                 style={{
-                  width: '150px',
-                  minHeight: '120px',
-                  padding: '8px',
+                  width: '140px',
+                  minHeight: '132px',
+                  padding: '9px',
                   borderRadius: '8px',
                   cursor: puedeMoverModulos && pos.serie ? 'grab' : 'pointer',
-                  backgroundColor: pos.estado
-                    ? colorEstado(pos.estado, pos)
-                    : '#222',
                   color: 'white',
                   boxSizing: 'border-box',
-                  flex: '0 0 150px',
+                  flex: '0 0 140px',
                   transition: 'opacity 0.2s',
                 }}
               >
-                {pos.serie ? (
-                  <>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <strong>{pos.serie}</strong>
-
-                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                        {pos.observacion_alerta && (
-                          <span
-                            title="Ver observación"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              mostrarObservacionAlerta(pos)
-                            }}
-                            style={{
-                              fontSize: '18px',
-                              cursor: 'pointer',
-                              lineHeight: 1,
-                            }}
-                          >
-                            {'\u{1F6A8}'}
-                          </span>
-                        )}
-
-                        {pos.nota && (
-                          <span
-                            title="Este módulo tiene una nota"
-                            style={{
-                              fontSize: '18px',
-                              lineHeight: 1,
-                            }}
-                          >
-                            {'\u{1F4DD}'}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div>{pos.tipo}</div>
-                    <div>{pos.proyecto}</div>
-                    <div>{pos.estado}</div>
-                  </>
-                ) : (
-                  <div>Vacío</div>
-                )}
+                <ContenidoTarjetaModulo modulo={pos} onMostrarObservacion={mostrarObservacionAlerta} />
               </div>
             ))}
           {puedeAgregarModulos && (
@@ -6596,9 +6746,9 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 flex: '0 0 54px',
                 minHeight: '120px',
                 borderRadius: '8px',
-                border: '1px dashed #90caf9',
-                background: '#0d47a1',
-                color: 'white',
+                border: '1px dashed #607d8b',
+                background: '#111d24',
+                color: '#cfd8dc',
                 fontSize: '30px',
                 fontWeight: 800,
                 cursor: 'pointer',
@@ -6613,6 +6763,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     ))}
   </div>
 )}
+</section>
       
 
       {esSolicitudPruebaActiva(moduloSeleccionado?.solicitud_prueba) && puedeResolverPrueba && (
@@ -6780,6 +6931,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       esEstadoPruebaElectrica={esEstadoPruebaElectrica}
       esSolicitudPruebaActiva={esSolicitudPruebaActiva}
       onGuardarCambios={guardarCambios}
+      onSolicitarMaterial={abrirSolicitudMaterialDesdeModulo}
       onSolicitarPrueba={solicitarPruebaElectrica}
       onCancelarSolicitudPrueba={cancelarSolicitudPruebaElectrica}
       onAbrirResumenMateriales={abrirResumenMateriales}
@@ -7182,6 +7334,17 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     guardandoId={guardandoUsuarioBodegaId}
     onGuardarCambios={guardarAsignacionesUsuarios}
     onCerrar={() => setMostrarUsuariosBodega(false)}
+  />
+)}
+
+{mostrarAuditoria && puedeVerAuditoria && (
+  <AuditoriaModal
+    eventos={eventosAuditoria}
+    cargando={cargandoAuditoria}
+    error={errorAuditoria}
+    limite={limiteAuditoria}
+    onConsultar={consultarAuditoria}
+    onCerrar={() => setMostrarAuditoria(false)}
   />
 )}
 

@@ -47,6 +47,46 @@ export function exportarHistorialExcel(historial, fechaDesde, fechaHasta) {
   XLSX.writeFile(libro, `historial_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
+export function exportarAuditoriaExcel(eventos = [], filtros = {}) {
+  if (!eventos.length) {
+    alert('No hay eventos de auditoría para exportar')
+    return
+  }
+
+  const filas = eventos.map((evento) => ({
+    'Fecha y hora': evento.ocurrido_en
+      ? new Date(evento.ocurrido_en).toLocaleString('es-CL', { timeZone: 'America/Santiago' })
+      : '',
+    Usuario: evento.usuario_nombre || '',
+    Rol: evento.usuario_rol || '',
+    Acción: ({ INSERT: 'Creación', UPDATE: 'Modificación', DELETE: 'Eliminación' })[evento.accion] || evento.accion || '',
+    Tabla: evento.tabla || '',
+    'ID del registro': evento.registro_id || '',
+    'Campos modificados': Object.keys(evento.cambios || {}).join(', '),
+    Cambios: serializarJsonExcel(evento.cambios),
+    Antes: serializarJsonExcel(evento.datos_antes),
+    Después: serializarJsonExcel(evento.datos_despues),
+    Transacción: evento.transaccion_id || '',
+    Origen: serializarJsonExcel(evento.origen),
+  }))
+  const hoja = XLSX.utils.json_to_sheet(filas)
+  hoja['!cols'] = [
+    { wch: 22 }, { wch: 24 }, { wch: 14 }, { wch: 15 }, { wch: 28 }, { wch: 38 },
+    { wch: 36 }, { wch: 70 }, { wch: 70 }, { wch: 70 }, { wch: 18 }, { wch: 45 },
+  ]
+  hoja['!autofilter'] = { ref: `A1:L${filas.length + 1}` }
+
+  const libro = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(libro, hoja, 'Auditoría')
+  const desde = filtros.fechaDesde || 'inicio'
+  const hasta = filtros.fechaHasta || new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(libro, `auditoria_${desde}_${hasta}.xlsx`)
+}
+
+function serializarJsonExcel(valor) {
+  return valor ? JSON.stringify(valor) : ''
+}
+
 export function exportarInventarioBodegaExcel(inventario) {
   if (!inventario?.items?.length) {
     alert('No hay inventario para exportar')

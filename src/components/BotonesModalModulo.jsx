@@ -6,6 +6,7 @@ function BotonesModalModulo({
   esEstadoPruebaElectrica,
   esSolicitudPruebaActiva,
   onGuardarCambios,
+  onSolicitarMaterial,
   onSolicitarPrueba,
   onCancelarSolicitudPrueba,
   onAbrirResumenMateriales,
@@ -26,12 +27,28 @@ function BotonesModalModulo({
       <button
         onClick={onGuardarCambios}
         style={{
+          backgroundColor: '#2e7d32',
+          color: 'white',
           padding: '10px',
           flex: 1,
         }}
       >
         {puedeEditarDatosModulo ? 'Guardar cambios' : 'Guardar nota'}
       </button>
+
+      {perfilRol === 'electrico' && (
+        <button
+          onClick={onSolicitarMaterial}
+          style={{
+            backgroundColor: '#2e7d32',
+            color: 'white',
+            padding: '10px',
+            flex: 1,
+          }}
+        >
+          {'\u{1F4E6}'} Solicitar material
+        </button>
+      )}
 
       {puedeGestionarSolicitudPrueba && (
         esEstadoPruebaElectrica(moduloSeleccionado?.estado) ? (
@@ -68,7 +85,7 @@ function BotonesModalModulo({
           <button
             onClick={onSolicitarPrueba}
             style={{
-              backgroundColor: '#1976d2',
+              backgroundColor: '#2e7d32',
               color: 'white',
               padding: '10px',
               flex: 1,
@@ -100,6 +117,8 @@ function BotonesModalModulo({
       <button
         onClick={onCerrar}
         style={{
+          backgroundColor: '#b71c1c',
+          color: 'white',
           padding: '10px',
           flex: 1,
         }}

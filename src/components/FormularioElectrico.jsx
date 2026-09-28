@@ -1,10 +1,12 @@
+import { useState } from 'react'
+
 function FormularioElectrico({ secciones, valores, onChange }) {
   return (
     <div style={{ display: 'grid', gap: '8px', marginBottom: '14px', textAlign: 'left' }}>
-      {secciones.map((seccion, index) => (
-        <details
+      {secciones.map((seccion) => (
+        <DetalleDesplegable
           key={seccion.nombre}
-          defaultOpen={index === 0}
+          abiertoInicial={false}
           style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}
         >
           <summary
@@ -72,9 +74,18 @@ function FormularioElectrico({ secciones, valores, onChange }) {
               )
             })}
           </div>
-        </details>
+        </DetalleDesplegable>
       ))}
     </div>
+  )
+}
+
+function DetalleDesplegable({ abiertoInicial, children, style }) {
+  const [abierto, setAbierto] = useState(abiertoInicial)
+  return (
+    <details open={abierto} onToggle={(e) => setAbierto(e.currentTarget.open)} style={style}>
+      {children}
+    </details>
   )
 }
 

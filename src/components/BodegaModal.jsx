@@ -56,7 +56,7 @@ function BodegaModal({
   codigosBarraBodega = [],
   cargandoCodigosBarraBodega = false,
   guardandoCodigoBarraBodega = false,
-  solicitudMaterialInicial = 0,
+  solicitudMaterialInicial = null,
   soloSolicitarMaterial = false,
   onCambiarArchivo,
   onLeerArchivo,
@@ -136,9 +136,9 @@ function BodegaModal({
   }, [])
   const [pedidoMaterial, setPedidoMaterial] = useState({
     fecha: fechaActualInput(),
-    proyecto: '',
-    tipoModulo: '',
-    serie: '',
+    proyecto: solicitudMaterialInicial?.proyecto || '',
+    tipoModulo: solicitudMaterialInicial?.tipoModulo || '',
+    serie: solicitudMaterialInicial?.serie || '',
     bodega: 'bayona',
     retira: '',
   })
