@@ -5609,9 +5609,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 aria-label="Ver avisos pendientes"
                 onClick={(e) => {
                   e.stopPropagation()
-                  const abrir = !mostrarLlamadosPendientes
-                  cerrarVentanasEmergentes()
-                  setMostrarLlamadosPendientes(abrir)
+                  setMostrarLlamadosPendientes((actual) => !actual)
                 }}
               >
                 {'\u{1F514}'}
