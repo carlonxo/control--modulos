@@ -344,6 +344,56 @@ body {
     padding: 7px 9px;
     font-size: 12px;
   }
+
+  .bodega-resumen-acciones {
+    display: grid !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    align-items: stretch !important;
+    gap: 10px 8px !important;
+  }
+
+  .bodega-resumen-tarjeta {
+    grid-column: span 3;
+    min-width: 0 !important;
+    max-width: none !important;
+    flex: none !important;
+  }
+
+  .bodega-resumen-grupo-acciones {
+    grid-column: 1 / -1;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: 8px !important;
+    margin-left: 0 !important;
+  }
+
+  .bodega-resumen-boton {
+    width: 100% !important;
+    min-width: 0;
+    min-height: 58px !important;
+    margin: 0 !important;
+    padding: 8px 6px !important;
+    box-sizing: border-box;
+    font-size: 12px;
+    line-height: 1.15 !important;
+    white-space: normal;
+  }
+
+  .bodega-tarjeta-resumen {
+    min-height: 76px !important;
+    padding: 10px !important;
+  }
+
+  .bodega-tarjeta-resumen-titulo {
+    font-size: 14px;
+    line-height: 1.15;
+  }
+
+  .bodega-tarjeta-resumen-valor {
+    margin-top: 3px;
+    font-size: 20px !important;
+    line-height: 1;
+  }
 }
 
 @media (max-width: 480px) {

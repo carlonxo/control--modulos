@@ -69,7 +69,6 @@ function BodegaModal({
   onAprobarSolicitudBodega,
   onDenegarSolicitudBodega,
   onEditarSolicitudBodega,
-  onExportarInventario,
   onImprimirPedidos,
   onImprimirPedidosGeneral,
   onImprimirHistorialVales,
@@ -641,13 +640,13 @@ function BodegaModal({
             </button>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'stretch', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
-            <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+          <div className="bodega-resumen-acciones" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'stretch', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
+            <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
               <Tarjeta titulo="Materiales" valor={inventarioSeleccionado?.totalItems || 0} />
             </div>
 
             {mostrarPedidosHoy && (
-              <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+              <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
                 <Tarjeta
                   titulo="Pedidos hoy"
                   valor={pedidosBodegaHoy.length}
@@ -657,7 +656,7 @@ function BodegaModal({
             )}
 
             {puedeOperarBodega && (
-              <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+              <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
                 <Tarjeta
                   titulo="Material recepcionado"
                   valor={recepcionesBodega.length}
@@ -667,7 +666,7 @@ function BodegaModal({
             )}
 
             {puedeOperarBodega && (
-              <div style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+              <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
                 <Tarjeta
                   titulo="Material despachado"
                   valor={despachosBodega.length}
@@ -676,69 +675,53 @@ function BodegaModal({
               </div>
             )}
 
-            {puedeExportarInventario && (
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch', marginLeft: 'auto' }}>
-                {puedeOperarBodega && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMostrarSalidaMaterial((actual) => !actual)
-                        setMostrarRecepcionarMaterial(false)
-                        setMostrarCrearPedido(false)
-                        setMostrarCrearDevolucion(false)
-                        setMostrarIngresoProveedor(false)
-                      }}
-                      style={{
-                        ...botonAccionInventarioCompacto,
-                        background: '#5d4037',
-                        borderColor: '#a1887f',
-                      }}
-                    >
-                      <span>Despachar</span>
-                      <span>material</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMostrarRecepcionarMaterial((actual) => !actual)
-                        setMostrarCrearPedido(false)
-                        setMostrarCrearDevolucion(false)
-                        setMostrarIngresoProveedor(false)
-                        setMostrarSalidaMaterial(false)
-                      }}
-                      style={{
-                        ...botonAccionInventarioCompacto,
-                        background: '#1b5e20',
-                        borderColor: '#66bb6a',
-                      }}
-                    >
-                      <span>Recepcionar</span>
-                      <span>material</span>
-                    </button>
-                  </>
-                )}
+            {puedeExportarInventario && puedeOperarBodega && (
+              <div className="bodega-resumen-grupo-acciones" style={{ display: 'flex', gap: '10px', alignItems: 'stretch', marginLeft: 'auto' }}>
                 <button
+                  className="bodega-resumen-boton"
                   type="button"
-                  onClick={onExportarInventario}
-                  disabled={!inventarioSeleccionado?.items?.length}
+                  onClick={() => {
+                    setMostrarSalidaMaterial((actual) => !actual)
+                    setMostrarRecepcionarMaterial(false)
+                    setMostrarCrearPedido(false)
+                    setMostrarCrearDevolucion(false)
+                    setMostrarIngresoProveedor(false)
+                  }}
                   style={{
                     ...botonAccionInventarioCompacto,
-                    background: '#1565c0',
-                    borderColor: '#777',
-                    opacity: !inventarioSeleccionado?.items?.length ? 0.7 : 1,
-                    cursor: !inventarioSeleccionado?.items?.length ? 'not-allowed' : 'pointer',
+                    background: '#5d4037',
+                    borderColor: '#a1887f',
                   }}
                 >
-                  <span>Exportar</span>
-                  <span>inventario</span>
+                  <span>Despachar</span>
+                  <span>material</span>
+                </button>
+                <button
+                  className="bodega-resumen-boton"
+                  type="button"
+                  onClick={() => {
+                    setMostrarRecepcionarMaterial((actual) => !actual)
+                    setMostrarCrearPedido(false)
+                    setMostrarCrearDevolucion(false)
+                    setMostrarIngresoProveedor(false)
+                    setMostrarSalidaMaterial(false)
+                  }}
+                  style={{
+                    ...botonAccionInventarioCompacto,
+                    background: '#1b5e20',
+                    borderColor: '#66bb6a',
+                  }}
+                >
+                  <span>Recepcionar</span>
+                  <span>material</span>
                 </button>
               </div>
             )}
 
             {puedeAdministrar && (
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
+              <div className="bodega-resumen-grupo-acciones" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
                 <button
+                  className="bodega-resumen-boton"
                   type="button"
                   onClick={() => {
                     setMostrarCrearPedido((actual) => !actual)
@@ -753,6 +736,7 @@ function BodegaModal({
                   Crear pedido
                 </button>
                 <button
+                  className="bodega-resumen-boton"
                   type="button"
                   onClick={() => {
                     setMostrarCrearDevolucion((actual) => !actual)
@@ -769,8 +753,9 @@ function BodegaModal({
               </div>
             )}
             {!puedeAdministrar && !modoSoloBodega && puedeCrearPedido && (
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
+              <div className="bodega-resumen-grupo-acciones" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
                 <button
+                  className="bodega-resumen-boton"
                   type="button"
                   onClick={() => {
                     setMostrarCrearPedido((actual) => !actual)
@@ -783,6 +768,7 @@ function BodegaModal({
                 </button>
                 {!soloSolicitarMaterial && (
                   <button
+                    className="bodega-resumen-boton"
                     type="button"
                     onClick={() => {
                       setMostrarCrearDevolucion((actual) => !actual)
@@ -3371,6 +3357,7 @@ function Tarjeta({ titulo, valor, onClick }) {
 
   return (
     <div
+      className="bodega-tarjeta-resumen"
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
@@ -3385,8 +3372,8 @@ function Tarjeta({ titulo, valor, onClick }) {
         boxSizing: 'border-box',
       }}
     >
-      <div style={{ color: '#ccc', fontWeight: 700 }}>{titulo}</div>
-      <div style={{ color: '#66bb6a', fontSize: '20px', fontWeight: 900 }}>{valor}</div>
+      <div className="bodega-tarjeta-resumen-titulo" style={{ color: '#ccc', fontWeight: 700 }}>{titulo}</div>
+      <div className="bodega-tarjeta-resumen-valor" style={{ color: '#66bb6a', fontSize: '20px', fontWeight: 900 }}>{valor}</div>
     </div>
   )
 }

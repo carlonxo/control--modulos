@@ -5499,6 +5499,15 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       onClick: () => abrirBodega({ seccion: 'cargar-inventario' }),
     },
     {
+      id: 'bodega-exportar-inventario',
+      etiqueta: 'Exportar inventario',
+      icono: '\u21E9',
+      nivel: 1,
+      visible: (mostrarBodega || esRolBodega) && puedeExportarInventarioBodega,
+      activo: false,
+      onClick: exportarInventarioBodegaActual,
+    },
+    {
       id: 'bodega-historial-vales',
       etiqueta: 'Historial de vales',
       icono: '\u25F7',
@@ -7206,7 +7215,6 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onAprobarSolicitudBodega={aprobarSolicitudBodega}
     onDenegarSolicitudBodega={denegarSolicitudBodega}
     onEditarSolicitudBodega={editarSolicitudBodega}
-    onExportarInventario={exportarInventarioBodegaActual}
     onImprimirPedidos={imprimirPedidosBodegaHoy}
     onImprimirPedidosGeneral={imprimirPedidosBodegaHoyGeneral}
     onImprimirHistorialVales={imprimirHistorialValesBodega}
