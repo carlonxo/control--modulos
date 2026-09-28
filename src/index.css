@@ -118,6 +118,60 @@ body {
   text-align: left;
 }
 
+.detalle-cobro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4200;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.detalle-cobro-modal {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid white;
+  border-radius: 10px;
+  background: #222;
+  color: white;
+  text-align: left;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.detalle-cobro-encabezado {
+  flex: 0 0 auto;
+  padding: 18px;
+  border-bottom: 1px solid #4c4c4c;
+  background: #222;
+}
+
+.detalle-cobro-cuerpo {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 600px) {
+  .detalle-cobro-overlay {
+    padding: 8px;
+  }
+
+  .detalle-cobro-modal {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .detalle-cobro-encabezado {
+    padding: 14px;
+  }
+}
+
 .encabezado-marca,
 .encabezado-usuario-acciones,
 .encabezado-perfil {

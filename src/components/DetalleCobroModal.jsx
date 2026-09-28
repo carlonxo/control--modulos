@@ -11,50 +11,52 @@ function DetalleCobroModal({
 }) {
   return (
     <div
-      onClick={onClickFondo}
-      style={{
-        position: 'fixed',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 'calc(100vw - 32px)',
-        maxWidth: '560px',
-        maxHeight: 'calc(100vh - 32px)',
-        overflowY: 'auto',
-        boxSizing: 'border-box',
-        padding: '18px',
-        background: '#222',
-        border: '1px solid white',
-        borderRadius: '10px',
-        zIndex: 1500,
-        color: 'white',
-        textAlign: 'left',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+      className="detalle-cobro-overlay"
+      onClick={(evento) => {
+        if (evento.target !== evento.currentTarget) return
+        onClickFondo?.()
+        onCerrar()
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start', marginBottom: '12px' }}>
-        <div>
-          <h3 style={{ margin: 0 }}>Detalle de cobro</h3>
-          <div style={{ color: '#ccc', marginTop: '4px' }}>
-            Serie: {detalle.serie || '-'}
+      <section
+        className="detalle-cobro-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detalle-cobro-titulo"
+        onClick={(evento) => evento.stopPropagation()}
+      >
+        <div
+          className="detalle-cobro-encabezado"
+          style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}
+        >
+          <div>
+            <h3 id="detalle-cobro-titulo" style={{ margin: 0 }}>Detalle de cobro</h3>
+            <div style={{ color: '#ccc', marginTop: '4px' }}>
+              Serie: {detalle.serie || '-'}
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={onCerrar}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #b85c5c',
+              background: '#8b2525',
+              color: 'white',
+              cursor: 'pointer',
+            }}
+          >
+            Cerrar
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onCerrar}
+
+        <div
+          className="detalle-cobro-cuerpo"
           style={{
-            padding: '8px 12px',
-            borderRadius: '8px',
-            border: '1px solid #777',
-            background: '#555',
-            color: 'white',
-            cursor: 'pointer',
+            padding: '14px 18px 18px',
           }}
         >
-          Cerrar
-        </button>
-      </div>
-
       {detalle.lineas.length === 0 ? (
         <p style={{ color: '#ccc' }}>No hay cobros asociados a este valor.</p>
       ) : (
@@ -179,7 +181,9 @@ function DetalleCobroModal({
       >
         <span>Total detalle</span>
         <span>{formatearPrecio(detalle.total)}</span>
-      </div>
+        </div>
+        </div>
+      </section>
     </div>
   )
 }

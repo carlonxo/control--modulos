@@ -127,6 +127,7 @@ function BodegaModal({
   useEffect(() => {
     const overflowBodyAnterior = document.body.style.overflow
     const overflowHtmlAnterior = document.documentElement.style.overflow
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
     document.body.style.overflow = 'hidden'
     document.documentElement.style.overflow = 'hidden'
 

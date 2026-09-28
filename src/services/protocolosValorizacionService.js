@@ -117,12 +117,12 @@ function calcularValoresProtocoloMensual({
     const cobroMantencion = calcularCobroCantidadProtocolo(detalle.mantencion, precioUnitario, parsearCantidadProtocolo)
     const cobroModificacion = calcularCobroCantidadProtocolo(detalle.modificacion, precioUnitario, parsearCantidadProtocolo)
     const detalleMantencionItem = [
-      cobroMantencion.subtotalNuevo > 0 ? { material: itemProtocolo, materialPrecio, cantidad: cobroMantencion.nuevo, precioUnitario: cobroMantencion.precioNuevo, subtotal: cobroMantencion.subtotalNuevo, tipoCantidad: 'Nuevo' } : null,
-      cobroMantencion.subtotalReutilizado > 0 ? { material: `${itemProtocolo} reutilizado`, materialPrecio, cantidad: cobroMantencion.reutilizado, precioUnitario: cobroMantencion.precioReutilizado, subtotal: cobroMantencion.subtotalReutilizado, tipoCantidad: 'Reutilizado 50%' } : null,
+      cobroMantencion.nuevo !== 0 ? { material: itemProtocolo, materialPrecio, cantidad: cobroMantencion.nuevo, precioUnitario: cobroMantencion.precioNuevo, subtotal: cobroMantencion.subtotalNuevo, tipoCantidad: 'Nuevo' } : null,
+      cobroMantencion.reutilizado !== 0 ? { material: `${itemProtocolo} reutilizado`, materialPrecio, cantidad: cobroMantencion.reutilizado, precioUnitario: cobroMantencion.precioReutilizado, subtotal: cobroMantencion.subtotalReutilizado, tipoCantidad: 'Reutilizado 50%' } : null,
     ].filter(Boolean)
     const detalleModificacionItem = [
-      cobroModificacion.subtotalNuevo > 0 ? { material: itemProtocolo, materialPrecio, cantidad: cobroModificacion.nuevo, precioUnitario: cobroModificacion.precioNuevo, subtotal: cobroModificacion.subtotalNuevo, tipoCantidad: 'Nuevo' } : null,
-      cobroModificacion.subtotalReutilizado > 0 ? { material: `${itemProtocolo} reutilizado`, materialPrecio, cantidad: cobroModificacion.reutilizado, precioUnitario: cobroModificacion.precioReutilizado, subtotal: cobroModificacion.subtotalReutilizado, tipoCantidad: 'Reutilizado 50%' } : null,
+      cobroModificacion.nuevo !== 0 ? { material: itemProtocolo, materialPrecio, cantidad: cobroModificacion.nuevo, precioUnitario: cobroModificacion.precioNuevo, subtotal: cobroModificacion.subtotalNuevo, tipoCantidad: 'Nuevo' } : null,
+      cobroModificacion.reutilizado !== 0 ? { material: `${itemProtocolo} reutilizado`, materialPrecio, cantidad: cobroModificacion.reutilizado, precioUnitario: cobroModificacion.precioReutilizado, subtotal: cobroModificacion.subtotalReutilizado, tipoCantidad: 'Reutilizado 50%' } : null,
     ].filter(Boolean)
 
     return {

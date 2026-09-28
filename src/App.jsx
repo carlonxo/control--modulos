@@ -2901,6 +2901,7 @@ async function cargarInventariosBodega(preferido = null) {
 
 async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null, seccion = null } = {}) {
   if (!puedeVerBodega) return
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setSeccionBodegaInicial(seccion ? { nombre: seccion, id: Date.now() } : null)
