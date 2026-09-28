@@ -620,6 +620,13 @@ h1 {
     left: 218px !important;
     top: 68px !important;
   }
+
+  .vista-modal-con-menu {
+    left: calc(50% + 109px) !important;
+    top: calc(50% + 34px) !important;
+    width: calc(100vw - 242px) !important;
+    max-height: calc(100vh - 100px) !important;
+  }
 }
 
 @media (max-width: 800px) {
@@ -638,6 +645,12 @@ h1 {
   .bodega-modal-overlay-con-menu {
     left: 0 !important;
     top: 68px !important;
+  }
+
+  .vista-modal-con-menu {
+    top: calc(50% + 34px) !important;
+    width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 92px) !important;
   }
 
   .menu-lateral {
@@ -682,6 +695,11 @@ h1 {
 @media (max-width: 680px) {
   .bodega-modal-overlay-con-menu {
     top: 60px !important;
+  }
+
+  .vista-modal-con-menu {
+    top: calc(50% + 30px) !important;
+    max-height: calc(100vh - 84px) !important;
   }
 }
 h2 {

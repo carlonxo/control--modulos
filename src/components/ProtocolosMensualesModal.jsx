@@ -1,6 +1,7 @@
 function ProtocolosMensualesModal({ onClickFondo, children }) {
   return (
     <div
+      className="vista-modal-con-menu"
       onClick={onClickFondo}
       style={{
         position: 'fixed',

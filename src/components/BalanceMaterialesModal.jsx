@@ -180,6 +180,7 @@ function BalanceMaterialesModal({
 
   return (
     <div
+      className="vista-modal-con-menu"
       onClick={(e) => {
         e.stopPropagation()
         onClickFondo?.()

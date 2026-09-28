@@ -880,6 +880,7 @@ const puedeVerMenuModulo = tienePermiso(perfil?.rol, 'verMenuModulo')
 const esRolBodega = perfil?.rol === 'bodega'
 const puedeOperarComoBodega = esRolBodega || perfil?.rol === 'analista'
 const puedeRevisarSolicitudesBodega = ['admin', 'operador'].includes(perfil?.rol)
+const puedeRecibirAvisosBodega = puedeRevisarSolicitudesBodega || puedeOperarComoBodega
 const puedeAdministrarUsuariosBodega = perfil?.rol === 'admin'
 const puedeAdministrarEquivalenciasMateriales = perfil?.rol === 'admin'
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
@@ -900,10 +901,10 @@ const datosFiltradosPorProyecto = proyectosFiltroActivos.length
 const llamadosPendientes = datos.filter(
   (modulo) => modulo.serie && esSolicitudPruebaActiva(modulo.solicitud_prueba)
 )
-const solicitudesMaterialPendientesRevision = puedeRevisarSolicitudesBodega
-  ? alertasBodega.filter((vale) => vale.tipo_ingreso === 'pedido_app' && esSolicitudPendienteRevisionBodega(vale))
+const solicitudesMaterialPendientesRevision = puedeRecibirAvisosBodega
+  ? alertasBodega.filter((vale) => vale.tipo_ingreso === 'pedido_app')
   : []
-const totalAvisosPendientes = llamadosPendientes.length + solicitudesMaterialPendientesRevision.length
+const totalAvisosPendientes = (recibeAvisosPrueba ? llamadosPendientes.length : 0) + solicitudesMaterialPendientesRevision.length
 const ingresosProtocolosMensuales = protocolosMensuales.reduce(
   (total, registro) => total + Number(registro.valorTotal || 0),
   0
@@ -1368,7 +1369,7 @@ useEffect(() => {
 }, [datos, recibeAvisosPrueba])
 
 useEffect(() => {
-  const debeCargarBodega = esRolBodega || mostrarBodega || puedeRevisarSolicitudesBodega
+  const debeCargarBodega = esRolBodega || mostrarBodega || puedeRecibirAvisosBodega
   if (!puedeVerBodega || !debeCargarBodega) return
 
   if (esRolBodega) setMostrarBodega(true)
@@ -1389,7 +1390,7 @@ useEffect(() => {
   }, 60000)
 
   return () => clearInterval(intervalo)
-}, [esRolBodega, puedeVerBodega, mostrarBodega, puedeRevisarSolicitudesBodega])
+}, [esRolBodega, puedeVerBodega, mostrarBodega, puedeRecibirAvisosBodega])
 
 if (!session) {
   return <Login supabase={supabase} />
@@ -5601,7 +5602,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           </div>
 
           <div className="encabezado-usuario-acciones">
-            {(recibeAvisosPrueba || puedeRevisarSolicitudesBodega) && (
+            {(recibeAvisosPrueba || puedeRecibirAvisosBodega) && (
               <button
                 type="button"
                 className="encabezado-boton-avisos"
@@ -5684,7 +5685,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           />
         )}
 
-        {(recibeAvisosPrueba || puedeRevisarSolicitudesBodega) && (
+        {(recibeAvisosPrueba || puedeRecibirAvisosBodega) && (
           <>
             {mostrarLlamadosPendientes && (
               <div
@@ -5737,7 +5738,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                       </div>
                     )}
 
-                    {puedeRevisarSolicitudesBodega && (
+                    {puedeRecibirAvisosBodega && (
                       <div>
                         <h4 style={{ margin: '0 0 8px', color: '#ffcc80' }}>Solicitudes de material</h4>
                         {solicitudesMaterialPendientesRevision.length === 0 ? (
