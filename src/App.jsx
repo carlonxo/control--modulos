@@ -120,6 +120,7 @@ import {
   guardarHistorialModuloFinalizado,
 } from './services/finalizacionModulosService'
 import {
+  buscarPruebaRecienteGarantiaPorSerie,
   crearModuloActivo,
   prepararLineaParaIngresoModulo,
 } from './services/ingresoModulosService'
@@ -1490,6 +1491,24 @@ async function crearModulo() {
 
   setCreandoModulo(true)
 
+  const serieIngreso = serieNueva.trim()
+  const tipoIngreso = tipoNuevo.trim()
+  const proyectoIngreso = proyectoNuevo.trim()
+  const responsableIngreso = responsableNuevo.trim()
+  const {
+    data: pruebaAnteriorGarantia,
+    error: errorValidacionGarantia,
+  } = await buscarPruebaRecienteGarantiaPorSerie({
+    supabase,
+    serie: serieIngreso,
+  })
+
+  if (errorValidacionGarantia) {
+    mostrarNotificacion('No se pudo validar la garantía del módulo: ' + errorValidacionGarantia.message)
+    setCreandoModulo(false)
+    return
+  }
+
   let lineaIngreso = posicionSeleccionada.linea
   let posicionIngreso = posicionSeleccionada.posicion
 
@@ -1508,14 +1527,32 @@ async function crearModulo() {
     }
   }
 
+  const fechaPruebaAnterior = pruebaAnteriorGarantia?.fechaPruebaAnterior || null
+  const moduloEnGarantia = Boolean(fechaPruebaAnterior)
+  const estadoInicial = moduloEnGarantia ? 'En garantía' : 'Sin iniciar'
+  const protocoloGarantia = moduloEnGarantia
+    ? agregarNotaGarantiaProtocolo({
+        fecha: fechaParaInput(fechaPruebaAnterior),
+        serie: serieIngreso,
+        tipo: tipoIngreso,
+        proyecto: proyectoIngreso,
+        linea: lineaIngreso,
+        responsable: responsableIngreso,
+        estado: estadoInicial,
+      }, fechaPruebaAnterior)
+    : null
+
   const { data: moduloCreado, error } = await crearModuloActivo({
     supabase,
-    serie: serieNueva,
-    tipo: tipoNuevo,
-    proyecto: proyectoNuevo,
-    responsable: responsableNuevo,
+    serie: serieIngreso,
+    tipo: tipoIngreso,
+    proyecto: proyectoIngreso,
+    responsable: responsableIngreso,
     linea: lineaIngreso,
     posicion: posicionIngreso,
+    estado: estadoInicial,
+    fechaPruebaElectrica: fechaPruebaAnterior,
+    protocoloEntrega: protocoloGarantia,
   })
 
   if (error) {
@@ -1528,16 +1565,22 @@ async function crearModulo() {
 
   await registrarAccionModulo({
     tipo: 'ingreso',
-    modulo: moduloCreado || { serie: serieNueva, linea: lineaIngreso },
+    modulo: moduloCreado || { serie: serieIngreso, linea: lineaIngreso },
     datosAntes: null,
     datosDespues: moduloCreado,
-    descripcion: `Ingresó módulo en línea ${lineaIngreso}`,
+    descripcion: moduloEnGarantia
+      ? `Ingresó módulo en garantía en línea ${lineaIngreso}; prueba anterior ${formatearFecha(fechaPruebaAnterior)}`
+      : `Ingresó módulo en línea ${lineaIngreso}`,
   })
 
   setMostrarNuevoModulo(false)
   setCreandoModulo(false)
 
-  mostrarNotificacion('Módulo creado correctamente')
+  mostrarNotificacion(
+    moduloEnGarantia
+      ? `Módulo creado en garantía. Prueba anterior: ${formatearFecha(fechaPruebaAnterior)}`
+      : 'Módulo creado correctamente'
+  )
 }
 
 function abrirIngresoModuloEnExtremo(linea, extremo) {

@@ -1,3 +1,5 @@
+import { estaDentroDeGarantia, fechaDocumentoProtocolo } from '../utils/modulos'
+
 async function actualizarPosicionModulo({ supabase, id, posicion }) {
   const { error } = await supabase
     .from('modulos')
@@ -6,6 +8,46 @@ async function actualizarPosicionModulo({ supabase, id, posicion }) {
 
   if (error) {
     throw new Error(error.message)
+  }
+}
+
+export async function buscarPruebaRecienteGarantiaPorSerie({
+  supabase,
+  serie,
+}) {
+  const serieLimpia = String(serie || '').trim()
+  if (!serieLimpia) return { data: null, error: null }
+
+  const seleccionarRegistros = (tabla) => supabase
+    .from(tabla)
+    .select('id, serie, fecha_prueba_electrica, protocolo_entrega')
+    .ilike('serie', serieLimpia)
+    .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
+    .limit(5)
+
+  const [respuestaHistorial, respuestaManuales] = await Promise.all([
+    seleccionarRegistros('historial_modulos'),
+    seleccionarRegistros('protocolos_manuales'),
+  ])
+
+  const tablaManualNoExiste = respuestaManuales.error?.message?.includes('protocolos_manuales')
+  const error = respuestaHistorial.error || (tablaManualNoExiste ? null : respuestaManuales.error)
+  if (error) return { data: null, error }
+
+  const candidatos = [
+    ...(respuestaHistorial.data || []).map((registro) => ({ ...registro, origen: 'historial' })),
+    ...(tablaManualNoExiste ? [] : respuestaManuales.data || []).map((registro) => ({ ...registro, origen: 'manual' })),
+  ]
+    .map((registro) => ({
+      ...registro,
+      fechaPruebaAnterior: fechaDocumentoProtocolo(registro),
+    }))
+    .filter((registro) => estaDentroDeGarantia(registro.fechaPruebaAnterior))
+    .sort((a, b) => new Date(b.fechaPruebaAnterior) - new Date(a.fechaPruebaAnterior))
+
+  return {
+    data: candidatos[0] || null,
+    error: null,
   }
 }
 
@@ -56,21 +98,27 @@ export async function crearModuloActivo({
   responsable,
   linea,
   posicion,
+  estado = 'Sin iniciar',
+  fechaPruebaElectrica = null,
+  protocoloEntrega = null,
 }) {
+  const moduloNuevo = {
+    serie,
+    tipo,
+    proyecto,
+    responsable: String(responsable || '').trim() || null,
+    linea,
+    posicion,
+    estado,
+    fecha_ingreso: new Date(),
+  }
+
+  if (fechaPruebaElectrica) moduloNuevo.fecha_prueba_electrica = fechaPruebaElectrica
+  if (protocoloEntrega) moduloNuevo.protocolo_entrega = protocoloEntrega
+
   return supabase
     .from('modulos')
-    .insert([
-      {
-        serie,
-        tipo,
-        proyecto,
-        responsable: String(responsable || '').trim() || null,
-        linea,
-        posicion,
-        estado: 'Sin iniciar',
-        fecha_ingreso: new Date(),
-      },
-    ])
+    .insert([moduloNuevo])
     .select('*')
     .single()
 }
