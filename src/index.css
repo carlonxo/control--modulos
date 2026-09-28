@@ -557,6 +557,24 @@ h1 {
   background: #39d6cd;
 }
 
+.menu-lateral-opcion-submenu {
+  min-height: 36px;
+  margin-left: 18px;
+  width: calc(100% - 18px);
+  grid-template-columns: 22px minmax(0, 1fr);
+  color: #aebfc8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.menu-lateral-opcion-submenu .menu-lateral-icono {
+  font-size: 15px;
+}
+
+.menu-lateral-opcion-submenu.menu-lateral-opcion-activa::before {
+  left: -26px;
+}
+
 .menu-lateral-icono {
   display: grid;
   place-items: center;
@@ -597,6 +615,11 @@ h1 {
     padding: 0 28px;
     box-sizing: border-box;
   }
+
+  .bodega-modal-overlay-con-menu {
+    left: 218px !important;
+    top: 68px !important;
+  }
 }
 
 @media (max-width: 800px) {
@@ -610,6 +633,11 @@ h1 {
     width: 100%;
     padding: 0 20px;
     box-sizing: border-box;
+  }
+
+  .bodega-modal-overlay-con-menu {
+    left: 0 !important;
+    top: 68px !important;
   }
 
   .menu-lateral {
@@ -648,6 +676,12 @@ h1 {
     z-index: 2500;
     display: block;
     background: rgba(0, 0, 0, 0.62);
+  }
+}
+
+@media (max-width: 680px) {
+  .bodega-modal-overlay-con-menu {
+    top: 60px !important;
   }
 }
 h2 {

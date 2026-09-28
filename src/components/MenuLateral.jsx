@@ -31,7 +31,7 @@ export default function MenuLateral({ abierto = false, items = [], onToggle, onC
               {item.separadorAntes && indice > 0 && <div className="menu-lateral-separador" />}
               <button
                 type="button"
-                className={`menu-lateral-opcion${item.activo ? ' menu-lateral-opcion-activa' : ''}`}
+                className={`menu-lateral-opcion${item.nivel ? ' menu-lateral-opcion-submenu' : ''}${item.activo ? ' menu-lateral-opcion-activa' : ''}`}
                 onClick={() => ejecutar(item)}
                 title={item.etiqueta}
               >

@@ -802,6 +802,7 @@ const [inventarioBodegaSeleccionadoId, setInventarioBodegaSeleccionadoId] = useS
 const [cargandoInventariosBodega, setCargandoInventariosBodega] = useState(false)
 const [leyendoInventarioBodega, setLeyendoInventarioBodega] = useState(false)
 const [solicitudMaterialBodegaInicial, setSolicitudMaterialBodegaInicial] = useState(null)
+const [seccionBodegaInicial, setSeccionBodegaInicial] = useState(null)
 const [guardandoPedidoBodega, setGuardandoPedidoBodega] = useState(false)
 const [guardandoDevolucionBodega, setGuardandoDevolucionBodega] = useState(false)
 const [guardandoRecepcionBodega, setGuardandoRecepcionBodega] = useState(false)
@@ -2897,10 +2898,11 @@ async function cargarInventariosBodega(preferido = null) {
   return inventariosFiltrados
 }
 
-async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null } = {}) {
+async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null, seccion = null } = {}) {
   if (!puedeVerBodega) return
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
+  setSeccionBodegaInicial(seccion ? { nombre: seccion, id: Date.now() } : null)
   if (abrirSolicitudMaterial) {
     setSolicitudMaterialBodegaInicial({
       id: Date.now(),
@@ -5434,6 +5436,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       id: 'inicio',
       etiqueta: 'Planta Bayona',
       icono: '\u2302',
+      visible: !esRolBodega,
       activo: !mostrarKPI,
       onClick: () => {
         cerrarVentanasEmergentes()
@@ -5445,6 +5448,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       id: 'indicadores',
       etiqueta: 'Indicadores',
       icono: '\u25A5',
+      visible: !esRolBodega,
       activo: mostrarKPI,
       onClick: () => {
         cerrarVentanasEmergentes()
@@ -5480,8 +5484,35 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       etiqueta: perfil?.rol === 'electrico' ? 'Solicitar material' : 'Bodega',
       icono: '\u25A3',
       visible: puedeVerBodega,
-      activo: mostrarBodega,
+      activo: mostrarBodega || esRolBodega,
       onClick: () => abrirBodega({ abrirSolicitudMaterial: perfil?.rol === 'electrico' }),
+    },
+    {
+      id: 'bodega-cargar-inventario',
+      etiqueta: 'Cargar inventario',
+      icono: '\u21E7',
+      nivel: 1,
+      visible: (mostrarBodega || esRolBodega) && puedeAdministrarBodega,
+      activo: seccionBodegaInicial?.nombre === 'cargar-inventario',
+      onClick: () => abrirBodega({ seccion: 'cargar-inventario' }),
+    },
+    {
+      id: 'bodega-historial-vales',
+      etiqueta: 'Historial de vales',
+      icono: '\u25F7',
+      nivel: 1,
+      visible: (mostrarBodega || esRolBodega) && Boolean(puedeAdministrarBodega || esRolBodega || puedeVerPedidosBodegaHoy),
+      activo: seccionBodegaInicial?.nombre === 'historial-vales',
+      onClick: () => abrirBodega({ seccion: 'historial-vales' }),
+    },
+    {
+      id: 'bodega-codigos-barra',
+      etiqueta: 'Códigos de barra',
+      icono: '\u2261',
+      nivel: 1,
+      visible: (mostrarBodega || esRolBodega) && puedeExportarInventarioBodega,
+      activo: seccionBodegaInicial?.nombre === 'codigos-barra',
+      onClick: () => abrirBodega({ seccion: 'codigos-barra' }),
     },
     {
       id: 'reintegrar',
@@ -5556,7 +5587,6 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         onClick={cerrarPanelesYModulo}
         style={{
           padding: '20px',
-          display: esRolBodega ? 'none' : undefined,
           width: '100%',
           boxSizing: 'border-box',
           maxWidth: '1200px',
@@ -5567,7 +5597,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           <div className="encabezado-marca">
             <strong>Planta Bayona</strong>
             <span className="encabezado-separador" />
-            <span>Control modular</span>
+            <span>{mostrarBodega || esRolBodega ? 'Bodega' : 'Control modular'}</span>
           </div>
 
           <div className="encabezado-usuario-acciones">
@@ -7164,6 +7194,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     cargandoCodigosBarraBodega={cargandoCodigosBarraBodega}
     guardandoCodigoBarraBodega={guardandoCodigoBarraBodega}
     solicitudMaterialInicial={solicitudMaterialBodegaInicial}
+    seccionInicial={seccionBodegaInicial}
     soloSolicitarMaterial={perfil?.rol === 'electrico'}
     onCambiarArchivo={setArchivoInventarioBodega}
     onLeerArchivo={leerInventarioBodega}

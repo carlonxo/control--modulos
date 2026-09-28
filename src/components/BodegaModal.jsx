@@ -57,6 +57,7 @@ function BodegaModal({
   cargandoCodigosBarraBodega = false,
   guardandoCodigoBarraBodega = false,
   solicitudMaterialInicial = null,
+  seccionInicial = null,
   soloSolicitarMaterial = false,
   onCambiarArchivo,
   onLeerArchivo,
@@ -134,6 +135,23 @@ function BodegaModal({
       document.documentElement.style.overflow = overflowHtmlAnterior
     }
   }, [])
+
+  useEffect(() => {
+    if (!seccionInicial?.id) return
+
+    const seccion = seccionInicial.nombre
+    setMostrarCargaExcel(seccion === 'cargar-inventario')
+    setMostrarCodigosBarra(seccion === 'codigos-barra')
+
+    const abrirHistorial = seccion === 'historial-vales'
+    if (Boolean(mostrarHistorialValesBodega) !== abrirHistorial) {
+      onToggleHistorialValesBodega?.()
+    }
+
+    if (seccion === 'codigos-barra') {
+      onActualizarCodigosBarraBodega?.()
+    }
+  }, [seccionInicial?.id])
   const [pedidoMaterial, setPedidoMaterial] = useState({
     fecha: fechaActualInput(),
     proyecto: solicitudMaterialInicial?.proyecto || '',
@@ -413,7 +431,7 @@ function BodegaModal({
 
   return (
     <div
-      className="bodega-modal-overlay"
+      className="bodega-modal-overlay bodega-modal-overlay-con-menu"
       onClick={(e) => {
         e.stopPropagation()
         onClickFondo?.()
@@ -445,22 +463,13 @@ function BodegaModal({
           padding: '24px',
         }}
       >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '18px' }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Bodega</h2>
-          <p style={{ color: '#ccc', margin: '6px 0 0' }}>
-            Inventario informado por bodega, separado del catálogo de precios de mantención.
-          </p>
-        </div>
-        {modoSoloBodega && (
+      {!modoSoloBodega && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'flex-start', marginBottom: '18px' }}>
           <button type="button" onClick={onCerrar} style={botonGris}>
-            Cerrar sesión
+            Volver a módulos
           </button>
-        )}
-        <button type="button" onClick={onCerrar} style={{ ...botonGris, display: modoSoloBodega ? 'none' : undefined }}>
-          Volver a módulos
-        </button>
-      </div>
+        </div>
+      )}
 
       {(puedeOperarBodega || puedeAprobarPedidos) && (
         <CampanaBodega
@@ -540,55 +549,6 @@ function BodegaModal({
 
       {puedeVerHistorialVales ? (
         <>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
-            {puedeAdministrar && (
-            <button
-              type="button"
-              onClick={() => {
-                setMostrarCargaExcel((actual) => !actual)
-                if (!mostrarCargaExcel && mostrarHistorialValesBodega) onToggleHistorialValesBodega?.()
-                setMostrarCodigosBarra(false)
-              }}
-              style={botonAzul}
-            >
-              Cargar inventario Excel
-            </button>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setMostrarCargaExcel(false)
-                setMostrarCodigosBarra(false)
-                onToggleHistorialValesBodega?.()
-              }}
-              style={{
-                ...botonAzul,
-                background: mostrarHistorialValesBodega ? '#0d47a1' : '#455a64',
-                borderColor: mostrarHistorialValesBodega ? '#64b5f6' : '#607d8b',
-              }}
-            >
-            Historial de vales
-            </button>
-            {puedeExportarInventario && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMostrarCargaExcel(false)
-                  if (mostrarHistorialValesBodega) onToggleHistorialValesBodega?.()
-                  setMostrarCodigosBarra((actual) => !actual)
-                  if (!mostrarCodigosBarra) onActualizarCodigosBarraBodega?.()
-                }}
-                style={{
-                  ...botonAzul,
-                  background: mostrarCodigosBarra ? '#0d47a1' : '#455a64',
-                  borderColor: mostrarCodigosBarra ? '#64b5f6' : '#607d8b',
-                }}
-              >
-                Códigos de barra
-              </button>
-            )}
-          </div>
-
           {mostrarCargaExcel && (
             <div style={panelMovimientoStyle}>
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '10px', alignItems: 'end' }}>
