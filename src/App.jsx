@@ -161,8 +161,9 @@ import {
 import {
   cargarSolicitantePrueba,
   cargarUsuariosBodega as cargarUsuariosBodegaSupabase,
-  actualizarBodegaAsignadaUsuario,
-  actualizarPlantaAsignadaUsuario,
+  actualizarUsuarioAdministrado,
+  cambiarEstadoUsuarioAdministrado,
+  crearUsuarioAdministrado,
   obtenerNombrePerfilPorId,
 } from './services/perfilesService'
 import { cargarEventosAuditoria } from './services/auditoriaService'
@@ -1790,54 +1791,78 @@ async function guardarAsignacionesUsuarios(cambios = []) {
 
   for (const cambio of cambios) {
     const usuario = cambio.usuario
-    const asignaciones = cambio.asignaciones || {}
+    const datos = cambio.cambios || {}
     if (!usuario?.id) continue
 
-    const bodegaAsignada = asignaciones.bodega_asignada || ''
-    const plantaAsignada = asignaciones.planta_asignada || ''
-
     setGuardandoUsuarioBodegaId(usuario.id)
-    const resultadoBodega = await actualizarBodegaAsignadaUsuario({
+    const resultado = await actualizarUsuarioAdministrado({
       supabase,
       usuarioId: usuario.id,
-      bodegaAsignada,
+      cambios: {
+        rol: datos.rol || usuario.rol,
+        bodega_asignada: datos.bodega_asignada || null,
+        planta_asignada: datos.planta_asignada || null,
+      },
     })
 
-    if (resultadoBodega.error) {
+    if (resultado.error) {
       setGuardandoUsuarioBodegaId(null)
       setGuardandoUsuariosBodega(false)
-      mostrarNotificacion(`No se pudo guardar bodega de ${usuario.nombre || 'usuario'}: ${resultadoBodega.error.message}`)
-      return
-    }
-
-    const resultadoPlanta = await actualizarPlantaAsignadaUsuario({
-      supabase,
-      usuarioId: usuario.id,
-      plantaAsignada,
-    })
-
-    if (resultadoPlanta.error) {
-      setGuardandoUsuarioBodegaId(null)
-      setGuardandoUsuariosBodega(false)
-      mostrarNotificacion(`No se pudo guardar planta de ${usuario.nombre || 'usuario'}: ${resultadoPlanta.error.message}`)
+      mostrarNotificacion(`No se pudo actualizar a ${usuario.nombre || 'usuario'}: ${resultado.error.message}`)
       return
     }
   }
 
   setGuardandoUsuarioBodegaId(null)
   setGuardandoUsuariosBodega(false)
-  setUsuariosBodega((actuales) => actuales.map((item) => (
-    cambios.reduce((usuarioActualizado, cambio) => (
-      cambio.usuario?.id === usuarioActualizado.id
-        ? {
-            ...usuarioActualizado,
-            bodega_asignada: cambio.asignaciones?.bodega_asignada || null,
-            planta_asignada: cambio.asignaciones?.planta_asignada || null,
-          }
-        : usuarioActualizado
-    ), item)
-  )))
+  await cargarUsuariosBodega()
   mostrarNotificacion(`Usuarios actualizados correctamente (${cambios.length})`)
+}
+
+async function crearUsuarioDesdePanel(datosUsuario) {
+  if (!puedeAdministrarUsuariosBodega) return false
+
+  setGuardandoUsuariosBodega(true)
+  const { error } = await crearUsuarioAdministrado({ supabase, usuario: datosUsuario })
+  setGuardandoUsuariosBodega(false)
+
+  if (error) {
+    mostrarNotificacion(`No se pudo crear el usuario: ${error.message}`)
+    return false
+  }
+
+  await cargarUsuariosBodega()
+  mostrarNotificacion('Usuario creado correctamente')
+  return true
+}
+
+async function cambiarEstadoUsuarioDesdePanel(usuario, bloquear) {
+  if (!puedeAdministrarUsuariosBodega || !usuario?.id) return
+  if (usuario.id === session?.user?.id) {
+    mostrarNotificacion('No puedes bloquear tu propia cuenta')
+    return
+  }
+
+  const accion = bloquear ? 'bloquear' : 'reactivar'
+  if (!window.confirm(`¿Confirmas que deseas ${accion} el acceso de ${usuario.nombre || usuario.email || 'este usuario'}?`)) return
+
+  setGuardandoUsuariosBodega(true)
+  setGuardandoUsuarioBodegaId(usuario.id)
+  const { error } = await cambiarEstadoUsuarioAdministrado({
+    supabase,
+    usuarioId: usuario.id,
+    bloquear,
+  })
+  setGuardandoUsuarioBodegaId(null)
+  setGuardandoUsuariosBodega(false)
+
+  if (error) {
+    mostrarNotificacion(`No se pudo ${accion} el acceso: ${error.message}`)
+    return
+  }
+
+  await cargarUsuariosBodega()
+  mostrarNotificacion(bloquear ? 'Acceso bloqueado correctamente' : 'Acceso reactivado correctamente')
 }
 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
@@ -3244,9 +3269,13 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     pedido.serie ? `Serie: ${pedido.serie}` : '',
     pedido.bodega ? `Bodega: ${pedido.bodega}` : '',
   ].filter(Boolean).join(' | ')
-  const observacionPedido = solicitudRequiereRevision
-    ? agregarMarcaRevisionVale(observacionPedidoBase, 'Revision: solicitado')
-    : observacionPedidoBase
+  const nombreCreadorPedido = perfil?.nombre || perfil?.email || session?.user?.email || 'usuario'
+  const observacionPedido = agregarMarcaRevisionVale(
+    observacionPedidoBase,
+    solicitudRequiereRevision
+      ? 'Revision: solicitado'
+      : `Revision: aprobado por ${nombreCreadorPedido}`,
+  )
 
   setGuardandoPedidoBodega(true)
   const { error, etapa } = await guardarValeBodegaSupabase({
@@ -6241,31 +6270,38 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
 <div
   style={{
-    background: '#222',
-    padding: '20px',
+    background: 'linear-gradient(145deg, #17252d 0%, #111b21 100%)',
+    padding: '9px',
+    border: '1px solid #294753',
     borderRadius: '10px',
-    marginBottom: '30px',
+    marginBottom: '18px',
     width: '100%',
     boxSizing: 'border-box',
+    boxShadow: '0 12px 30px rgba(0,0,0,0.22)',
   }}
 >
 
-  <h2>Buscar historial por serie</h2>
+<div className="herramientas-tablero-grid">
+<div style={{ display: 'grid', gridTemplateRows: '20px 32px', gap: '5px', minWidth: 0, padding: '8px 10px', border: '1px solid #31505d', borderRadius: '7px', background: '#0e1a20', textAlign: 'left' }}>
+  <strong style={{ color: '#79c7ff', fontSize: '13px', whiteSpace: 'nowrap' }}>Buscar historial por serie</strong>
+  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', minWidth: 0 }}>
+  <label style={{ display: 'contents' }}>
+    <input
+      type="search"
+      value={serieBusqueda}
+      onChange={(e) => setSerieBusqueda(e.target.value)}
+      placeholder="Ingresa el número de serie"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          buscarSerie()
+        }
+      }}
+      aria-label="Número de serie"
+      style={{ flex: '1 1 120px', minWidth: '90px', width: '100%', height: '32px', padding: '5px 8px', boxSizing: 'border-box', borderRadius: '5px', border: '1px solid #54717e', background: '#17262e', color: 'white' }}
+    />
+  </label>
 
-<div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
-  <input
-    type="text"
-    value={serieBusqueda}
-    onChange={(e) => setSerieBusqueda(e.target.value)}
-    placeholder="Buscar serie"
-    onKeyDown={(e) => {
-      if (e.key === 'Enter') {
-        buscarSerie()
-      }
-    }}
-  />
-
-  <button onClick={buscarSerie}>
+  <button onClick={buscarSerie} style={{ height: '32px', padding: '5px 11px', borderRadius: '5px', border: '1px solid #278be8', background: '#176fc1', color: 'white', fontWeight: 800 }}>
     Buscar
   </button>
 
@@ -6275,8 +6311,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       onClick={limpiarBusquedaSerie}
       title="Limpiar búsqueda"
       style={{
-        width: '28px',
-        height: '28px',
+        width: '32px',
+        height: '32px',
         borderRadius: '50%',
         border: '1px solid #777',
         background: '#444',
@@ -6288,41 +6324,54 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       ×
     </button>
   )}
+  </div>
 </div>
 
 {/* BLOQUE FECHAS + EXPORTAR + FILTRO PROYECTOS */}
 <div
   style={{
-    marginTop: '15px',
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
+    display: 'contents',
   }}
 >
-  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-    <input
-      type="date"
-      value={fechaDesde}
-      onChange={(e) => setFechaDesde(e.target.value)}
-    />
+  <div style={{ display: 'grid', gridTemplateRows: '20px 32px', gap: '5px', minWidth: 0, padding: '8px 10px', border: '1px solid #31505d', borderRadius: '7px', background: '#10212a', textAlign: 'left' }}>
+      <strong style={{ color: '#79c7ff', fontSize: '13px', whiteSpace: 'nowrap' }}>Exportar listado de pruebas eléctricas</strong>
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', minWidth: 0 }}>
+      <small style={{ color: '#b8c7ce', fontWeight: 700 }}>Desde</small>
+      <label style={{ display: 'contents' }}>
+        <input
+          type="date"
+          aria-label="Fecha inicial del listado"
+          title="Desde"
+          value={fechaDesde}
+          onChange={(e) => setFechaDesde(e.target.value)}
+          style={{ width: '138px', minWidth: '138px', flex: '0 0 138px', height: '32px', padding: '4px 6px', boxSizing: 'border-box', borderRadius: '5px', border: '1px solid #54717e', background: '#17262e', color: 'white' }}
+        />
+      </label>
 
-    <input
-      type="date"
-      value={fechaHasta}
-      onChange={(e) => setFechaHasta(e.target.value)}
-    />
+      <small style={{ color: '#b8c7ce', fontWeight: 700 }}>Hasta</small>
+      <label style={{ display: 'contents' }}>
+        <input
+          type="date"
+          aria-label="Fecha final del listado"
+          title="Hasta"
+          value={fechaHasta}
+          onChange={(e) => setFechaHasta(e.target.value)}
+          style={{ width: '138px', minWidth: '138px', flex: '0 0 138px', height: '32px', padding: '4px 6px', boxSizing: 'border-box', borderRadius: '5px', border: '1px solid #54717e', background: '#17262e', color: 'white' }}
+        />
+      </label>
 
-    <button
-      type="button"
-      onClick={exportarHistorialExcelHandler}
-    >
-      Exportar Excel
-    </button>
+      <button
+        type="button"
+        onClick={exportarHistorialExcelHandler}
+        style={{ height: '32px', padding: '5px 10px', borderRadius: '5px', border: '1px solid #159489', background: '#087d77', color: 'white', fontWeight: 800, whiteSpace: 'nowrap' }}
+      >
+        Exportar
+      </button>
+      </div>
   </div>
 
-  <div style={{ position: 'relative', marginLeft: 'auto' }}>
+  <div style={{ position: 'relative', display: 'grid', gridTemplateRows: '20px 32px', gap: '5px', minWidth: 0, padding: '8px 10px', border: '1px solid #31505d', borderRadius: '7px', background: '#10212a', textAlign: 'left' }}>
+    <strong style={{ color: '#79c7ff', fontSize: '13px', whiteSpace: 'nowrap' }}>Filtrar módulos por proyecto</strong>
     <button
       type="button"
       onClick={(e) => {
@@ -6331,15 +6380,16 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       }}
       disabled={proyectosEnLinea.length === 0}
       style={{
-        minWidth: '190px',
-        padding: '7px 10px',
+        width: '100%',
+        height: '32px',
+        padding: '5px 9px',
         borderRadius: '6px',
         border: '1px solid #777',
-        background: proyectosFiltroActivos.length ? '#0d47a1' : '#444',
+        background: proyectosFiltroActivos.length ? '#176fc1' : '#17262e',
         color: 'white',
         cursor: proyectosEnLinea.length ? 'pointer' : 'not-allowed',
         fontWeight: 700,
-        textAlign: 'left',
+        textAlign: 'center',
       }}
       title="Filtrar módulos visibles por proyecto"
     >
@@ -6428,6 +6478,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       </div>
     )}
   </div>
+</div>
 </div>
 
   {busquedaRealizada && resultadoBusqueda.length === 0 && (
@@ -7411,10 +7462,13 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 {mostrarUsuariosBodega && puedeAdministrarUsuariosBodega && (
   <UsuariosBodegaModal
     usuarios={usuariosBodega}
+    usuarioActualId={session?.user?.id}
     cargando={cargandoUsuariosBodega}
     guardando={guardandoUsuariosBodega}
     guardandoId={guardandoUsuarioBodegaId}
     onGuardarCambios={guardarAsignacionesUsuarios}
+    onCrearUsuario={crearUsuarioDesdePanel}
+    onCambiarEstado={cambiarEstadoUsuarioDesdePanel}
     onCerrar={() => setMostrarUsuariosBodega(false)}
   />
 )}

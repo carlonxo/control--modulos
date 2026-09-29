@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 const bodegasDisponibles = [
   { valor: '', etiqueta: 'Sin asignar' },
@@ -14,215 +14,215 @@ const plantasDisponibles = [
   { valor: 'planta montaña', etiqueta: 'Planta Montaña' },
 ]
 
+const rolesDisponibles = [
+  ['admin', 'Administrador'],
+  ['operador', 'Operador'],
+  ['colaborador', 'Colaborador'],
+  ['control_calidad', 'Control de calidad'],
+  ['electrico', 'Eléctrico'],
+  ['analista', 'Analista'],
+  ['bodega', 'Bodega'],
+  ['supervisor', 'Supervisor'],
+  ['visor', 'Visor'],
+]
+
+const usuarioInicial = {
+  nombre: '', email: '', password: '', rol: 'visor', bodega_asignada: '', planta_asignada: '',
+}
+
 function UsuariosBodegaModal({
   usuarios = [],
+  usuarioActualId,
   cargando,
   guardando,
   onGuardarCambios,
+  onCrearUsuario,
+  onCambiarEstado,
   onCerrar,
 }) {
   const [ediciones, setEdiciones] = useState({})
-
-  useEffect(() => {
-    setEdiciones(Object.fromEntries(
-      usuarios.map((usuario) => [
-        usuario.id,
-        {
-          bodega_asignada: usuario.bodega_asignada || '',
-          planta_asignada: usuario.planta_asignada || '',
-        },
-      ]),
-    ))
-  }, [usuarios])
+  const [busqueda, setBusqueda] = useState('')
+  const [mostrarCreacion, setMostrarCreacion] = useState(false)
+  const [nuevoUsuario, setNuevoUsuario] = useState(usuarioInicial)
 
   const usuariosModificados = useMemo(() => usuarios
     .filter((usuario) => {
-      const edicion = ediciones[usuario.id] || {}
-      return (
-        (usuario.bodega_asignada || '') !== (edicion.bodega_asignada || '')
+      const edicion = obtenerEdicion(usuario, ediciones)
+      return (usuario.rol || '') !== (edicion.rol || '')
+        || (usuario.bodega_asignada || '') !== (edicion.bodega_asignada || '')
         || (usuario.planta_asignada || '') !== (edicion.planta_asignada || '')
-      )
     })
-    .map((usuario) => ({
-      usuario,
-      asignaciones: ediciones[usuario.id] || {},
-    })), [usuarios, ediciones])
+    .map((usuario) => ({ usuario, cambios: obtenerEdicion(usuario, ediciones) })), [usuarios, ediciones])
 
-  const hayUsuarios = usuarios.length > 0
+  const usuariosVisibles = useMemo(() => {
+    const filtro = busqueda.trim().toLocaleLowerCase('es')
+    if (!filtro) return usuarios
+    return usuarios.filter((usuario) => [usuario.nombre, usuario.email, usuario.rol]
+      .some((valor) => String(valor || '').toLocaleLowerCase('es').includes(filtro)))
+  }, [usuarios, busqueda])
+
+  const bloqueados = usuarios.filter((usuario) => usuario.bloqueado).length
   const hayCambios = usuariosModificados.length > 0
 
+  async function crearUsuario(evento) {
+    evento.preventDefault()
+    const creado = await onCrearUsuario?.(nuevoUsuario)
+    if (creado) {
+      setNuevoUsuario(usuarioInicial)
+      setMostrarCreacion(false)
+    }
+  }
+
   return (
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        position: 'fixed',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 'calc(100vw - 32px)',
-        maxWidth: '940px',
-        maxHeight: '88vh',
-        overflowY: 'auto',
-        background: '#222',
-        color: 'white',
-        border: '1px solid white',
-        borderRadius: '12px',
-        padding: '20px',
-        boxSizing: 'border-box',
-        zIndex: 2600,
-        textAlign: 'left',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '14px' }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Usuarios</h2>
-          <p style={{ margin: '6px 0 0', color: '#ccc' }}>
-            Asigna bodega y planta a los usuarios registrados.
-          </p>
-        </div>
-        <button type="button" onClick={onCerrar} style={botonGris}>
-          Cerrar
-        </button>
-      </div>
-
-      {cargando ? (
-        <p style={{ color: '#ccc' }}>Cargando usuarios...</p>
-      ) : !hayUsuarios ? (
-        <p style={{ color: '#ccc' }}>No hay usuarios registrados.</p>
-      ) : (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-            <button
-              type="button"
-              onClick={() => onGuardarCambios?.(usuariosModificados)}
-              disabled={guardando || !hayCambios}
-              style={{
-                ...botonGuardar,
-                opacity: guardando || !hayCambios ? 0.55 : 1,
-                cursor: guardando || !hayCambios ? 'default' : 'pointer',
-              }}
-            >
-              {guardando
-                ? 'Guardando cambios...'
-                : hayCambios
-                  ? `Guardar cambios (${usuariosModificados.length})`
-                  : 'Guardar cambios'}
-            </button>
+    <div style={overlayStyle} onClick={(evento) => evento.stopPropagation()}>
+      <section style={panelStyle}>
+        <header style={headerStyle}>
+          <div>
+            <h2 style={{ margin: 0 }}>Administración de usuarios</h2>
+            <p style={subtituloStyle}>Crea cuentas, controla accesos y administra permisos y asignaciones.</p>
           </div>
+          <button type="button" onClick={onCerrar} style={botonCerrar}>Cerrar</button>
+        </header>
 
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
-              <thead>
-                <tr style={{ background: '#333' }}>
-                  <th style={thStyle}>Usuario</th>
-                  <th style={thStyle}>Rol</th>
-                  <th style={thStyle}>Bodega asignada</th>
-                  <th style={thStyle}>Planta asignada</th>
-                </tr>
-              </thead>
+        <div style={resumenStyle}>
+          <TarjetaResumen etiqueta="Usuarios" valor={usuarios.length} color="#5bc0de" />
+          <TarjetaResumen etiqueta="Activos" valor={usuarios.length - bloqueados} color="#44d26b" />
+          <TarjetaResumen etiqueta="Bloqueados" valor={bloqueados} color="#ff6868" />
+        </div>
+
+        <div style={toolbarStyle}>
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(evento) => setBusqueda(evento.target.value)}
+            placeholder="Buscar por nombre, correo o rol"
+            style={buscadorStyle}
+          />
+          <button type="button" onClick={() => setMostrarCreacion((actual) => !actual)} style={botonPrimario}>
+            {mostrarCreacion ? 'Cancelar creación' : '+ Agregar usuario'}
+          </button>
+          <button type="button" onClick={() => onGuardarCambios?.(usuariosModificados)} disabled={guardando || !hayCambios} style={botonAccion(guardando || !hayCambios)}>
+            {guardando ? 'Guardando...' : hayCambios ? `Guardar cambios (${usuariosModificados.length})` : 'Guardar cambios'}
+          </button>
+        </div>
+
+        {mostrarCreacion && (
+          <form onSubmit={crearUsuario} style={formularioStyle}>
+            <h3 style={{ margin: '0 0 4px', gridColumn: '1 / -1' }}>Nueva cuenta</h3>
+            <Campo etiqueta="Nombre"><input required value={nuevoUsuario.nombre} onChange={(e) => cambiarNuevo('nombre', e.target.value, setNuevoUsuario)} style={inputStyle} /></Campo>
+            <Campo etiqueta="Correo"><input required type="email" value={nuevoUsuario.email} onChange={(e) => cambiarNuevo('email', e.target.value, setNuevoUsuario)} style={inputStyle} /></Campo>
+            <Campo etiqueta="Contraseña temporal"><input required minLength={8} type="password" value={nuevoUsuario.password} onChange={(e) => cambiarNuevo('password', e.target.value, setNuevoUsuario)} style={inputStyle} /></Campo>
+            <Campo etiqueta="Rol"><SelectorRol value={nuevoUsuario.rol} onChange={(valor) => cambiarNuevo('rol', valor, setNuevoUsuario)} /></Campo>
+            <Campo etiqueta="Bodega"><Selector opciones={bodegasDisponibles} value={nuevoUsuario.bodega_asignada} onChange={(valor) => cambiarNuevo('bodega_asignada', valor, setNuevoUsuario)} /></Campo>
+            <Campo etiqueta="Planta"><Selector opciones={plantasDisponibles} value={nuevoUsuario.planta_asignada} onChange={(valor) => cambiarNuevo('planta_asignada', valor, setNuevoUsuario)} /></Campo>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="submit" disabled={guardando} style={botonAccion(guardando)}>{guardando ? 'Creando cuenta...' : 'Crear usuario'}</button>
+            </div>
+          </form>
+        )}
+
+        {cargando ? (
+          <p style={{ color: '#ccc' }}>Cargando usuarios...</p>
+        ) : usuarios.length === 0 ? (
+          <p style={{ color: '#ccc' }}>No hay usuarios registrados.</p>
+        ) : (
+          <div style={{ overflowX: 'auto', border: '1px solid #35505f', borderRadius: '10px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1050px' }}>
+              <thead><tr style={{ background: '#132c39' }}>
+                <th style={thStyle}>Usuario</th><th style={thStyle}>Estado</th><th style={thStyle}>Rol</th><th style={thStyle}>Bodega</th><th style={thStyle}>Planta</th><th style={thStyle}>Último ingreso</th><th style={{ ...thStyle, textAlign: 'center' }}>Acceso</th>
+              </tr></thead>
               <tbody>
-                {usuarios.map((usuario) => {
-                  const edicion = ediciones[usuario.id] || { bodega_asignada: '', planta_asignada: '' }
-                  const filaModificada = (usuario.bodega_asignada || '') !== (edicion.bodega_asignada || '')
-                    || (usuario.planta_asignada || '') !== (edicion.planta_asignada || '')
-
+                {usuariosVisibles.map((usuario) => {
+                  const edicion = obtenerEdicion(usuario, ediciones)
+                  const esUsuarioActual = usuario.id === usuarioActualId
+                  const modificada = usuariosModificados.some((item) => item.usuario.id === usuario.id)
                   return (
-                    <tr key={usuario.id} style={{ background: filaModificada ? '#2b3b24' : 'transparent' }}>
-                      <td style={tdStyle}>
-                        <strong>{usuario.nombre || 'Sin nombre'}</strong>
-                      </td>
-                      <td style={tdStyle}>{usuario.rol || '-'}</td>
-                      <td style={tdStyle}>
-                        <select
-                          value={edicion.bodega_asignada || ''}
-                          disabled={guardando}
-                          onChange={(e) => editarUsuario(usuario.id, 'bodega_asignada', e.target.value, setEdiciones)}
-                          style={selectStyle(guardando)}
-                        >
-                          {bodegasDisponibles.map((bodega) => (
-                            <option key={bodega.valor || 'sin-bodega'} value={bodega.valor}>
-                              {bodega.etiqueta}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td style={tdStyle}>
-                        <select
-                          value={edicion.planta_asignada || ''}
-                          disabled={guardando}
-                          onChange={(e) => editarUsuario(usuario.id, 'planta_asignada', e.target.value, setEdiciones)}
-                          style={selectStyle(guardando)}
-                        >
-                          {plantasDisponibles.map((planta) => (
-                            <option key={planta.valor || 'sin-planta'} value={planta.valor}>
-                              {planta.etiqueta}
-                            </option>
-                          ))}
-                        </select>
+                    <tr key={usuario.id} style={{ background: modificada ? '#233d2a' : usuario.bloqueado ? '#3b2428' : 'transparent' }}>
+                      <td style={tdStyle}><strong>{usuario.nombre || 'Sin nombre'}</strong><div style={{ color: '#9fb3bf', fontSize: '0.82rem', marginTop: '3px' }}>{usuario.email || 'Sin correo disponible'}</div></td>
+                      <td style={tdStyle}><EstadoUsuario bloqueado={usuario.bloqueado} /></td>
+                      <td style={tdStyle}><SelectorRol value={edicion.rol || 'visor'} disabled={guardando || esUsuarioActual} onChange={(valor) => editarUsuario(usuario.id, 'rol', valor, setEdiciones)} /></td>
+                      <td style={tdStyle}><Selector opciones={bodegasDisponibles} value={edicion.bodega_asignada || ''} disabled={guardando} onChange={(valor) => editarUsuario(usuario.id, 'bodega_asignada', valor, setEdiciones)} /></td>
+                      <td style={tdStyle}><Selector opciones={plantasDisponibles} value={edicion.planta_asignada || ''} disabled={guardando} onChange={(valor) => editarUsuario(usuario.id, 'planta_asignada', valor, setEdiciones)} /></td>
+                      <td style={tdStyle}>{formatearFecha(usuario.ultimo_ingreso)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <button type="button" disabled={guardando || esUsuarioActual} onClick={() => onCambiarEstado?.(usuario, !usuario.bloqueado)} title={esUsuarioActual ? 'No puedes bloquear tu propia cuenta' : ''} style={usuario.bloqueado ? botonReactivar : botonBloquear}>
+                          {usuario.bloqueado ? 'Reactivar' : 'Bloquear'}
+                        </button>
                       </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
+            {usuariosVisibles.length === 0 && <p style={{ padding: '10px 16px', color: '#bbb' }}>No se encontraron coincidencias.</p>}
           </div>
-        </>
-      )}
+        )}
+      </section>
     </div>
   )
 }
 
-function editarUsuario(usuarioId, campo, valor, setEdiciones) {
-  setEdiciones((actuales) => ({
-    ...actuales,
-    [usuarioId]: {
-      ...(actuales[usuarioId] || {}),
-      [campo]: valor,
-    },
-  }))
+function TarjetaResumen({ etiqueta, valor, color }) {
+  return <div style={tarjetaStyle}><span style={{ color: '#aebec7' }}>{etiqueta}</span><strong style={{ color, fontSize: '1.55rem' }}>{valor}</strong></div>
 }
 
-function selectStyle(deshabilitado) {
+function Campo({ etiqueta, children }) {
+  return <label style={{ display: 'grid', gap: '6px', color: '#d6e1e7', fontWeight: 700 }}><span>{etiqueta}</span>{children}</label>
+}
+
+function Selector({ opciones, value, onChange, disabled }) {
+  return <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={selectStyle(disabled)}>{opciones.map((opcion) => <option key={opcion.valor || 'sin-asignar'} value={opcion.valor}>{opcion.etiqueta}</option>)}</select>
+}
+
+function SelectorRol({ value, onChange, disabled }) {
+  return <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={selectStyle(disabled)}>{rolesDisponibles.map(([valor, etiqueta]) => <option key={valor} value={valor}>{etiqueta}</option>)}</select>
+}
+
+function EstadoUsuario({ bloqueado }) {
+  return <span style={{ display: 'inline-block', padding: '4px 9px', borderRadius: '999px', fontWeight: 800, fontSize: '0.8rem', color: bloqueado ? '#ff9696' : '#72e38d', background: bloqueado ? '#4a2229' : '#173c26' }}>{bloqueado ? 'Bloqueado' : 'Activo'}</span>
+}
+
+function editarUsuario(usuarioId, campo, valor, setEdiciones) {
+  setEdiciones((actuales) => ({ ...actuales, [usuarioId]: { ...(actuales[usuarioId] || {}), [campo]: valor } }))
+}
+
+function obtenerEdicion(usuario, ediciones) {
   return {
-    width: '100%',
-    padding: '9px',
-    borderRadius: '6px',
-    border: '1px solid #666',
-    background: '#3a3a3a',
-    color: 'white',
-    opacity: deshabilitado ? 0.7 : 1,
+    rol: usuario.rol || 'visor',
+    bodega_asignada: usuario.bodega_asignada || '',
+    planta_asignada: usuario.planta_asignada || '',
+    ...(ediciones[usuario.id] || {}),
   }
 }
 
-const thStyle = {
-  padding: '10px',
-  border: '1px solid #444',
-  textAlign: 'left',
+function cambiarNuevo(campo, valor, setNuevoUsuario) {
+  setNuevoUsuario((actual) => ({ ...actual, [campo]: valor }))
 }
 
-const tdStyle = {
-  padding: '10px',
-  border: '1px solid #444',
-  verticalAlign: 'middle',
+function formatearFecha(fecha) {
+  if (!fecha) return 'Nunca'
+  const valor = new Date(fecha)
+  return Number.isNaN(valor.getTime()) ? 'Sin registro' : valor.toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-const botonGris = {
-  padding: '9px 14px',
-  borderRadius: '8px',
-  border: '1px solid #777',
-  background: '#666',
-  color: 'white',
-  fontWeight: 700,
-  cursor: 'pointer',
-}
-
-const botonGuardar = {
-  padding: '10px 16px',
-  borderRadius: '8px',
-  border: '1px solid #2e7d32',
-  background: '#16722a',
-  color: 'white',
-  fontWeight: 700,
-}
+const overlayStyle = { position: 'fixed', inset: 0, zIndex: 2600, background: 'rgba(0,0,0,.68)', padding: 'clamp(8px, 2vw, 24px)', boxSizing: 'border-box', display: 'grid', placeItems: 'center' }
+const panelStyle = { width: 'min(1180px, 100%)', maxHeight: '94vh', overflowY: 'auto', background: '#101b22', color: 'white', border: '1px solid #3a5a69', borderRadius: '14px', padding: 'clamp(14px, 2vw, 24px)', boxSizing: 'border-box', textAlign: 'left', boxShadow: '0 18px 60px rgba(0,0,0,.5)' }
+const headerStyle = { display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '16px' }
+const subtituloStyle = { margin: '6px 0 0', color: '#aebec7' }
+const resumenStyle = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(90px, 1fr))', gap: '10px', marginBottom: '14px' }
+const tarjetaStyle = { display: 'flex', flexDirection: 'column', gap: '2px', background: '#172a34', border: '1px solid #35505f', borderRadius: '10px', padding: '11px 14px' }
+const toolbarStyle = { display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }
+const inputStyle = { minWidth: 0, width: '100%', padding: '10px', borderRadius: '7px', border: '1px solid #506b78', background: '#0e171c', color: 'white', boxSizing: 'border-box' }
+const buscadorStyle = { ...inputStyle, flex: '1 1 260px', width: 'auto' }
+const formularioStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', padding: '16px', marginBottom: '16px', background: '#172a34', border: '1px solid #3a5a69', borderRadius: '10px' }
+const selectStyle = (disabled) => ({ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #506b78', background: '#17262e', color: 'white', opacity: disabled ? 0.6 : 1 })
+const thStyle = { padding: '10px', borderBottom: '1px solid #46606c', textAlign: 'left', whiteSpace: 'nowrap' }
+const tdStyle = { padding: '10px', borderBottom: '1px solid #2c414b', verticalAlign: 'middle' }
+const baseBoton = { padding: '9px 14px', borderRadius: '8px', color: 'white', fontWeight: 800, cursor: 'pointer' }
+const botonCerrar = { ...baseBoton, border: '1px solid #a84a4a', background: '#8b2929' }
+const botonPrimario = { ...baseBoton, border: '1px solid #168f88', background: '#087d77' }
+const botonAccion = (disabled) => ({ ...baseBoton, border: '1px solid #32954b', background: '#16722a', opacity: disabled ? 0.5 : 1, cursor: disabled ? 'default' : 'pointer' })
+const botonBloquear = { ...baseBoton, padding: '7px 11px', border: '1px solid #b65252', background: '#7f2929' }
+const botonReactivar = { ...baseBoton, padding: '7px 11px', border: '1px solid #32954b', background: '#176b2a' }
 
 export default UsuariosBodegaModal

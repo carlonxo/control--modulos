@@ -933,3 +933,16 @@ code {
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
   }
 }
+/* Barra compacta de búsqueda, exportación y filtro del tablero. */
+.herramientas-tablero-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(450px, 1.4fr) minmax(190px, 0.7fr);
+  gap: 7px;
+  align-items: stretch;
+}
+
+@media (max-width: 760px) {
+  .herramientas-tablero-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -39,6 +39,16 @@ export async function obtenerNombrePerfilPorId({ supabase, idPerfil }) {
 }
 
 export async function cargarUsuariosBodega({ supabase }) {
+  const resultadoAdministrativo = await invocarAdministracionUsuarios({
+    supabase,
+    accion: 'listar',
+  })
+
+  if (!resultadoAdministrativo.error) {
+    return { data: resultadoAdministrativo.data?.usuarios || [], error: null }
+  }
+
+  // Compatibilidad temporal mientras se publica la Edge Function.
   const consultaCompleta = await supabase
     .from('perfiles')
     .select('id, nombre, rol, bodega_asignada, planta_asignada')
@@ -64,6 +74,52 @@ export async function cargarUsuariosBodega({ supabase }) {
     })),
     error: consultaSinPlanta.error,
   }
+}
+
+export async function crearUsuarioAdministrado({ supabase, usuario }) {
+  return invocarAdministracionUsuarios({
+    supabase,
+    accion: 'crear',
+    payload: usuario,
+  })
+}
+
+export async function actualizarUsuarioAdministrado({ supabase, usuarioId, cambios }) {
+  const resultado = await invocarAdministracionUsuarios({
+    supabase,
+    accion: 'actualizar',
+    payload: { usuarioId, ...cambios },
+  })
+
+  if (!resultado.error) return resultado
+
+  // Conserva la edición de perfiles durante la publicación inicial de la función.
+  const { error } = await supabase
+    .from('perfiles')
+    .update(cambios)
+    .eq('id', usuarioId)
+
+  return { data: error ? null : { ok: true }, error }
+}
+
+export async function cambiarEstadoUsuarioAdministrado({ supabase, usuarioId, bloquear }) {
+  return invocarAdministracionUsuarios({
+    supabase,
+    accion: bloquear ? 'bloquear' : 'reactivar',
+    payload: { usuarioId },
+  })
+}
+
+async function invocarAdministracionUsuarios({ supabase, accion, payload = {} }) {
+  const { data, error } = await supabase.functions.invoke('administrar-usuarios', {
+    body: { accion, ...payload },
+  })
+
+  if (!error && data?.error) {
+    return { data: null, error: new Error(data.error) }
+  }
+
+  return { data, error }
 }
 
 export async function actualizarBodegaAsignadaUsuario({

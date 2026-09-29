@@ -1186,10 +1186,12 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar, onImprimir, onImprimirG
             const total = (pedido.items || []).length
             const estadoVisual = obtenerEstadoVisualPedidoBodega(pedido)
             const solicitante = pedido.solicitante_nombre || pedido.usuario_nombre || 'Sin usuario'
+            const aprobador = obtenerNombreAprobadorPedido(pedido)
             const detalle = [
               pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
               pedido.tipo_modulo ? `Tipo: ${pedido.tipo_modulo}` : '',
               pedido.serie ? `Serie: ${pedido.serie}` : '',
+              aprobador ? `Aprobó: ${aprobador}` : '',
               `Total: ${formatearNumero(total)}`,
             ].filter(Boolean).join(' | ')
 
@@ -1290,10 +1292,12 @@ function PanelHistorialValesBodega({
             const total = (pedido.items || []).length
             const estadoVisual = obtenerEstadoVisualPedidoBodega(pedido)
             const solicitante = pedido.solicitante_nombre || pedido.usuario_nombre || 'Sin usuario'
+            const aprobador = obtenerNombreAprobadorPedido(pedido)
             const detalle = [
               pedido.proyecto ? `Proyecto: ${pedido.proyecto}` : '',
               pedido.tipo_modulo ? `Tipo: ${pedido.tipo_modulo}` : '',
               pedido.serie ? `Serie: ${pedido.serie}` : '',
+              aprobador ? `Aprobó: ${aprobador}` : '',
               `Total: ${formatearNumero(total)}`,
             ].filter(Boolean).join(' | ')
 
@@ -2047,6 +2051,7 @@ function DetalleSolicitudBodega({
   const puedeCambiarMaterialPedido = requiereEscaneo
   const cambioMaterialActivo = indiceCambioMaterial !== null
   const estadoVisualPedido = obtenerEstadoVisualPedidoBodega(alerta)
+  const nombreAprobador = obtenerNombreAprobadorPedido(alerta)
   const resumenEscaneo = calcularResumenEscaneoPedido(itemsPedido, cantidadesEscaneadas, materialesInventario)
   const pedidoEscaneadoCompleto = resumenEscaneo.every((fila) => !fila.requiereEscaneo || fila.escaneado >= fila.cantidad)
 
@@ -2365,9 +2370,18 @@ function DetalleSolicitudBodega({
               {alerta.solicitante_nombre || alerta.usuario_nombre || 'Sin usuario'} | {alerta.fecha || ''}
             </p>
             {esPedido && (
-              <span style={{ display: 'inline-block', marginTop: '8px', padding: '3px 9px', borderRadius: '999px', color: estadoVisualPedido.color, border: `1px solid ${estadoVisualPedido.borde}`, background: estadoVisualPedido.fondo, fontWeight: 800 }}>
-                Estado: {estadoVisualPedido.etiqueta}
-              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
+                <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: '999px', color: estadoVisualPedido.color, border: `1px solid ${estadoVisualPedido.borde}`, background: estadoVisualPedido.fondo, fontWeight: 800 }}>
+                  Estado: {estadoVisualPedido.etiqueta}
+                </span>
+                {solicitado ? (
+                  <span style={{ color: '#90caf9', fontWeight: 800 }}>Aprobación pendiente</span>
+                ) : (
+                  <span style={{ color: '#d4e5ee' }}>
+                    Aprobado por: <strong style={{ color: '#66bb6a' }}>{nombreAprobador || 'Sin registro'}</strong>
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -3437,6 +3451,28 @@ function obtenerEstadoVisualPedidoBodega(pedido = {}) {
     borde: '#f9a825',
     fondo: '#3a2b10',
   }
+}
+
+function obtenerNombreAprobadorPedido(pedido = {}) {
+  const parteAprobacion = String(pedido.observacion || '')
+    .split('|')
+    .map((parte) => parte.trim())
+    .find((parte) => /^revisi[oó]n\s*:\s*aprobado por\s+/i.test(parte))
+
+  if (parteAprobacion) {
+    return parteAprobacion.replace(/^revisi[oó]n\s*:\s*aprobado por\s+/i, '').trim()
+  }
+
+  const estado = String(pedido.estado_bodega || '').toLowerCase()
+  const revisionSolicitada = String(pedido.observacion || '')
+    .split('|')
+    .some((parte) => /^revisi[oó]n\s*:\s*solicitado/i.test(parte.trim()))
+
+  if (estado !== 'solicitado' && !revisionSolicitada) {
+    return String(pedido.usuario_nombre || '').trim()
+  }
+
+  return ''
 }
 
 function limpiarObservacionSolicitudBodega(observacion = '') {
