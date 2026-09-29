@@ -33,3 +33,7 @@ export function prepararItemsValeBodega(filas = []) {
     }))
     .filter((fila) => fila.material_balance && fila.cantidad > 0)
 }
+
+export function obtenerFactorMovimientoValeBodega(tipoIngreso = '') {
+  return String(tipoIngreso || '').trim().toLowerCase() === 'devolucion_app' ? -1 : 1
+}

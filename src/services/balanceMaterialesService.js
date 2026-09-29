@@ -1,3 +1,5 @@
+import { obtenerFactorMovimientoValeBodega } from '../utils/valesBodega.js'
+
 export function compilarBalanceMateriales(registros = [], vales = [], opciones = {}) {
   const {
     configMateriales = {},
@@ -172,7 +174,8 @@ export function compilarBalanceMateriales(registros = [], vales = [], opciones =
 
     const materialBalance = resolverMaterialBalance(material, itemVale.material_vale || '')
     const fila = acumulado.get(materialBalance.clave) || crearFila(materialBalance)
-    fila.retirado += Number(itemVale.cantidad || 0)
+    const factorMovimiento = obtenerFactorMovimientoValeBodega(itemVale.tipo_ingreso)
+    fila.retirado += factorMovimiento * Number(itemVale.cantidad || 0)
     fila.noCatalogado = fila.noCatalogado && materialBalance.noCatalogado
     if (!fila.idArt && materialBalance.idArt) fila.idArt = materialBalance.idArt
     acumulado.set(materialBalance.clave, fila)

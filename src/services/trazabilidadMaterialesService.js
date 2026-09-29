@@ -1,3 +1,5 @@
+import { obtenerFactorMovimientoValeBodega } from '../utils/valesBodega.js'
+
 function nombrePersona(valor) {
   return String(valor || '').trim() || 'No asignado'
 }
@@ -157,6 +159,7 @@ export function compilarTrazabilidadMaterialesPorSolicitante({
       precioCompra,
       serie: item.serie || '',
       cantidad: Number(item.cantidad || 0),
+      factorMovimiento: obtenerFactorMovimientoValeBodega(item.tipo_ingreso),
       cobradoMismaSerie: 0,
       cobradoOtraSerie: 0,
     }
@@ -164,6 +167,10 @@ export function compilarTrazabilidadMaterialesPorSolicitante({
 
   valesPreparados.forEach((item) => {
     const fila = obtenerFila(item.solicitante, item.material, item.precioCompra)
+    if (item.factorMovimiento < 0) {
+      fila.retirado -= item.cantidad
+      return
+    }
     const cobradoMismaSerie = item.serie
       ? descontarCobroDisponible({
           serie: item.serie,
@@ -180,6 +187,7 @@ export function compilarTrazabilidadMaterialesPorSolicitante({
   })
 
   valesPreparados.forEach((item) => {
+    if (item.factorMovimiento < 0) return
     const pendienteItem = Math.max(0, item.cantidad - item.cobradoMismaSerie)
     if (pendienteItem <= 0) return
 
@@ -349,7 +357,7 @@ export function compilarTrazabilidadMaterialesPorGrupo({
         const cantidad = Number(item.cantidad || 0)
         if (!material || cantidad <= 0) return
         const fila = obtenerFila(material, precioCompra)
-        fila.retirado += cantidad
+        fila.retirado += obtenerFactorMovimientoValeBodega(item.tipo_ingreso) * cantidad
       })
   }
 
