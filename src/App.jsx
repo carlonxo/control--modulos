@@ -72,6 +72,7 @@ import {
   guardarValeBodega as guardarValeBodegaSupabase,
   actualizarItemsValeBodega as actualizarItemsValeBodegaSupabase,
   entregarPedidoBodegaTransaccional,
+  recepcionarDevolucionBodegaTransaccional,
 } from './services/valesBodegaService'
 import {
   cargarRecepcionesBodegaRango as cargarRecepcionesBodegaRangoSupabase,
@@ -780,6 +781,8 @@ const [alertasBodega, setAlertasBodega] = useState([])
 const [mostrarAlertasBodega, setMostrarAlertasBodega] = useState(false)
 const [pedidosBodegaHoy, setPedidosBodegaHoy] = useState([])
 const [mostrarPedidosBodegaHoy, setMostrarPedidosBodegaHoy] = useState(false)
+const [devolucionesBodegaHoy, setDevolucionesBodegaHoy] = useState([])
+const [mostrarDevolucionesBodegaHoy, setMostrarDevolucionesBodegaHoy] = useState(false)
 const [historialValesBodega, setHistorialValesBodega] = useState([])
 const [mostrarHistorialValesBodega, setMostrarHistorialValesBodega] = useState(false)
 const [fechaHistorialValesBodega, setFechaHistorialValesBodega] = useState(fechaActualLocalInput())
@@ -820,6 +823,7 @@ useEffect(() => {
 }, [perfil?.id, mostrarVistaGeneral])
 const [guardandoDespachoBodega, setGuardandoDespachoBodega] = useState(false)
 const [entregandoSolicitudBodega, setEntregandoSolicitudBodega] = useState(false)
+const [recepcionandoDevolucionBodega, setRecepcionandoDevolucionBodega] = useState(false)
 const [usuariosBodega, setUsuariosBodega] = useState([])
 const [cargandoUsuariosBodega, setCargandoUsuariosBodega] = useState(false)
 const [guardandoUsuarioBodegaId, setGuardandoUsuarioBodegaId] = useState(null)
@@ -2288,6 +2292,7 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
     : solicitudesFiltradas.filter((vale) => !esSolicitudPendienteRevisionBodega(vale) && !esSolicitudCerradaBodega(vale))
 
   setPedidosBodegaHoy(solicitudesVisibles.filter((vale) => vale.tipo_ingreso === 'pedido_app'))
+  setDevolucionesBodegaHoy(solicitudesVisibles.filter((vale) => vale.tipo_ingreso === 'devolucion_app'))
   setAlertasBodega(alertasVisibles)
 }
 
@@ -2321,6 +2326,19 @@ function alternarPanelPedidosBodegaHoy() {
   setMostrarPedidosBodegaHoy((actual) => {
     const abrir = !actual
     if (abrir) {
+      setMostrarDevolucionesBodegaHoy(false)
+      setMostrarRecepcionesBodega(false)
+      setMostrarDespachosBodega(false)
+    }
+    return abrir
+  })
+}
+
+function alternarPanelDevolucionesBodegaHoy() {
+  setMostrarDevolucionesBodegaHoy((actual) => {
+    const abrir = !actual
+    if (abrir) {
+      setMostrarPedidosBodegaHoy(false)
       setMostrarRecepcionesBodega(false)
       setMostrarDespachosBodega(false)
     }
@@ -2333,6 +2351,7 @@ function alternarPanelRecepcionesBodega() {
     const abrir = !actual
     if (abrir) {
       setMostrarPedidosBodegaHoy(false)
+      setMostrarDevolucionesBodegaHoy(false)
       setMostrarDespachosBodega(false)
     }
     return abrir
@@ -2344,6 +2363,7 @@ function alternarPanelDespachosBodega() {
     const abrir = !actual
     if (abrir) {
       setMostrarPedidosBodegaHoy(false)
+      setMostrarDevolucionesBodegaHoy(false)
       setMostrarRecepcionesBodega(false)
     }
     return abrir
@@ -3382,7 +3402,7 @@ async function guardarDevolucionBodegaConMateriales(datosDevolucion, materialesD
   const motivo = String(datosDevolucion?.motivo || '').trim()
   const items = (materialesDevolucion || [])
     .map((item) => ({
-      material_vale: String(item.descripcion || item.codigo || '').trim(),
+      material_vale: String(item.codigo || item.descripcion || '').trim(),
       material_balance: String(item.descripcion || item.codigo || '').trim(),
       cantidad: Number(item.cantidad || 0),
     }))
@@ -3440,6 +3460,9 @@ async function guardarDevolucionBodegaConMateriales(datosDevolucion, materialesD
   mostrarNotificacion('Devolución registrada')
   if (mostrarValesBodega && fechaValeBodega === fecha) {
     await cargarValesBodegaDia(fecha)
+  }
+  if (fecha === fechaActualLocalInput()) {
+    await cargarAlertasBodega(fecha)
   }
   return true
 }
@@ -3584,6 +3607,119 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
   if (datosEntrega.fecha_entrega_bodega) {
     await recalcularResumenOperacionalPorFecha(datosEntrega.fecha_entrega_bodega)
   }
+  await cargarInventariosBodega()
+  await cargarAlertasBodega()
+  return true
+}
+
+async function recepcionarDevolucionBodega(alerta) {
+  if (!puedeOperarComoBodega || !alerta?.id) return false
+  if (String(alerta.estado_bodega || '').toLowerCase() === 'entregado') {
+    mostrarNotificacion('Esta devolución ya fue recepcionada')
+    return true
+  }
+
+  const bodegaSolicitud = obtenerBodegaDesdeObservacion(alerta.observacion)
+  const inventarioActual = bodegaSolicitud
+    ? inventariosBodega.find((item) => obtenerBodegaInventario(item) === bodegaSolicitud)
+    : inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+
+  if (!inventarioActual?.id) {
+    mostrarNotificacion(
+      bodegaSolicitud
+        ? `No hay inventario cargado para bodega ${bodegaSolicitud}`
+        : 'No hay inventario seleccionado para recepcionar el material'
+    )
+    return false
+  }
+
+  const itemsDevolucion = alerta.items || []
+  if (itemsDevolucion.length === 0) {
+    mostrarNotificacion('La devolución no tiene materiales para recepcionar')
+    return false
+  }
+
+  const actualizacionesPorItem = {}
+  const itemsNoEncontrados = []
+
+  for (const itemDevolucion of itemsDevolucion) {
+    const itemInventario = buscarItemInventarioParaVale(inventarioActual, itemDevolucion)
+    const nombre = itemDevolucion.material_balance || itemDevolucion.material_vale || 'Material'
+    const cantidad = Number(itemDevolucion.cantidad || 0)
+
+    if (!itemInventario?.id) {
+      itemsNoEncontrados.push(nombre)
+      continue
+    }
+    if (cantidad <= 0) continue
+
+    const clave = itemInventario.id
+    actualizacionesPorItem[clave] = actualizacionesPorItem[clave] || {
+      itemInventario,
+      cantidad: 0,
+      itemsVale: [],
+    }
+    actualizacionesPorItem[clave].cantidad += cantidad
+    actualizacionesPorItem[clave].itemsVale.push({ id: itemDevolucion.id, cantidad })
+  }
+
+  if (itemsNoEncontrados.length > 0) {
+    mostrarNotificacion(`No se puede recepcionar: estos materiales no existen en el inventario seleccionado: ${itemsNoEncontrados.join(', ')}`)
+    return false
+  }
+
+  const actualizaciones = Object.values(actualizacionesPorItem)
+  if (actualizaciones.length === 0) {
+    mostrarNotificacion('No hay cantidades válidas para recepcionar')
+    return false
+  }
+
+  const totalUnidades = actualizaciones.reduce((total, item) => total + Number(item.cantidad || 0), 0)
+  const confirmado = window.confirm(
+    `¿Confirmar la recepción de ${totalUnidades.toLocaleString('es-CL')} unidades? El material se sumará al inventario ${inventarioActual.nombre || bodegaSolicitud || 'seleccionado'}.`
+  )
+  if (!confirmado) return false
+
+  setRecepcionandoDevolucionBodega(true)
+  const { data: resultado, error } = await recepcionarDevolucionBodegaTransaccional({
+    supabase,
+    valeId: alerta.id,
+    inventarioId: inventarioActual.id,
+    actualizaciones,
+    itemsEsperados: itemsDevolucion,
+  })
+  setRecepcionandoDevolucionBodega(false)
+
+  if (error || !resultado?.ok) {
+    const detalle = error?.message || 'Supabase no confirmó la recepción'
+    const devolucionModificada = detalle.includes('DEVOLUCION_MODIFICADA')
+    const funcionNoInstalada = error?.code === 'PGRST202'
+    mostrarNotificacion(
+      devolucionModificada
+        ? 'La devolución cambió mientras se procesaba. El inventario no fue modificado; actualiza el detalle e inténtalo nuevamente.'
+        : funcionNoInstalada
+          ? 'Falta instalar la recepción segura en Supabase. Ejecuta el archivo supabase_devoluciones_bodega_recepcion.sql.'
+          : `No se pudo recepcionar la devolución. El inventario no fue modificado. Detalle: ${detalle}`
+    )
+    await cargarInventariosBodega()
+    await cargarAlertasBodega()
+    return false
+  }
+
+  const datosRecepcion = {
+    estado_bodega: resultado.estado_bodega || 'entregado',
+    fecha_entrega_bodega: resultado.fecha_entrega_bodega,
+    entregado_por: resultado.entregado_por || '',
+  }
+  mostrarNotificacion(
+    resultado.ya_recepcionada
+      ? 'Esta devolución ya había sido recepcionada; no se volvió a sumar al inventario.'
+      : 'Devolución recepcionada y material sumado al inventario'
+  )
+  setDevolucionesBodegaHoy((actuales) => actuales.map((vale) => (
+    vale.id === alerta.id ? { ...vale, ...datosRecepcion } : vale
+  )))
+  setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== alerta.id))
   await cargarInventariosBodega()
   await cargarAlertasBodega()
   return true
@@ -7276,11 +7412,14 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     guardandoRecepcion={guardandoRecepcionBodega}
     guardandoSalida={guardandoDespachoBodega}
     entregandoSolicitudBodega={entregandoSolicitudBodega}
+    recepcionandoDevolucionBodega={recepcionandoDevolucionBodega}
     puedeExportarInventario={puedeExportarInventarioBodega}
     alertasBodega={alertasBodega}
     mostrarAlertasBodega={mostrarAlertasBodega}
     pedidosBodegaHoy={pedidosBodegaHoy}
     mostrarPedidosBodegaHoy={mostrarPedidosBodegaHoy}
+    devolucionesBodegaHoy={devolucionesBodegaHoy}
+    mostrarDevolucionesBodegaHoy={mostrarDevolucionesBodegaHoy}
     historialValesBodega={historialValesBodega}
     mostrarHistorialValesBodega={mostrarHistorialValesBodega}
     fechaHistorialValesBodega={fechaHistorialValesBodega}
@@ -7306,6 +7445,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarRecepcion={guardarRecepcionBodega}
     onGuardarSalida={guardarDespachoBodega}
     onEntregarSolicitudBodega={entregarSolicitudBodega}
+    onRecepcionarDevolucionBodega={recepcionarDevolucionBodega}
     onAprobarSolicitudBodega={aprobarSolicitudBodega}
     onDenegarSolicitudBodega={denegarSolicitudBodega}
     onEditarSolicitudBodega={editarSolicitudBodega}
@@ -7315,6 +7455,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onImprimirHistorialValesGeneral={imprimirHistorialValesBodegaGeneral}
     onToggleAlertasBodega={() => setMostrarAlertasBodega((actual) => !actual)}
     onTogglePedidosBodegaHoy={alternarPanelPedidosBodegaHoy}
+    onToggleDevolucionesBodegaHoy={alternarPanelDevolucionesBodegaHoy}
     onToggleHistorialValesBodega={async () => {
       const abrir = !mostrarHistorialValesBodega
       setMostrarHistorialValesBodega(abrir)

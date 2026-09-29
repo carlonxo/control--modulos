@@ -36,11 +36,14 @@ function BodegaModal({
   guardandoRecepcion,
   guardandoSalida,
   entregandoSolicitudBodega,
+  recepcionandoDevolucionBodega,
   puedeExportarInventario,
   alertasBodega = [],
   mostrarAlertasBodega,
   pedidosBodegaHoy = [],
   mostrarPedidosBodegaHoy,
+  devolucionesBodegaHoy = [],
+  mostrarDevolucionesBodegaHoy,
   historialValesBodega = [],
   mostrarHistorialValesBodega,
   fechaHistorialValesBodega = fechaActualInput(),
@@ -66,6 +69,7 @@ function BodegaModal({
   onGuardarRecepcion,
   onGuardarSalida,
   onEntregarSolicitudBodega,
+  onRecepcionarDevolucionBodega,
   onAprobarSolicitudBodega,
   onDenegarSolicitudBodega,
   onEditarSolicitudBodega,
@@ -75,6 +79,7 @@ function BodegaModal({
   onImprimirHistorialValesGeneral,
   onToggleAlertasBodega,
   onTogglePedidosBodegaHoy,
+  onToggleDevolucionesBodegaHoy,
   onToggleHistorialValesBodega,
   onCambiarFechaHistorialValesBodega,
   onActualizarHistorialValesBodega,
@@ -251,6 +256,7 @@ function BodegaModal({
 
   function cerrarPanelesResumenBodega() {
     if (mostrarPedidosBodegaHoy) onTogglePedidosBodegaHoy?.()
+    if (mostrarDevolucionesBodegaHoy) onToggleDevolucionesBodegaHoy?.()
     if (mostrarRecepcionesBodega) onToggleRecepcionesBodega?.()
     if (mostrarDespachosBodega) onToggleDespachosBodega?.()
   }
@@ -485,6 +491,7 @@ function BodegaModal({
         <DetalleSolicitudBodega
           alerta={alertaBodegaSeleccionada}
           entregando={entregandoSolicitudBodega}
+          recepcionandoDevolucion={recepcionandoDevolucionBodega}
           materialesInventario={materialesInventario}
           codigosBarraBodega={codigosBarraBodega}
           puedeEditar={puedeEditarPedidos}
@@ -513,6 +520,12 @@ function BodegaModal({
             const ok = await onEntregarSolicitudBodega?.(alertaBodegaSeleccionada, opcionesEntrega)
             if (!ok) return
             limpiarEscaneosPedido(alertaBodegaSeleccionada.id)
+            setAlertaBodegaSeleccionada(null)
+            onActualizarAlertasBodega?.()
+          }}
+          onRecepcionarDevolucion={async () => {
+            const ok = await onRecepcionarDevolucionBodega?.(alertaBodegaSeleccionada)
+            if (!ok) return
             setAlertaBodegaSeleccionada(null)
             onActualizarAlertasBodega?.()
           }}
@@ -655,6 +668,16 @@ function BodegaModal({
               </div>
             )}
 
+            {mostrarPedidosHoy && (
+              <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+                <Tarjeta
+                  titulo="Devoluciones hoy"
+                  valor={devolucionesBodegaHoy.length}
+                  onClick={onToggleDevolucionesBodegaHoy}
+                />
+              </div>
+            )}
+
             {puedeOperarBodega && (
               <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
                 <Tarjeta
@@ -790,6 +813,13 @@ function BodegaModal({
               onSeleccionar={setAlertaBodegaSeleccionada}
               onImprimir={onImprimirPedidos}
               onImprimirGeneral={onImprimirPedidosGeneral}
+            />
+          )}
+
+          {mostrarPedidosHoy && mostrarDevolucionesBodegaHoy && (
+            <PanelDevolucionesBodegaHoy
+              devoluciones={devolucionesBodegaHoy}
+              onSeleccionar={setAlertaBodegaSeleccionada}
             />
           )}
 
@@ -1208,6 +1238,55 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar, onImprimir, onImprimirG
                   </strong>
                   <small style={{ color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {detalle}
+                  </small>
+                </span>
+                <strong style={{
+                  color: estadoVisual.color,
+                  border: `1px solid ${estadoVisual.borde}`,
+                  borderRadius: '999px',
+                  padding: '5px 10px',
+                  whiteSpace: 'nowrap',
+                  background: estadoVisual.fondo,
+                }}>
+                  {estadoVisual.etiqueta}
+                </strong>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PanelDevolucionesBodegaHoy({ devoluciones, onSeleccionar }) {
+  return (
+    <div style={{ ...panelMovimientoStyle, marginTop: '-2px' }}>
+      <h3 style={{ margin: '0 0 10px' }}>Devoluciones de hoy</h3>
+      {devoluciones.length === 0 ? (
+        <p style={{ color: '#bbb', margin: 0 }}>No hay devoluciones registradas hoy.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: '8px' }}>
+          {devoluciones.map((devolucion) => {
+            const totalReferencias = (devolucion.items || []).length
+            const totalUnidades = (devolucion.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
+            const estadoVisual = obtenerEstadoVisualDevolucionBodega(devolucion)
+            const usuario = devolucion.solicitante_nombre || devolucion.usuario_nombre || 'Sin usuario'
+
+            return (
+              <button
+                type="button"
+                key={devolucion.id || `${devolucion.fecha}-${usuario}-${totalReferencias}`}
+                onClick={() => onSeleccionar?.(devolucion)}
+                style={filaPedidoHoyStyle}
+              >
+                <span style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
+                  <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Devolución | {usuario}
+                  </strong>
+                  <small style={{ color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {totalReferencias} materiales | {formatearNumero(totalUnidades)} unidades
+                    {devolucion.entregado_por ? ` | Recibió: ${devolucion.entregado_por}` : ''}
                   </small>
                 </span>
                 <strong style={{
@@ -2007,6 +2086,7 @@ function estiloEstadoCodigo(estado) {
 function DetalleSolicitudBodega({
   alerta,
   entregando,
+  recepcionandoDevolucion,
   materialesInventario = [],
   codigosBarraBodega = [],
   puedeEditar,
@@ -2017,6 +2097,7 @@ function DetalleSolicitudBodega({
   onActualizarPedido,
   onAprobar,
   onEntregar,
+  onRecepcionarDevolucion,
   onDenegar,
   onCerrar,
 }) {
@@ -2034,6 +2115,7 @@ function DetalleSolicitudBodega({
   const [verificandoEntrega, setVerificandoEntrega] = useState(false)
   const inputEscanerRef = useRef(null)
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
+  const esDevolucion = alerta?.tipo_ingreso === 'devolucion_app'
   const estadoPedido = String(alerta?.estado_bodega || '').toLowerCase()
   const solicitado = estadoPedido === 'solicitado'
   const entregado = estadoPedido === 'entregado'
@@ -2051,6 +2133,7 @@ function DetalleSolicitudBodega({
   const puedeCambiarMaterialPedido = requiereEscaneo
   const cambioMaterialActivo = indiceCambioMaterial !== null
   const estadoVisualPedido = obtenerEstadoVisualPedidoBodega(alerta)
+  const estadoVisualDevolucion = obtenerEstadoVisualDevolucionBodega(alerta)
   const nombreAprobador = obtenerNombreAprobadorPedido(alerta)
   const resumenEscaneo = calcularResumenEscaneoPedido(itemsPedido, cantidadesEscaneadas, materialesInventario)
   const pedidoEscaneadoCompleto = resumenEscaneo.every((fila) => !fila.requiereEscaneo || fila.escaneado >= fila.cantidad)
@@ -2369,16 +2452,21 @@ function DetalleSolicitudBodega({
             <p style={{ margin: '6px 0 0', color: '#ccc' }}>
               {alerta.solicitante_nombre || alerta.usuario_nombre || 'Sin usuario'} | {alerta.fecha || ''}
             </p>
-            {esPedido && (
+            {(esPedido || esDevolucion) && (
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', marginTop: '8px' }}>
-                <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: '999px', color: estadoVisualPedido.color, border: `1px solid ${estadoVisualPedido.borde}`, background: estadoVisualPedido.fondo, fontWeight: 800 }}>
-                  Estado: {estadoVisualPedido.etiqueta}
+                <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: '999px', color: esDevolucion ? estadoVisualDevolucion.color : estadoVisualPedido.color, border: `1px solid ${esDevolucion ? estadoVisualDevolucion.borde : estadoVisualPedido.borde}`, background: esDevolucion ? estadoVisualDevolucion.fondo : estadoVisualPedido.fondo, fontWeight: 800 }}>
+                  Estado: {esDevolucion ? estadoVisualDevolucion.etiqueta : estadoVisualPedido.etiqueta}
                 </span>
-                {solicitado ? (
+                {esPedido && (solicitado ? (
                   <span style={{ color: '#90caf9', fontWeight: 800 }}>Aprobación pendiente</span>
                 ) : (
                   <span style={{ color: '#d4e5ee' }}>
                     Aprobado por: <strong style={{ color: '#66bb6a' }}>{nombreAprobador || 'Sin registro'}</strong>
+                  </span>
+                ))}
+                {esDevolucion && entregado && alerta.entregado_por && (
+                  <span style={{ color: '#d4e5ee' }}>
+                    Recibido por: <strong style={{ color: '#66bb6a' }}>{alerta.entregado_por}</strong>
                   </span>
                 )}
               </div>
@@ -2763,6 +2851,20 @@ function DetalleSolicitudBodega({
                 {denegado ? 'Pedido denegado' : entregado ? 'Pedido ya entregado' : entregando ? 'Descontando...' : verificandoEntrega ? 'Verificando...' : 'Pedido entregado'}
               </button>
             </>
+          )}
+          {puedeGestionar && esDevolucion && !entregado && !denegado && (
+            <button
+              type="button"
+              disabled={recepcionandoDevolucion}
+              onClick={onRecepcionarDevolucion}
+              style={{
+                ...botonVerde,
+                opacity: recepcionandoDevolucion ? 0.7 : 1,
+                cursor: recepcionandoDevolucion ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {recepcionandoDevolucion ? 'Recepcionando...' : 'Recibir material'}
+            </button>
           )}
         </div>
       </div>
@@ -3451,6 +3553,14 @@ function obtenerEstadoVisualPedidoBodega(pedido = {}) {
     borde: '#f9a825',
     fondo: '#3a2b10',
   }
+}
+
+function obtenerEstadoVisualDevolucionBodega(devolucion = {}) {
+  const visual = obtenerEstadoVisualPedidoBodega(devolucion)
+  if (String(devolucion.estado_bodega || '').toLowerCase() === 'entregado') {
+    return { ...visual, etiqueta: 'Recibida' }
+  }
+  return visual
 }
 
 function obtenerNombreAprobadorPedido(pedido = {}) {
