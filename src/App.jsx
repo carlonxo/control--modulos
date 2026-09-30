@@ -27,6 +27,7 @@ import BodegaModal from './components/BodegaModal'
 import ProyeccionMaterialesModal from './components/ProyeccionMaterialesModal'
 import UsuariosBodegaModal from './components/UsuariosBodegaModal'
 import AuditoriaModal from './components/AuditoriaModal'
+import IndicadoresHorasHombre from './components/IndicadoresHorasHombre'
 import MenuLateral from './components/MenuLateral'
 import EquivalenciasMaterialesModal from './components/EquivalenciasMaterialesModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
@@ -168,6 +169,13 @@ import {
   obtenerNombrePerfilPorId,
 } from './services/perfilesService'
 import { cargarEventosAuditoria } from './services/auditoriaService'
+import { corregirHorasHombreModulo } from './services/horasHombreService'
+import {
+  activarNotificacionesPush,
+  consultarEstadoNotificacionesPush,
+  desactivarNotificacionesPush,
+  enviarEventoPush,
+} from './services/pushNotificationsService'
 import {
   claveProtocoloUnico,
   esEstadoConObservacionAlerta,
@@ -673,6 +681,7 @@ function App() {
   const [datos, setDatos] = useState([])
 const [moduloSeleccionado, setModuloSeleccionado] = useState(null)
 const [historial, setHistorial] = useState([])
+const [guardandoCorreccionHorasHombre, setGuardandoCorreccionHorasHombre] = useState(null)
 
 const [estadoEditado, setEstadoEditado] = useState('')
 const [lineaEditada, setLineaEditada] = useState('')
@@ -699,8 +708,11 @@ const [tipoEditado, setTipoEditado] = useState('')
 const [proyectoEditado, setProyectoEditado] = useState('')
 const [responsableEditado, setResponsableEditado] = useState('')
 const [mostrarKPI, setMostrarKPI] = useState(false)
+const [mostrarHorasHombre, setMostrarHorasHombre] = useState(false)
 const [mostrarVistaGeneral, setMostrarVistaGeneral] = useState(false)
 const [notificacion, setNotificacion] = useState(null)
+const [estadoNotificacionesPush, setEstadoNotificacionesPush] = useState('cargando')
+const [configurandoNotificacionesPush, setConfigurandoNotificacionesPush] = useState(false)
 const [moduloEnDrag, setModuloEnDrag] = useState(null)
 const [notaEditada, setNotaEditada] = useState('')
 const [nombreSolicitante, setNombreSolicitante] = useState('')
@@ -1059,6 +1071,35 @@ function mostrarNotificacion(mensaje, opciones = {}) {
   })
 }
 
+async function alternarNotificacionesPush() {
+  if (!session?.user?.id || configurandoNotificacionesPush) return
+  setConfigurandoNotificacionesPush(true)
+
+  const resultado = estadoNotificacionesPush === 'activa'
+    ? await desactivarNotificacionesPush({ supabase })
+    : await activarNotificacionesPush({ supabase, usuarioId: session.user.id })
+
+  setConfigurandoNotificacionesPush(false)
+  setEstadoNotificacionesPush(resultado.estado)
+
+  if (resultado.error) {
+    const faltaSql = String(resultado.error.message || '').includes('registrar_suscripcion_push')
+    mostrarNotificacion(
+      faltaSql
+        ? 'Falta instalar las notificaciones en Supabase. Ejecuta supabase_notificaciones_push.sql.'
+        : resultado.error.message,
+      { tipo: 'error', duracion: 6000 }
+    )
+    return
+  }
+
+  mostrarNotificacion(
+    resultado.estado === 'activa'
+      ? 'Notificaciones activadas en este teléfono'
+      : 'Notificaciones desactivadas en este teléfono'
+  )
+}
+
 function fechaActualLocalInput() {
   const fecha = new Date()
   const zonaLocal = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000)
@@ -1266,6 +1307,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
     setMostrarValesBodega,
     setMostrarBodega,
     setMostrarProyeccionMateriales,
+    setMostrarHorasHombre,
   ])
   setPrecioMaterialEnEdicion(null)
   setDetalleCobroSeleccionado(null)
@@ -1295,6 +1337,33 @@ useEffect(() => {
     cargarPerfil()
   }
 }, [session])
+
+useEffect(() => {
+  if (!session?.user?.id) return
+  consultarEstadoNotificacionesPush().then(setEstadoNotificacionesPush)
+}, [session?.user?.id])
+
+useEffect(() => {
+  if (!perfil?.id) return
+  const temporizador = window.setTimeout(() => {
+    const url = new URL(window.location.href)
+    const destinoPush = url.searchParams.get('push')
+    if (!destinoPush) return
+
+    if (destinoPush === 'material' && puedeVerBodega) {
+      abrirBodega()
+    } else if (destinoPush === 'prueba' || destinoPush === 'avisos') {
+      setMostrarLlamadosPendientes(true)
+    }
+
+    url.searchParams.delete('push')
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`)
+  }, 0)
+
+  return () => window.clearTimeout(temporizador)
+  // El destino se procesa una sola vez al terminar de cargar el perfil.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [perfil?.id])
 
 useEffect(() => {
   cargarTablero()
@@ -1447,7 +1516,34 @@ async function cargarPerfil() {
   } catch (error) {
     console.error(error)
   }
-}
+  }
+
+  async function guardarCorreccionHorasHombre(registro, horas, motivo) {
+    if (perfil?.rol !== 'admin' || !registro?.id) return false
+    const clave = `${registro.origen_hh}-${registro.id}`
+    setGuardandoCorreccionHorasHombre(clave)
+    const { error } = await corregirHorasHombreModulo({
+      supabase,
+      origen: registro.origen_hh,
+      id: registro.id,
+      horas,
+      motivo,
+    })
+    setGuardandoCorreccionHorasHombre(null)
+
+    if (error) {
+      mostrarNotificacion(
+        error.code === 'PGRST202'
+          ? 'Falta instalar la corrección de H/H en Supabase. Ejecuta el archivo supabase_horas_hombre_modulos.sql.'
+          : `No se pudo guardar la corrección de H/H: ${error.message}`
+      )
+      return false
+    }
+
+    await Promise.all([cargarTablero(), cargarHistorial()])
+    mostrarNotificacion(horas === null ? 'Se restableció el cálculo automático de H/H' : 'Corrección de H/H guardada')
+    return true
+  }
 
 async function buscarSerie() {
   const serie = serieBusqueda.trim()
@@ -1686,8 +1782,10 @@ async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompl
 
 async function abrirPreciosMateriales() {
   if (!puedeVerPreciosMateriales) return
+  const debeAbrir = !mostrarPreciosMateriales
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
+  if (!debeAbrir) return
   setMostrarPreciosMateriales(true)
   await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
 }
@@ -3298,7 +3396,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
   )
 
   setGuardandoPedidoBodega(true)
-  const { error, etapa } = await guardarValeBodegaSupabase({
+  const { vale, error, etapa } = await guardarValeBodegaSupabase({
     supabase,
     fecha: pedido.fecha,
     archivoNombre: '',
@@ -3327,6 +3425,9 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
       ? 'Solicitud de material enviada para revisión'
       : 'Pedido guardado como vale de bodega'
   )
+  if (vale?.id) {
+    void enviarEventoPush({ supabase, tipo: 'solicitud_material', recursoId: vale.id })
+  }
   if (mostrarValesBodega && fechaValeBodega === pedido.fecha) {
     await cargarValesBodegaDia(pedido.fecha)
   }
@@ -4838,6 +4939,12 @@ async function solicitarPruebaElectrica() {
 
   await cargarTablero()
 
+  void enviarEventoPush({
+    supabase,
+    tipo: 'solicitud_prueba',
+    recursoId: moduloSeleccionado.id,
+  })
+
   setModuloSeleccionado(null)
 
   mostrarNotificacion('Solicitud de prueba eléctrica enviada')
@@ -5647,10 +5754,11 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       etiqueta: 'Planta Bayona',
       icono: '\u2302',
       visible: !esRolBodega,
-      activo: !mostrarKPI,
+      activo: !mostrarKPI && !mostrarHorasHombre,
       onClick: () => {
         cerrarVentanasEmergentes()
         setMostrarKPI(false)
+        setMostrarHorasHombre(false)
         window.scrollTo({ top: 0, behavior: 'smooth' })
       },
     },
@@ -5661,8 +5769,11 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       visible: !esRolBodega,
       activo: mostrarKPI,
       onClick: () => {
+        const abrir = !mostrarKPI
         cerrarVentanasEmergentes()
-        setMostrarKPI(true)
+        setMostrarHorasHombre(false)
+        setMostrarKPI(abrir)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
       },
     },
     {
@@ -5765,6 +5876,20 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       visible: puedeVerProyeccionMateriales,
       activo: mostrarProyeccionMateriales,
       onClick: abrirProyeccionMateriales,
+    },
+    {
+      id: 'horas-hombre',
+      etiqueta: 'Horas-hombre',
+      icono: '\u23F1',
+      visible: !esRolBodega,
+      activo: mostrarHorasHombre,
+      onClick: () => {
+        const abrir = !mostrarHorasHombre
+        cerrarVentanasEmergentes()
+        setMostrarKPI(false)
+        setMostrarHorasHombre(abrir)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      },
     },
     {
       id: 'equivalencias',
@@ -5926,6 +6051,45 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 }}
               >
                 <h3 style={{ margin: '0 0 12px' }}>Avisos pendientes</h3>
+
+                <button
+                  type="button"
+                  onClick={alternarNotificacionesPush}
+                  disabled={
+                    configurandoNotificacionesPush ||
+                    estadoNotificacionesPush === 'cargando' ||
+                    estadoNotificacionesPush === 'no-compatible' ||
+                    estadoNotificacionesPush === 'denegada'
+                  }
+                  style={{
+                    width: '100%',
+                    marginBottom: '6px',
+                    padding: '10px 12px',
+                    border: `1px solid ${estadoNotificacionesPush === 'activa' ? '#38c878' : '#4f7d91'}`,
+                    borderRadius: '8px',
+                    background: estadoNotificacionesPush === 'activa' ? '#104b2d' : '#17313c',
+                    color: 'white',
+                    cursor: configurandoNotificacionesPush ? 'wait' : 'pointer',
+                    fontWeight: 800,
+                  }}
+                >
+                  {configurandoNotificacionesPush
+                    ? 'Configurando…'
+                    : estadoNotificacionesPush === 'activa'
+                      ? '✓ Notificaciones activadas en este teléfono'
+                      : estadoNotificacionesPush === 'denegada'
+                        ? 'Notificaciones bloqueadas por el teléfono'
+                        : estadoNotificacionesPush === 'no-compatible'
+                          ? 'Instala la aplicación para activar notificaciones'
+                          : 'Activar notificaciones en este teléfono'}
+                </button>
+                <small style={{ display: 'block', marginBottom: '14px', color: '#aebdc4', lineHeight: 1.35 }}>
+                  {estadoNotificacionesPush === 'activa'
+                    ? 'Presiona nuevamente para desactivarlas en este dispositivo.'
+                    : estadoNotificacionesPush === 'denegada'
+                      ? 'Debes habilitarlas desde la configuración del navegador.'
+                      : 'Recibe avisos de materiales y pruebas eléctricas aunque la aplicación no esté abierta.'}
+                </small>
 
                 {totalAvisosPendientes === 0 ? (
                   <p>No hay avisos pendientes.</p>
@@ -6402,6 +6566,16 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     </div>
 
   </div>
+)}
+
+{mostrarHorasHombre && (
+  <IndicadoresHorasHombre
+    modulos={datos}
+    historial={historial}
+    puedeCorregir={perfil?.rol === 'admin'}
+    guardandoId={guardandoCorreccionHorasHombre}
+    onCorregir={guardarCorreccionHorasHombre}
+  />
 )}
 
 <div

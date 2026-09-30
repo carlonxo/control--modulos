@@ -43,6 +43,11 @@ export async function cargarDatosTablero({ supabase, esSolicitudPruebaActiva }) 
     nota: row.nota || modulosMap.get(row.id)?.nota || '',
     observacion_alerta: row.observacion_alerta || modulosMap.get(row.id)?.observacion_alerta || '',
     fecha_prueba_electrica: row.fecha_prueba_electrica || modulosMap.get(row.id)?.fecha_prueba_electrica || null,
+    fecha_ingreso: row.fecha_ingreso || modulosMap.get(row.id)?.fecha_ingreso || null,
+    horas_hombre_corregidas: row.horas_hombre_corregidas ?? modulosMap.get(row.id)?.horas_hombre_corregidas ?? null,
+    horas_hombre_motivo: row.horas_hombre_motivo || modulosMap.get(row.id)?.horas_hombre_motivo || '',
+    horas_hombre_corregidas_por: row.horas_hombre_corregidas_por || modulosMap.get(row.id)?.horas_hombre_corregidas_por || '',
+    horas_hombre_corregidas_en: row.horas_hombre_corregidas_en || modulosMap.get(row.id)?.horas_hombre_corregidas_en || null,
     solicitud_prueba: esSolicitudPruebaActiva(row.solicitud_prueba),
   }))
 
@@ -55,6 +60,7 @@ export async function cargarDatosTablero({ supabase, esSolicitudPruebaActiva }) 
       nota: modulo.nota || '',
       observacion_alerta: modulo.observacion_alerta || '',
       fecha_prueba_electrica: modulo.fecha_prueba_electrica || null,
+      fecha_ingreso: modulo.fecha_ingreso || null,
       solicitud_prueba: esSolicitudPruebaActiva(modulo.solicitud_prueba),
     }))
 
