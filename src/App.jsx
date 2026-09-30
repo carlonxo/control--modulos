@@ -72,6 +72,7 @@ import {
   cargarValesBodegaDia as cargarValesBodegaDiaSupabase,
   guardarValeBodega as guardarValeBodegaSupabase,
   actualizarItemsValeBodega as actualizarItemsValeBodegaSupabase,
+  actualizarDatosValeBodega as actualizarDatosValeBodegaSupabase,
   entregarPedidoBodegaTransaccional,
   recepcionarDevolucionBodegaTransaccional,
 } from './services/valesBodegaService'
@@ -399,6 +400,29 @@ function agregarMarcaRevisionVale(observacion = '', marca = '') {
 
   if (marca) partes.push(marca)
   return partes.join(' | ')
+}
+
+function actualizarDatosObservacionVale(observacion = '', datos = {}) {
+  const partes = String(observacion || '')
+    .split('|')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+  const esCampoEditable = (parte) => {
+    const normalizada = normalizarTextoComparacion(parte)
+    return normalizada.startsWith('proyecto')
+      || normalizada.startsWith('tipomodulo')
+      || normalizada.startsWith('serie')
+  }
+  const origen = partes.find((parte) => normalizarTextoComparacion(parte) === 'pedidogeneradodesdeapp')
+  const restantes = partes.filter((parte) => parte !== origen && !esCampoEditable(parte))
+
+  return [
+    origen || 'Pedido generado desde app',
+    `Proyecto: ${String(datos.proyecto || '').trim()}`,
+    `Tipo modulo: ${String(datos.tipoModulo || '').trim()}`,
+    `Serie: ${String(datos.serie || '').trim()}`,
+    ...restantes,
+  ].filter(Boolean).join(' | ')
 }
 
 function esSolicitudPendienteRevisionBodega(vale = {}) {
@@ -889,6 +913,7 @@ const puedeAdministrarBodega = tienePermiso(perfil?.rol, 'administrarBodega')
 const puedeVerPedidosBodegaHoy = tienePermiso(perfil?.rol, 'verPedidosBodegaHoy')
 const puedeEditarPedidosBodega = tienePermiso(perfil?.rol, 'editarPedidosBodega')
 const puedeEditarPedidosEntregadosBodega = perfil?.rol === 'admin'
+const puedeEditarDatosValeBodega = ['admin', 'analista'].includes(perfil?.rol)
 const puedeCrearPedidoBodega = ['admin', 'operador', 'electrico'].includes(perfil?.rol)
 const puedeEliminarProtocolosMensuales = tienePermiso(perfil?.rol, 'eliminarProtocolosMensuales')
 const puedeAjustarValoresProtocolos = tienePermiso(perfil?.rol, 'ajustarValoresProtocolos')
@@ -3087,10 +3112,14 @@ async function cargarInventariosBodega(preferido = null) {
 
 async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null, seccion = null } = {}) {
   if (!puedeVerBodega) return
+  const esSeccionAlternable = ['historial-vales', 'codigos-barra'].includes(seccion)
+  const seccionSiguiente = esSeccionAlternable && seccionBodegaInicial?.nombre === seccion
+    ? ''
+    : seccion
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
-  setSeccionBodegaInicial(seccion ? { nombre: seccion, id: Date.now() } : null)
+  setSeccionBodegaInicial(seccion === null ? null : { nombre: seccionSiguiente, id: Date.now() })
   if (abrirSolicitudMaterial) {
     setSolicitudMaterialBodegaInicial({
       id: Date.now(),
@@ -3991,16 +4020,20 @@ async function aplicarAjustesInventarioBodega(ajustes = []) {
   return { error: null }
 }
 
-async function editarSolicitudBodega(alerta, itemsEditados) {
-  if (!puedeEditarPedidosBodega || !alerta?.id) return false
+async function editarSolicitudBodega(alerta, itemsEditados, datosValeEditados = null) {
+  const editaMateriales = Array.isArray(itemsEditados)
+  const editaDatosVale = Boolean(datosValeEditados)
+  if (!alerta?.id || (!editaMateriales && !editaDatosVale)) return false
+  if (editaMateriales && !puedeEditarPedidosBodega) return false
+  if (editaDatosVale && !puedeEditarDatosValeBodega) return false
   const pedidoEntregado = String(alerta.estado_bodega || '').toLowerCase() === 'entregado'
 
-  if (pedidoEntregado && !puedeEditarPedidosEntregadosBodega) {
+  if (editaMateriales && pedidoEntregado && !puedeEditarPedidosEntregadosBodega) {
     mostrarNotificacion('Solo admin puede editar pedidos ya entregados')
     return false
   }
 
-  const items = (itemsEditados || [])
+  const items = (editaMateriales ? itemsEditados : (alerta.items || []))
     .map((item) => ({
       id: item.id,
       material_vale: String(item.material_vale || item.material_balance || '').trim(),
@@ -4017,7 +4050,7 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
   let ajustesInventario = []
   let itemsSinDescuento = []
 
-  if (pedidoEntregado) {
+  if (pedidoEntregado && editaMateriales) {
     const bodegaSolicitud = obtenerBodegaDesdeObservacion(alerta.observacion)
     const inventarioActual = bodegaSolicitud
       ? inventariosBodega.find((item) => obtenerBodegaInventario(item) === bodegaSolicitud)
@@ -4048,18 +4081,37 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
     if (!confirmado) return false
   }
 
-  const { error, etapa, items: itemsGuardados } = await actualizarItemsValeBodegaSupabase({
-    supabase,
-    vale: alerta,
-    items,
-  })
+  const valeEditado = editaDatosVale
+    ? {
+        ...alerta,
+        serie: String(datosValeEditados.serie || '').trim(),
+        observacion: actualizarDatosObservacionVale(alerta.observacion, datosValeEditados),
+      }
+    : alerta
+
+  const resultadoEdicion = editaDatosVale && !editaMateriales
+    ? await actualizarDatosValeBodegaSupabase({
+        supabase,
+        valeId: valeEditado.id,
+        serie: valeEditado.serie,
+        observacion: valeEditado.observacion,
+      })
+    : await actualizarItemsValeBodegaSupabase({
+        supabase,
+        vale: valeEditado,
+        items,
+      })
+  const { error, etapa } = resultadoEdicion
+  const itemsGuardados = resultadoEdicion.items || (editaDatosVale
+    ? (alerta.items || []).map((item) => ({ ...item, serie: valeEditado.serie }))
+    : null)
 
   if (error) {
     mostrarNotificacion(`No se pudo editar el pedido${etapa ? ` (${etapa})` : ''}: ${error.message}`)
     return { error: `${etapa ? `${etapa}: ` : ''}${error.message}` }
   }
 
-  if (pedidoEntregado && ajustesInventario.length > 0) {
+  if (pedidoEntregado && editaMateriales && ajustesInventario.length > 0) {
     const { error: errorInventario } = await aplicarAjustesInventarioBodega(ajustesInventario)
     if (errorInventario) {
       mostrarNotificacion('El pedido se editó, pero no se pudo corregir inventario: ' + errorInventario.message)
@@ -4073,8 +4125,8 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
     ? `Modificado por bodega: ${perfil?.nombre || perfil?.email || session?.user?.email || 'bodega'}`
     : ''
   const observacionActualizada = marcaEdicion
-    ? agregarMarcaObservacionVale(alerta.observacion, marcaEdicion)
-    : alerta.observacion
+    ? agregarMarcaObservacionVale(valeEditado.observacion, marcaEdicion)
+    : valeEditado.observacion
   const { error: errorMarcaEdicion } = marcaEdicion
     ? await supabase
       .from('vales_bodega')
@@ -4082,8 +4134,13 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
       .eq('id', alerta.id)
     : { error: null }
 
-  const observacionFinal = errorMarcaEdicion ? alerta.observacion : observacionActualizada
-  const pedidoActualizado = { ...alerta, observacion: observacionFinal, items: itemsGuardados || items }
+  const observacionFinal = errorMarcaEdicion ? valeEditado.observacion : observacionActualizada
+  const pedidoActualizado = {
+    ...valeEditado,
+    ...(resultadoEdicion.vale || {}),
+    observacion: observacionFinal,
+    items: itemsGuardados || items,
+  }
   setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
     vale.id === alerta.id ? pedidoActualizado : vale
   )))
@@ -4093,14 +4150,16 @@ async function editarSolicitudBodega(alerta, itemsEditados) {
   mostrarNotificacion(
     errorMarcaEdicion
       ? 'Pedido actualizado, pero no se pudo marcar como editado'
-      : pedidoEntregado
+      : pedidoEntregado && editaMateriales
         ? `Pedido entregado corregido. Inventario recalculado${itemsSinDescuento.length > 0 ? `; ${itemsSinDescuento.length} ítems sin descuento.` : '.'}`
-        : 'Pedido actualizado correctamente'
+        : editaDatosVale && !editaMateriales
+          ? 'Datos del vale actualizados correctamente'
+          : 'Pedido actualizado correctamente'
   )
-  if (pedidoEntregado) {
+  if (pedidoEntregado && editaMateriales) {
     await recalcularResumenOperacionalPorFecha(alerta.fecha_entrega_bodega || alerta.fecha)
   }
-  if (pedidoEntregado) await cargarInventariosBodega()
+  if (pedidoEntregado && editaMateriales) await cargarInventariosBodega()
   await cargarAlertasBodega()
   return pedidoActualizado
 }
@@ -7575,6 +7634,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     puedeVerPedidosHoy={puedeVerPedidosBodegaHoy}
     puedeEditarPedidos={puedeEditarPedidosBodega}
     puedeEditarPedidosEntregados={puedeEditarPedidosEntregadosBodega}
+    puedeEditarDatosVale={puedeEditarDatosValeBodega}
     puedeGestionarPedidos={puedeOperarComoBodega}
     puedeAprobarPedidos={puedeRevisarSolicitudesBodega}
     puedeCrearPedido={puedeCrearPedidoBodega}
@@ -7610,6 +7670,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     rangoDespachosBodega={rangoDespachosBodega}
     fechaDespachosBodega={fechaDespachosBodega}
     codigosBarraBodega={codigosBarraBodega}
+    modulos={datos}
     cargandoCodigosBarraBodega={cargandoCodigosBarraBodega}
     guardandoCodigoBarraBodega={guardandoCodigoBarraBodega}
     solicitudMaterialInicial={solicitudMaterialBodegaInicial}

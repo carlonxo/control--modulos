@@ -22,6 +22,7 @@ function BodegaModal({
   puedeVerPedidosHoy,
   puedeEditarPedidos,
   puedeEditarPedidosEntregados,
+  puedeEditarDatosVale = false,
   puedeGestionarPedidos,
   puedeAprobarPedidos,
   puedeCrearPedido = false,
@@ -57,6 +58,7 @@ function BodegaModal({
   rangoDespachosBodega = 'mes',
   fechaDespachosBodega = '',
   codigosBarraBodega = [],
+  modulos = [],
   cargandoCodigosBarraBodega = false,
   guardandoCodigoBarraBodega = false,
   solicitudMaterialInicial = null,
@@ -270,7 +272,31 @@ function BodegaModal({
   }
 
   function cambiarPedidoMaterial(campo, valor) {
-    setPedidoMaterial((actual) => ({ ...actual, [campo]: valor }))
+    setPedidoMaterial((actual) => {
+      if (campo !== 'serie') return { ...actual, [campo]: valor }
+
+      const moduloEncontrado = modulos.find((modulo) => (
+        normalizarBusqueda(modulo?.serie) === normalizarBusqueda(valor)
+      ))
+      const moduloAnterior = modulos.find((modulo) => (
+        normalizarBusqueda(modulo?.serie) === normalizarBusqueda(actual.serie)
+      ))
+
+      if (moduloEncontrado) {
+        return {
+          ...actual,
+          serie: valor,
+          tipoModulo: moduloEncontrado.tipo || '',
+          proyecto: moduloEncontrado.proyecto || '',
+        }
+      }
+
+      return {
+        ...actual,
+        serie: valor,
+        ...(moduloAnterior ? { tipoModulo: '', proyecto: '' } : {}),
+      }
+    })
   }
 
   function cambiarDevolucionMaterial(campo, valor) {
@@ -496,10 +522,11 @@ function BodegaModal({
           codigosBarraBodega={codigosBarraBodega}
           puedeEditar={puedeEditarPedidos}
           puedeEditarEntregados={puedeEditarPedidosEntregados}
+          puedeEditarDatosVale={puedeEditarDatosVale}
           puedeGestionar={puedeGestionarPedidos}
           puedeAprobar={puedeAprobarPedidos}
-          onEditar={async (itemsEditados) => {
-            const resultado = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados)
+          onEditar={async (itemsEditados, datosValeEditados) => {
+            const resultado = await onEditarSolicitudBodega?.(alertaBodegaSeleccionada, itemsEditados, datosValeEditados)
             if (!resultado || resultado.error) {
               return { ok: false, error: resultado?.error || 'No se pudo guardar la modificación.' }
             }
@@ -2091,6 +2118,7 @@ function DetalleSolicitudBodega({
   codigosBarraBodega = [],
   puedeEditar,
   puedeEditarEntregados,
+  puedeEditarDatosVale,
   puedeGestionar,
   puedeAprobar,
   onEditar,
@@ -2102,8 +2130,10 @@ function DetalleSolicitudBodega({
   onCerrar,
 }) {
   const [editando, setEditando] = useState(false)
+  const [editandoDatosVale, setEditandoDatosVale] = useState(false)
   const [guardandoEdicion, setGuardandoEdicion] = useState(false)
   const [itemsEditados, setItemsEditados] = useState([])
+  const [datosValeEditados, setDatosValeEditados] = useState(() => obtenerDatosEditablesVale(alerta))
   const [filaSugerenciasEdicion, setFilaSugerenciasEdicion] = useState(null)
   const [textoEscaner, setTextoEscaner] = useState('')
   const [cantidadesEscaneadas, setCantidadesEscaneadas] = useState(() => leerEscaneosPedido(alerta?.id))
@@ -2151,6 +2181,8 @@ function DetalleSolicitudBodega({
       material_balance: item.material_balance || item.material_vale || '',
       cantidad: item.cantidad || '',
     })))
+    setDatosValeEditados(obtenerDatosEditablesVale(alerta))
+    if (esOtroPedido) setEditandoDatosVale(false)
     setCantidadesEscaneadas((actuales) => {
       const base = esOtroPedido ? leerEscaneosPedido(alerta?.id) : actuales
       const conciliadas = conciliarEscaneosPedido(base, itemsPedido, materialesInventario)
@@ -2210,6 +2242,27 @@ function DetalleSolicitudBodega({
     setGuardandoEdicion(false)
     if (resultado?.ok) setEditando(false)
     else setMensajeEscaner({ tipo: 'error', texto: resultado?.error || 'No se pudo guardar la modificación.' })
+  }
+
+  async function guardarDatosVale() {
+    const serie = String(datosValeEditados.serie || '').trim()
+    const tipoModulo = String(datosValeEditados.tipoModulo || '').trim()
+    const proyecto = String(datosValeEditados.proyecto || '').trim()
+
+    if (!serie || !tipoModulo || !proyecto) {
+      setMensajeEscaner({ tipo: 'error', texto: 'Completa serie, tipo de módulo y proyecto antes de guardar.' })
+      return
+    }
+
+    setGuardandoEdicion(true)
+    const resultado = await onEditar?.(null, { serie, tipoModulo, proyecto })
+    setGuardandoEdicion(false)
+    if (resultado?.ok) {
+      setEditandoDatosVale(false)
+      setMensajeEscaner({ tipo: 'ok', texto: 'Datos del vale actualizados correctamente.' })
+    } else {
+      setMensajeEscaner({ tipo: 'error', texto: resultado?.error || 'No se pudieron guardar los datos del vale.' })
+    }
   }
 
   async function procesarEscaneo(valor) {
@@ -2500,17 +2553,82 @@ function DetalleSolicitudBodega({
           </p>
         )}
 
-        {(limpiarObservacionSolicitudBodega(alerta.observacion) || fueModificadoPorBodega) && (
+        {(limpiarObservacionSolicitudBodega(alerta.observacion) || fueModificadoPorBodega || editandoDatosVale) && (
           <div
             className={fueModificadoPorBodega ? 'vale-bodega-modificado' : ''}
-            style={{ padding: '10px', border: '1px solid #795548', borderRadius: '8px', background: '#2b211b', color: '#ffcc80', marginBottom: '12px' }}
+            onDoubleClick={() => {
+              if (!puedeEditarDatosVale || !esPedido || editandoDatosVale) return
+              setDatosValeEditados(obtenerDatosEditablesVale(alerta))
+              setEditandoDatosVale(true)
+            }}
+            title={puedeEditarDatosVale && esPedido && !editandoDatosVale ? 'Doble clic para editar serie, tipo y proyecto' : undefined}
+            style={{
+              padding: '10px',
+              border: `1px solid ${puedeEditarDatosVale && esPedido ? '#b57a31' : '#795548'}`,
+              borderRadius: '8px',
+              background: '#2b211b',
+              color: '#ffcc80',
+              marginBottom: '12px',
+              cursor: puedeEditarDatosVale && esPedido && !editandoDatosVale ? 'pointer' : 'default',
+            }}
           >
             {fueModificadoPorBodega && (
               <span style={{ display: 'inline-block', marginRight: '8px', color: '#ffe082', fontWeight: 900 }}>
                 Editado por bodega
               </span>
             )}
-            {limpiarObservacionSolicitudBodega(alerta.observacion)}
+            {editandoDatosVale ? (
+              <div style={{ display: 'grid', gap: '10px' }}>
+                <strong style={{ color: '#ffe0b2' }}>Editar datos del vale</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                  <CampoTexto
+                    label="Serie"
+                    value={datosValeEditados.serie}
+                    onChange={(valor) => setDatosValeEditados((actual) => ({ ...actual, serie: valor }))}
+                  />
+                  <CampoTexto
+                    label="Tipo de módulo"
+                    value={datosValeEditados.tipoModulo}
+                    onChange={(valor) => setDatosValeEditados((actual) => ({ ...actual, tipoModulo: valor }))}
+                  />
+                  <CampoTexto
+                    label="Proyecto"
+                    value={datosValeEditados.proyecto}
+                    onChange={(valor) => setDatosValeEditados((actual) => ({ ...actual, proyecto: valor }))}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={guardandoEdicion}
+                    onClick={() => {
+                      setDatosValeEditados(obtenerDatosEditablesVale(alerta))
+                      setEditandoDatosVale(false)
+                    }}
+                    style={botonMiniGris}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={guardandoEdicion}
+                    onClick={guardarDatosVale}
+                    style={{ ...botonMiniAzul, opacity: guardandoEdicion ? 0.7 : 1 }}
+                  >
+                    {guardandoEdicion ? 'Guardando...' : 'Guardar datos'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {limpiarObservacionSolicitudBodega(alerta.observacion)}
+                {puedeEditarDatosVale && esPedido && (
+                  <small style={{ display: 'block', marginTop: '6px', color: '#d7a968' }}>
+                    Doble clic para editar serie, tipo y proyecto
+                  </small>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -3084,10 +3202,10 @@ function PanelCrearPedido({
           onChange={(valor) => onCambiarPedido('fecha', valor)}
         />
         <CampoTexto
-          label="Proyecto"
-          value={pedido.proyecto}
-          onChange={(valor) => onCambiarPedido('proyecto', valor)}
-          placeholder="Proyecto"
+          label="Serie"
+          value={pedido.serie || ''}
+          onChange={(valor) => onCambiarPedido('serie', valor)}
+          placeholder="Ej: 2020xxxx"
         />
         <CampoTexto
           label="Tipo módulo"
@@ -3096,10 +3214,10 @@ function PanelCrearPedido({
           placeholder="Tipo módulo"
         />
         <CampoTexto
-          label="Serie"
-          value={pedido.serie || ''}
-          onChange={(valor) => onCambiarPedido('serie', valor)}
-          placeholder="Ej: 2020xxxx"
+          label="Proyecto"
+          value={pedido.proyecto}
+          onChange={(valor) => onCambiarPedido('proyecto', valor)}
+          placeholder="Proyecto"
         />
         <label style={labelStyle}>
           Bodega
@@ -3593,6 +3711,24 @@ function limpiarObservacionSolicitudBodega(observacion = '') {
     .filter((parte) => !normalizarBusqueda(parte).startsWith('modificado por bodega'))
     .filter((parte) => !normalizarBusqueda(parte).startsWith('revision'))
     .join(' | ')
+}
+
+function obtenerDatoObservacionVale(observacion = '', etiqueta = '') {
+  const prefijo = `${normalizarBusqueda(etiqueta)}:`
+  const parte = String(observacion || '')
+    .split('|')
+    .map((item) => item.trim())
+    .find((item) => normalizarBusqueda(item).startsWith(prefijo))
+
+  return parte ? parte.split(':').slice(1).join(':').trim() : ''
+}
+
+function obtenerDatosEditablesVale(vale = {}) {
+  return {
+    serie: String(vale.serie || obtenerDatoObservacionVale(vale.observacion, 'Serie') || '').trim(),
+    tipoModulo: obtenerDatoObservacionVale(vale.observacion, 'Tipo modulo'),
+    proyecto: obtenerDatoObservacionVale(vale.observacion, 'Proyecto'),
+  }
 }
 
 function tieneMarcaModificacionBodega(observacion = '') {

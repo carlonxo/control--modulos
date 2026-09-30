@@ -573,6 +573,27 @@ export async function actualizarItemsValeBodega({
   return { error: null, etapa: null, items: itemsGuardados || filasInsertar }
 }
 
+export async function actualizarDatosValeBodega({
+  supabase,
+  valeId,
+  serie,
+  observacion,
+}) {
+  if (!valeId) return { vale: null, error: new Error('Falta el pedido para editar'), etapa: 'vale' }
+
+  const { data, error } = await supabase.rpc('editar_datos_vale_bodega', {
+    p_vale_id: valeId,
+    p_serie: String(serie || '').trim(),
+    p_observacion: String(observacion || '').trim(),
+  })
+
+  return {
+    vale: data || null,
+    error,
+    etapa: error ? 'datos_vale' : null,
+  }
+}
+
 async function completarDatosValeEnItems({
   supabase,
   items = [],
