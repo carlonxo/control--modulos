@@ -1,6 +1,7 @@
 export default function ModalModulo({ children }) {
   return (
     <div
+      className="modal-modulo"
       style={{
         position: 'fixed',
         top: '50%',
@@ -10,9 +11,10 @@ export default function ModalModulo({ children }) {
         padding: '20px',
         borderRadius: '10px',
         border: '1px solid white',
-        width: 'calc(100vw - 32px)',
+        width: 'min(420px, calc(100dvw - 32px))',
         maxWidth: '420px',
-        maxHeight: 'calc(100vh - 32px)',
+        maxHeight: 'calc(100dvh - 32px)',
+        minWidth: 0,
         overflowY: 'auto',
         boxSizing: 'border-box',
         zIndex: 1000,

@@ -18,6 +18,7 @@ function BotonesModalModulo({
 
   return (
     <div
+      className="modal-modulo-botones"
       style={{
         display: 'flex',
         flexWrap: 'wrap',

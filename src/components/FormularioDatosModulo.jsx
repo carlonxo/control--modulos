@@ -23,6 +23,7 @@ function FormularioDatosModulo({
 }) {
   return (
     <div
+      className="modal-modulo-formulario"
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
@@ -30,7 +31,7 @@ function FormularioDatosModulo({
         textAlign: 'left',
       }}
     >
-      <div style={{ marginBottom: '10px' }}>
+      <div className="modal-modulo-campo" style={{ marginBottom: '10px' }}>
         <strong>Serie</strong>
         <input
           value={serieEditada}
@@ -40,7 +41,7 @@ function FormularioDatosModulo({
         />
       </div>
 
-      <div style={{ marginBottom: '10px' }}>
+      <div className="modal-modulo-campo" style={{ marginBottom: '10px' }}>
         <strong>Tipo</strong>
         <input
           value={tipoEditado}
@@ -50,7 +51,7 @@ function FormularioDatosModulo({
         />
       </div>
 
-      <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
+      <div className="modal-modulo-campo modal-modulo-campo-ancho" style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
         <strong>Proyecto</strong>
         <input
           value={proyectoEditado}
@@ -60,7 +61,7 @@ function FormularioDatosModulo({
         />
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+      <div className="modal-modulo-campo" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
         <strong style={{ whiteSpace: 'nowrap' }}>Línea</strong>
 
         <select
@@ -81,7 +82,7 @@ function FormularioDatosModulo({
         </select>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+      <div className="modal-modulo-campo" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
         <strong style={{ whiteSpace: 'nowrap' }}>Estado</strong>
 
         <select
@@ -108,7 +109,7 @@ function FormularioDatosModulo({
       </div>
 
       {estadoEditado === 'En garantía' && (
-        <div style={{ gridColumn: '1 / -1', marginBottom: '10px', textAlign: 'left' }}>
+        <div className="modal-modulo-campo modal-modulo-campo-ancho" style={{ gridColumn: '1 / -1', marginBottom: '10px', textAlign: 'left' }}>
           <strong>Fecha prueba eléctrica</strong>
           <input
             type="date"
@@ -131,7 +132,7 @@ function FormularioDatosModulo({
         </div>
       )}
 
-      <div style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
+      <div className="modal-modulo-campo modal-modulo-campo-ancho" style={{ marginBottom: '10px', gridColumn: '1 / -1' }}>
         <strong>Responsable</strong>
         <input
           value={responsableEditado}
@@ -141,7 +142,7 @@ function FormularioDatosModulo({
         />
       </div>
 
-      <div style={{ marginBottom: '5px', gridColumn: '1 / -1' }}>
+      <div className="modal-modulo-campo modal-modulo-campo-ancho" style={{ marginBottom: '5px', gridColumn: '1 / -1' }}>
         <strong>Nota</strong>
         <textarea
           value={notaEditada}

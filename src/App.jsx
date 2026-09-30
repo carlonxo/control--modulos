@@ -6469,12 +6469,13 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     display: 'contents',
   }}
 >
-  <div style={{ display: 'grid', gridTemplateRows: '20px 32px', gap: '5px', minWidth: 0, padding: '8px 10px', border: '1px solid #31505d', borderRadius: '7px', background: '#10212a', textAlign: 'left' }}>
-      <strong style={{ color: '#79c7ff', fontSize: '13px', whiteSpace: 'nowrap' }}>Exportar listado de pruebas eléctricas</strong>
-      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', minWidth: 0 }}>
-      <small style={{ color: '#b8c7ce', fontWeight: 700 }}>Desde</small>
-      <label style={{ display: 'contents' }}>
+  <div className="herramienta-exportacion-pruebas" style={{ display: 'grid', gridTemplateRows: '20px 32px', gap: '5px', minWidth: 0, padding: '8px 10px', border: '1px solid #31505d', borderRadius: '7px', background: '#10212a', textAlign: 'left' }}>
+      <strong className="herramienta-exportacion-pruebas-titulo" style={{ color: '#79c7ff', fontSize: '13px', whiteSpace: 'nowrap' }}>Exportar listado de pruebas eléctricas</strong>
+      <div className="herramienta-exportacion-pruebas-controles" style={{ display: 'flex', gap: '6px', alignItems: 'center', minWidth: 0 }}>
+      <label className="herramienta-exportacion-pruebas-campo">
+        <small style={{ color: '#b8c7ce', fontWeight: 700 }}>Desde</small>
         <input
+          className="herramienta-exportacion-pruebas-fecha"
           type="date"
           aria-label="Fecha inicial del listado"
           title="Desde"
@@ -6484,9 +6485,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         />
       </label>
 
-      <small style={{ color: '#b8c7ce', fontWeight: 700 }}>Hasta</small>
-      <label style={{ display: 'contents' }}>
+      <label className="herramienta-exportacion-pruebas-campo">
+        <small style={{ color: '#b8c7ce', fontWeight: 700 }}>Hasta</small>
         <input
+          className="herramienta-exportacion-pruebas-fecha"
           type="date"
           aria-label="Fecha final del listado"
           title="Hasta"
@@ -6497,6 +6499,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       </label>
 
       <button
+        className="herramienta-exportacion-pruebas-boton"
         type="button"
         onClick={exportarHistorialExcelHandler}
         style={{ height: '32px', padding: '5px 10px', borderRadius: '5px', border: '1px solid #159489', background: '#087d77', color: 'white', fontWeight: 800, whiteSpace: 'nowrap' }}
