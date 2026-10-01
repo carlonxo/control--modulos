@@ -714,6 +714,9 @@ const [fechaPruebaEditada, setFechaPruebaEditada] = useState('')
 const [serieBusqueda, setSerieBusqueda] = useState('')
 const [resultadoBusqueda, setResultadoBusqueda] = useState([])
 const [busquedaRealizada, setBusquedaRealizada] = useState(false)
+const [buscandoSerie, setBuscandoSerie] = useState(false)
+const [errorBusquedaSerie, setErrorBusquedaSerie] = useState('')
+const resultadosBusquedaRef = useRef(null)
 const [mostrarNuevoModulo, setMostrarNuevoModulo] = useState(false)
 const [creandoModulo, setCreandoModulo] = useState(false)
 const [posicionSeleccionada, setPosicionSeleccionada] = useState(null)
@@ -1303,6 +1306,8 @@ function limpiarBusquedaSerie() {
   setSerieBusqueda('')
   setResultadoBusqueda([])
   setBusquedaRealizada(false)
+  setBuscandoSerie(false)
+  setErrorBusquedaSerie('')
 }
 
 function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateriales = false } = {}) {
@@ -1576,21 +1581,34 @@ async function buscarSerie() {
   if (!serie) {
     setResultadoBusqueda([])
     setBusquedaRealizada(false)
+    setErrorBusquedaSerie('Ingresa una serie para buscar.')
     return
   }
 
-  const { data, error } = await buscarRegistrosPorSerie({
-    supabase,
-    serie,
-  })
+  setBuscandoSerie(true)
+  setErrorBusquedaSerie('')
 
-  if (error) {
-    alert(error.message)
-    return
+  try {
+    const { data, error } = await buscarRegistrosPorSerie({
+      supabase,
+      serie,
+    })
+
+    if (error) {
+      setResultadoBusqueda([])
+      setBusquedaRealizada(true)
+      setErrorBusquedaSerie(`No se pudo realizar la búsqueda: ${error.message}`)
+      return
+    }
+
+    setResultadoBusqueda(data || [])
+    setBusquedaRealizada(true)
+  } finally {
+    setBuscandoSerie(false)
+    window.setTimeout(() => {
+      resultadosBusquedaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
   }
-
-  setResultadoBusqueda(data || [])
-  setBusquedaRealizada(true)
 }
 
 function exportarHistorialExcelHandler() {
@@ -6658,20 +6676,39 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     <input
       type="search"
       value={serieBusqueda}
-      onChange={(e) => setSerieBusqueda(e.target.value)}
+      onChange={(e) => {
+        setSerieBusqueda(e.target.value)
+        setErrorBusquedaSerie('')
+      }}
       placeholder="Ingresa el número de serie"
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
+          e.preventDefault()
+          e.currentTarget.blur()
           buscarSerie()
         }
       }}
+      inputMode="numeric"
+      enterKeyHint="search"
+      autoComplete="off"
+      autoCapitalize="none"
+      spellCheck={false}
       aria-label="Número de serie"
       style={{ flex: '1 1 120px', minWidth: '90px', width: '100%', height: '32px', padding: '5px 8px', boxSizing: 'border-box', borderRadius: '5px', border: '1px solid #54717e', background: '#17262e', color: 'white' }}
     />
   </label>
 
-  <button onClick={buscarSerie} style={{ height: '32px', padding: '5px 11px', borderRadius: '5px', border: '1px solid #278be8', background: '#176fc1', color: 'white', fontWeight: 800 }}>
-    Buscar
+  <button
+    type="button"
+    disabled={buscandoSerie}
+    onClick={(e) => {
+      e.preventDefault()
+      e.currentTarget.blur()
+      buscarSerie()
+    }}
+    style={{ height: '32px', padding: '5px 11px', borderRadius: '5px', border: '1px solid #278be8', background: '#176fc1', color: 'white', fontWeight: 800, opacity: buscandoSerie ? 0.7 : 1 }}
+  >
+    {buscandoSerie ? 'Buscando...' : 'Buscar'}
   </button>
 
   {(serieBusqueda || busquedaRealizada || resultadoBusqueda.length > 0) && (
@@ -6853,9 +6890,23 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 </div>
 </div>
 
-  {busquedaRealizada && resultadoBusqueda.length === 0 && (
-    <p style={{ marginTop: '12px' }}>No se encontraron registros para esa serie.</p>
-  )}
+  {(buscandoSerie || busquedaRealizada || errorBusquedaSerie) && (
+    <div
+      ref={resultadosBusquedaRef}
+      aria-live="polite"
+      style={{ scrollMarginTop: '82px' }}
+    >
+      {buscandoSerie && (
+        <p style={{ marginTop: '12px', color: '#90caf9', fontWeight: 800 }}>Buscando serie...</p>
+      )}
+
+      {errorBusquedaSerie && (
+        <p style={{ marginTop: '12px', color: '#ff8a80', fontWeight: 800 }}>{errorBusquedaSerie}</p>
+      )}
+
+      {busquedaRealizada && !errorBusquedaSerie && resultadoBusqueda.length === 0 && (
+        <p style={{ marginTop: '12px' }}>No se encontraron registros para esa serie.</p>
+      )}
 
   {resultadoBusqueda.map((item) => (
     <div
@@ -6933,6 +6984,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       )}
     </div>
   ))}
+    </div>
+  )}
 </div>
 
 </div>
