@@ -2,6 +2,7 @@ export async function cargarDespachosBodegaRango({
   supabase,
   fechaInicio,
   fechaFin,
+  bodega = 'bayona',
   limite = 800,
 }) {
   let consulta = supabase
@@ -11,6 +12,7 @@ export async function cargarDespachosBodegaRango({
     .order('creado_en', { ascending: false })
     .limit(limite)
 
+  if (bodega) consulta = consulta.eq('bodega', bodega)
   if (fechaInicio) consulta = consulta.gte('fecha', fechaInicio)
   if (fechaFin) consulta = consulta.lt('fecha', fechaFin)
 

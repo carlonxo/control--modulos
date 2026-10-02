@@ -1,9 +1,11 @@
-export async function cargarInventariosBodega({ supabase, limite = 1 }) {
-  const { data: inventarios, error } = await supabase
+export async function cargarInventariosBodega({ supabase, bodega = 'bayona', limite = 1 }) {
+  let consulta = supabase
     .from('bodega_inventarios')
     .select('*')
     .order('fecha', { ascending: false })
     .limit(limite)
+  if (bodega) consulta = consulta.eq('bodega', normalizarBodegaInventario(bodega) || 'bayona')
+  const { data: inventarios, error } = await consulta
 
   if (error) return { inventarios: [], error }
 
@@ -98,6 +100,7 @@ export async function guardarInventariosBodega({
   inventarios = [],
   archivoNombre = '',
   cargadoPor = '',
+  bodega = 'bayona',
 }) {
   const inventariosPreparados = []
   const duplicadosDepurados = []
@@ -116,11 +119,12 @@ export async function guardarInventariosBodega({
       .from('bodega_inventarios')
       .upsert({
         fecha: inventario.fecha,
+        bodega: normalizarBodegaInventario(bodega) || 'bayona',
         archivo_nombre: archivoNombre,
         hoja_nombre: inventario.hoja,
         cargado_por: cargadoPor,
       }, {
-        onConflict: 'fecha,hoja_nombre',
+        onConflict: 'bodega,fecha,hoja_nombre',
       })
       .select()
       .single()

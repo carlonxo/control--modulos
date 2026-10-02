@@ -41,6 +41,7 @@ export function construirHistorialModulo({ modulo, protocoloHistorial }) {
     estado: modulo.estado,
     linea: modulo.linea,
     posicion: modulo.posicion,
+    planta: modulo.planta || 'planta bayona',
   }
 }
 

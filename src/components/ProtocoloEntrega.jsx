@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { etiquetaLinea } from '../utils/lineas'
 import plantillaProtocolo from '../assets/protocolo-entrega-base.png'
 import './ProtocoloEntrega.css'
 
@@ -257,7 +258,7 @@ function descargarBlob(blob, nombreArchivo) {
 
 export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, materiales, onGuardar, soloLectura = false, materialesSoloLectura = false, moduloEditable = false, datosModuloEditables = false, onCerrar }) {
   const [datos, setDatos] = useState(() => ({
-    fecha: new Date().toISOString().slice(0, 10), serie: modulo?.serie || '', tipo: modulo?.tipo || '', linea: modulo?.linea || '', proyecto: modulo?.proyecto || '', responsable: responsable || '', planosRevision: '', centroCosto: '', flexNaranjo: false, flexLibre: false, flexMetalico: false,
+    fecha: new Date().toISOString().slice(0, 10), serie: modulo?.serie || '', tipo: modulo?.tipo || '', linea: etiquetaLinea(modulo?.linea), proyecto: modulo?.proyecto || '', responsable: responsable || '', planosRevision: '', centroCosto: '', flexNaranjo: false, flexLibre: false, flexMetalico: false,
     eva: false, thhn: false, caleco: false, canalizado: '', aterrizado: '', te1: '', observCanalizado: '', observCableado: '', observaciones: '', firma: '',
     ...datosIniciales,
     detalleMateriales: crearDetalleInicial(materiales, datosIniciales?.detalleMateriales),
@@ -453,7 +454,7 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
       dibujarTexto(ctx, puedeEditarSerieModulo ? datos.serie : modulo.serie, { left: 959, top: 190, width: 304, height: 31 })
       dibujarTexto(ctx, datos.responsable, { left: 280, top: 221, width: 405, height: 37 })
       dibujarTexto(ctx, puedeEditarDatosModulo ? datos.tipo : modulo.tipo, { left: 959, top: 221, width: 304, height: 37 })
-      dibujarTexto(ctx, puedeEditarDatosModulo ? datos.linea : modulo.linea, { left: 280, top: 258, width: 405, height: 38 })
+      dibujarTexto(ctx, puedeEditarDatosModulo ? datos.linea : etiquetaLinea(modulo.linea), { left: 280, top: 258, width: 405, height: 38 })
       dibujarTexto(ctx, puedeEditarDatosModulo ? datos.proyecto : modulo.proyecto, { left: 959, top: 258, width: 304, height: 38 })
       dibujarTexto(ctx, datos.planosRevision, { left: 280, top: 296, width: 405, height: 44 })
       dibujarTexto(ctx, datos.centroCosto, { left: 959, top: 296, width: 304, height: 44 })
@@ -585,7 +586,7 @@ export default function ProtocoloEntrega({ modulo, responsable, datosIniciales, 
     ><div className="pdf-protocolo-escala" style={{ width: 1275 * escalaProtocolo, height: 1650 * escalaProtocolo }}><div className="pdf-protocolo-pagina" style={{ backgroundImage: `url(${plantillaProtocolo})`, transform: `scale(${escalaProtocolo})`, transformOrigin: 'top left' }}>
       {campo('fecha', { left: 280, top: 190, width: 405, height: 31 }, { type: 'date' })}{puedeEditarSerieModulo ? campo('serie', { left: 959, top: 190, width: 304, height: 31 }) : <input className="pdf-campo" style={{ left: 959, top: 190, width: 304, height: 31 }} value={modulo.serie || ''} disabled />}
       {campo('responsable', { left: 280, top: 221, width: 405, height: 37 })}{puedeEditarDatosModulo ? campo('tipo', { left: 959, top: 221, width: 304, height: 37 }) : <input className="pdf-campo" style={{ left: 959, top: 221, width: 304, height: 37 }} value={modulo.tipo || ''} disabled />}
-      {puedeEditarDatosModulo ? campo('linea', { left: 280, top: 258, width: 405, height: 38 }) : <input className="pdf-campo" style={{ left: 280, top: 258, width: 405, height: 38 }} value={modulo.linea || ''} disabled />}{puedeEditarDatosModulo ? campo('proyecto', { left: 959, top: 258, width: 304, height: 38 }) : <input className="pdf-campo" style={{ left: 959, top: 258, width: 304, height: 38 }} value={modulo.proyecto || ''} disabled />}
+      {puedeEditarDatosModulo ? campo('linea', { left: 280, top: 258, width: 405, height: 38 }) : <input className="pdf-campo" style={{ left: 280, top: 258, width: 405, height: 38 }} value={etiquetaLinea(modulo.linea)} disabled />}{puedeEditarDatosModulo ? campo('proyecto', { left: 959, top: 258, width: 304, height: 38 }) : <input className="pdf-campo" style={{ left: 959, top: 258, width: 304, height: 38 }} value={modulo.proyecto || ''} disabled />}
       {campo('planosRevision', { left: 280, top: 296, width: 405, height: 44 })}{campo('centroCosto', { left: 959, top: 296, width: 304, height: 44 })}
       <div className="pdf-linea-horizontal" style={{ left: 37, top: 258, width: 1226 }} />
       <div className="pdf-linea-horizontal" style={{ left: 37, top: 1277, width: 606 }} />

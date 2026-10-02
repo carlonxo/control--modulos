@@ -8,7 +8,7 @@ export async function cargarPerfilUsuario({ supabase, usuarioId }) {
     .maybeSingle()
 }
 
-export async function cargarDatosTablero({ supabase, esSolicitudPruebaActiva }) {
+export async function cargarDatosTablero({ supabase, esSolicitudPruebaActiva, planta = 'planta bayona' }) {
   const { data: tableroData, error: tableroError } = await supabase
     .from('tablero')
     .select('*')
@@ -22,6 +22,7 @@ export async function cargarDatosTablero({ supabase, esSolicitudPruebaActiva }) 
   let { data: modulosData, error: modulosError } = await supabase
     .from('modulos')
     .select('*')
+    .eq('planta', planta)
     .order('linea')
     .order('posicion')
 
@@ -29,6 +30,7 @@ export async function cargarDatosTablero({ supabase, esSolicitudPruebaActiva }) 
     ;({ data: modulosData, error: modulosError } = await supabase
       .from('modulos')
       .select('*')
+      .eq('planta', planta)
       .order('linea')
       .order('posicion'))
   }
@@ -38,7 +40,7 @@ export async function cargarDatosTablero({ supabase, esSolicitudPruebaActiva }) 
   }
 
   const modulosMap = new Map((modulosData || []).map((item) => [item.id, item]))
-  const dataTablero = (tableroData || []).map((row) => ({
+  const dataTablero = (tableroData || []).filter((row) => modulosMap.has(row.id)).map((row) => ({
     ...row,
     nota: row.nota || modulosMap.get(row.id)?.nota || '',
     observacion_alerta: row.observacion_alerta || modulosMap.get(row.id)?.observacion_alerta || '',

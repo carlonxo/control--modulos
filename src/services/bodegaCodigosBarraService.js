@@ -1,7 +1,8 @@
-export async function cargarCodigosBarraBodega({ supabase }) {
+export async function cargarCodigosBarraBodega({ supabase, bodega = 'bayona' }) {
   let respuesta = await supabase
     .from('bodega_codigos_barra')
-    .select('id, codigo_bodega, codigo_barra, descripcion, cantidad_por_escaneo, created_at')
+    .select('id, bodega, codigo_bodega, codigo_barra, descripcion, cantidad_por_escaneo, created_at')
+    .eq('bodega', bodega)
     .order('codigo_bodega', { ascending: true })
     .order('codigo_barra', { ascending: true })
 
@@ -9,6 +10,7 @@ export async function cargarCodigosBarraBodega({ supabase }) {
     respuesta = await supabase
       .from('bodega_codigos_barra')
       .select('id, codigo_bodega, codigo_barra, descripcion, created_at')
+      .eq('bodega', bodega)
       .order('codigo_bodega', { ascending: true })
       .order('codigo_barra', { ascending: true })
   }
@@ -30,6 +32,7 @@ export async function guardarCodigoBarraBodega({
   codigoBarra,
   descripcion = '',
   cantidadPorEscaneo = 1,
+  bodega = 'bayona',
 }) {
   const codigoBodegaLimpio = String(codigoBodega || '').trim()
   const codigoBarraLimpio = String(codigoBarra || '').trim()
@@ -39,6 +42,7 @@ export async function guardarCodigoBarraBodega({
   }
 
   const payload = {
+    bodega,
     codigo_bodega: codigoBodegaLimpio,
     codigo_barra: codigoBarraLimpio,
     descripcion: String(descripcion || '').trim() || null,
@@ -50,12 +54,12 @@ export async function guardarCodigoBarraBodega({
       .from('bodega_codigos_barra')
       .update(payload)
       .eq('id', id)
-      .select('id, codigo_bodega, codigo_barra, descripcion, cantidad_por_escaneo, created_at')
+      .select('id, bodega, codigo_bodega, codigo_barra, descripcion, cantidad_por_escaneo, created_at')
       .single()
     : await supabase
       .from('bodega_codigos_barra')
-      .upsert(payload, { onConflict: 'codigo_barra' })
-      .select('id, codigo_bodega, codigo_barra, descripcion, cantidad_por_escaneo, created_at')
+      .upsert(payload, { onConflict: 'bodega,codigo_barra' })
+      .select('id, bodega, codigo_bodega, codigo_barra, descripcion, cantidad_por_escaneo, created_at')
       .single()
 
   return {
@@ -76,6 +80,7 @@ export async function eliminarCodigoBarraBodega({ supabase, id }) {
 function normalizarCodigoBarraBodega(item = {}) {
   return {
     id: item.id,
+    bodega: item.bodega || 'bayona',
     codigoBodega: item.codigo_bodega || '',
     codigoBarra: item.codigo_barra || '',
     descripcion: item.descripcion || '',

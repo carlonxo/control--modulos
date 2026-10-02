@@ -28,14 +28,16 @@ export async function aprobarPruebaElectricaModulo({
   fechaPruebaDb,
   protocoloActualizado,
 }) {
+  const cambios = {
+    solicitud_prueba: false,
+    estado: 'Prueba eléctrica',
+    fecha_prueba_electrica: fechaPruebaDb,
+  }
+  if (protocoloActualizado !== undefined) cambios.protocolo_entrega = protocoloActualizado
+
   return supabase
     .from('modulos')
-    .update({
-      solicitud_prueba: false,
-      estado: 'Prueba eléctrica',
-      fecha_prueba_electrica: fechaPruebaDb,
-      protocolo_entrega: protocoloActualizado,
-    })
+    .update(cambios)
     .eq('id', moduloId)
 }
 

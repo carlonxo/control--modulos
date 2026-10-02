@@ -22,6 +22,7 @@ export default function EncabezadoModalModulo({
   puedeFinalizarModulos,
   finalizandoModulo = false,
   puedeEliminarModulo,
+  materialesProtocoloHabilitados = true,
   mostrarMenuModulo,
   pruebaBloqueada,
   puedeDejarObservacionAlerta,
@@ -98,7 +99,7 @@ export default function EncabezadoModalModulo({
                   </button>
                 )}
 
-                <button
+                {materialesProtocoloHabilitados && <button
                   type="button"
                   onClick={onAbrirEditorMateriales}
                   style={{
@@ -115,7 +116,7 @@ export default function EncabezadoModalModulo({
                   }}
                 >
                   Materiales {'\u{1F4DC}'}
-                </button>
+                </button>}
 
                 <button
                   type="button"

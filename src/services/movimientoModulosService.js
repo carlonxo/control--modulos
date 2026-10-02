@@ -1,7 +1,8 @@
-export async function cargarModulosActivosParaMovimiento({ supabase }) {
+export async function cargarModulosActivosParaMovimiento({ supabase, planta = 'planta bayona' }) {
   const { data, error } = await supabase
     .from('modulos')
     .select('*')
+    .eq('planta', planta)
 
   if (error) return { data: [], error }
 
@@ -67,12 +68,13 @@ function calcularMovimientosCambioLinea({
   lineaDestino,
   posicionOrigen,
   posicionDestino,
+  limiteModulos,
 }) {
   const modulosLineaDestino = modulosActivos
     .filter((modulo) => Number(modulo.linea) === lineaDestino && String(modulo.id) !== String(moduloActual.id))
     .sort((a, b) => Number(a.posicion) - Number(b.posicion))
 
-  if (modulosLineaDestino.length >= 9) {
+  if (Number.isFinite(limiteModulos) && modulosLineaDestino.length >= limiteModulos) {
     return { lineaLlena: true, modulosLineaDestino }
   }
 
@@ -115,6 +117,8 @@ export async function moverModuloEnTablero({
   moduloId,
   lineaDestino,
   posicionDestino,
+  planta = 'planta bayona',
+  limiteModulos = 9,
 }) {
   if (!moduloId) {
     return { ok: false, tipo: 'modulo_invalido' }
@@ -123,7 +127,7 @@ export async function moverModuloEnTablero({
   const lineaDestinoParsed = Number(lineaDestino)
   const posicionDestinoParsed = Number(posicionDestino)
 
-  const { data: modulosActivos, error: errorCarga } = await cargarModulosActivosParaMovimiento({ supabase })
+  const { data: modulosActivos, error: errorCarga } = await cargarModulosActivosParaMovimiento({ supabase, planta })
   if (errorCarga) {
     return { ok: false, tipo: 'error_carga', error: errorCarga }
   }
@@ -185,6 +189,7 @@ export async function moverModuloEnTablero({
       lineaDestino: lineaDestinoParsed,
       posicionOrigen,
       posicionDestino: posicionDestinoParsed,
+      limiteModulos,
     })
 
     if (calculo.lineaLlena) {

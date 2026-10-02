@@ -3,6 +3,7 @@ function BotonesModalModulo({
   moduloSeleccionado,
   puedeEditarDatosModulo,
   puedeUsarProtocolo,
+  materialesProtocoloHabilitados = true,
   esEstadoPruebaElectrica,
   esSolicitudPruebaActiva,
   onGuardarCambios,
@@ -97,7 +98,7 @@ function BotonesModalModulo({
         )
       )}
 
-      {puedeVerResumenMateriales && (
+      {puedeVerResumenMateriales && materialesProtocoloHabilitados && (
         <button
           onClick={onAbrirResumenMateriales}
           style={{ padding: '10px', flex: 1 }}

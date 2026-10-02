@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 
 const bodegasDisponibles = [
   { valor: '', etiqueta: 'Sin asignar' },
-  { valor: 'bayona', etiqueta: 'Bayona' },
-  { valor: 'rental', etiqueta: 'Rental' },
-  { valor: 'montaña', etiqueta: 'Montaña' },
+  { valor: 'bayona', etiqueta: 'Bodega Bayona' },
+  { valor: 'rental', etiqueta: 'Bodega Rental' },
+  { valor: 'montaña', etiqueta: 'Bodega Montaña' },
 ]
 
 const plantasDisponibles = [

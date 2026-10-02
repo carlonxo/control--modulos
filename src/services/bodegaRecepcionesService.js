@@ -2,6 +2,7 @@ export async function cargarRecepcionesBodegaRango({
   supabase,
   fechaInicio,
   fechaFin,
+  bodega = 'bayona',
   limite = 800,
 }) {
   let consulta = supabase
@@ -11,6 +12,7 @@ export async function cargarRecepcionesBodegaRango({
     .order('created_at', { ascending: false })
     .limit(limite)
 
+  if (bodega) consulta = consulta.eq('bodega', bodega)
   if (fechaInicio) consulta = consulta.gte('fecha', fechaInicio)
   if (fechaFin) consulta = consulta.lt('fecha', fechaFin)
 
@@ -104,9 +106,11 @@ export async function guardarRecepcionBodega({
 export async function cargarRecepcionesBodegaDia({
   supabase,
   fecha,
+  bodega = 'bayona',
 }) {
   return cargarRecepcionesBodegaRango({
     supabase,
+    bodega,
     fechaInicio: fecha,
     fechaFin: sumarDiasIso(fecha, 1),
   })

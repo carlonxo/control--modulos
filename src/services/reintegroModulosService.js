@@ -1,20 +1,22 @@
 import { prepararLineaParaIngresoModulo } from './ingresoModulosService'
 
-export async function buscarUltimoModuloFinalizadoPorSerie({ supabase, serie }) {
+export async function buscarUltimoModuloFinalizadoPorSerie({ supabase, serie, planta = 'planta bayona' }) {
   return supabase
     .from('historial_modulos')
     .select('*')
     .eq('serie', serie)
+    .eq('planta', planta)
     .order('fecha_salida', { ascending: false })
     .limit(1)
     .maybeSingle()
 }
 
-export async function buscarModuloActivoPorSerie({ supabase, serie }) {
+export async function buscarModuloActivoPorSerie({ supabase, serie, planta = 'planta bayona' }) {
   return supabase
     .from('modulos')
     .select('id')
     .eq('serie', serie)
+    .eq('planta', planta)
     .maybeSingle()
 }
 
@@ -23,10 +25,13 @@ export async function reintegrarModuloDesdeHistorial({
   moduloHistorial,
   linea,
   extremo,
+  planta = 'planta bayona',
+  limiteModulos = 9,
 }) {
   const { data: activoExistente, error: errorActivo } = await buscarModuloActivoPorSerie({
     supabase,
     serie: moduloHistorial.serie,
+    planta,
   })
 
   if (errorActivo) {
@@ -48,6 +53,8 @@ export async function reintegrarModuloDesdeHistorial({
     supabase,
     linea,
     extremo,
+    planta,
+    limiteModulos,
   })
 
   const { error: errorInsert } = await supabase
@@ -70,6 +77,7 @@ export async function reintegrarModuloDesdeHistorial({
         estado: moduloHistorial.estado || 'Sin iniciar',
         linea,
         posicion: posicionDestino,
+        planta,
       },
     ])
 

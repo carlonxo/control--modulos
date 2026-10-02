@@ -1,4 +1,4 @@
-import { LINEAS_TABLERO } from '../utils/lineas'
+import { LINEAS_TABLERO, etiquetaLinea } from '../utils/lineas'
 
 function FormularioDatosModulo({
   serieEditada,
@@ -17,6 +17,7 @@ function FormularioDatosModulo({
   setResponsableEditado,
   notaEditada,
   setNotaEditada,
+  lineasDisponibles = LINEAS_TABLERO,
   puedeEditarDatosModulo,
   esTipoBodega,
   estaDentroDeGarantia,
@@ -74,9 +75,9 @@ function FormularioDatosModulo({
             boxSizing: 'border-box',
           }}
         >
-          {LINEAS_TABLERO.map((n) => (
+          {lineasDisponibles.map((n) => (
             <option key={n} value={n}>
-              {n}
+              {etiquetaLinea(n)}
             </option>
           ))}
         </select>

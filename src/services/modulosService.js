@@ -12,10 +12,14 @@ export async function obtenerTablero() {
   return data
 }
 
-export async function obtenerHistorial() {
-  const { data, error } = await supabase
+export async function obtenerHistorial(planta = '') {
+  let consulta = supabase
     .from('historial_modulos')
     .select('*')
+
+  if (planta) consulta = consulta.eq('planta', planta)
+
+  const { data, error } = await consulta
 
   if (error) throw error
 

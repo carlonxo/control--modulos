@@ -51,11 +51,18 @@ export async function buscarPruebaRecienteGarantiaPorSerie({
   }
 }
 
-export async function prepararLineaParaIngresoModulo({ supabase, linea, extremo }) {
+export async function prepararLineaParaIngresoModulo({
+  supabase,
+  linea,
+  extremo,
+  planta = 'planta bayona',
+  limiteModulos = 9,
+}) {
   const { data: registros, error } = await supabase
     .from('modulos')
     .select('id, linea, posicion, serie')
     .eq('linea', linea)
+    .eq('planta', planta)
 
   if (error) {
     throw new Error('No se pudo preparar la línea: ' + error.message)
@@ -65,7 +72,7 @@ export async function prepararLineaParaIngresoModulo({ supabase, linea, extremo 
     .filter((modulo) => modulo?.serie && String(modulo.serie).trim() !== '')
     .sort((a, b) => Number(a.posicion) - Number(b.posicion))
 
-  if (modulosLinea.length >= 9) {
+  if (Number.isFinite(limiteModulos) && modulosLinea.length >= limiteModulos) {
     throw new Error(`La línea ${linea} ya está completa`)
   }
 
@@ -98,6 +105,7 @@ export async function crearModuloActivo({
   responsable,
   linea,
   posicion,
+  planta = 'planta bayona',
   estado = 'Sin iniciar',
   fechaPruebaElectrica = null,
   protocoloEntrega = null,
@@ -109,6 +117,7 @@ export async function crearModuloActivo({
     responsable: String(responsable || '').trim() || null,
     linea,
     posicion,
+    planta,
     estado,
     fecha_ingreso: new Date(),
   }

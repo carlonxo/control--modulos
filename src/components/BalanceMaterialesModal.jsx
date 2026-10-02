@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { exportarDetalleReutilizadosExcel } from '../services/exportarExcel'
 import { compilarTrazabilidadMaterialesPorGrupo } from '../services/trazabilidadMaterialesService'
+import { etiquetaLinea } from '../utils/lineas'
 
 function BalanceMaterialesModal({
   rango,
@@ -683,6 +684,7 @@ function VistaTrazabilidadGrupo({
           seleccionados={lineasSeleccionadas.map(String)}
           onCambiar={onCambiarLineas}
           prefijoOpcion="Línea "
+          formatearOpcion={etiquetaLinea}
         />
       </div>
 
@@ -775,6 +777,7 @@ function PanelSeleccionGrupo({
   seleccionados,
   onCambiar,
   prefijoOpcion = '',
+  formatearOpcion = (opcion) => opcion,
 }) {
   const seleccion = new Set(seleccionados.map(String))
   const alternar = (opcion) => {
@@ -816,7 +819,7 @@ function PanelSeleccionGrupo({
                 borderColor: activo ? '#64b5f6' : '#555',
               }}
             >
-              {prefijoOpcion}{opcion}
+              {prefijoOpcion}{formatearOpcion(opcion)}
             </button>
           )
         })}
@@ -1261,7 +1264,7 @@ function imprimirDetalleGrupo({
   const materialTexto = materialSeleccionado === '__todos__'
     ? 'Todos los materiales'
     : opcionesMateriales.find((opcion) => opcion.valor === materialSeleccionado)?.etiqueta || materialSeleccionado
-  const lineasTexto = lineasSeleccionadas.length > 0 ? lineasSeleccionadas.join(', ') : 'Todas'
+  const lineasTexto = lineasSeleccionadas.length > 0 ? lineasSeleccionadas.map(etiquetaLinea).join(', ') : 'Todas'
   const filasHtml = filas.map((fila) => {
     const alertaDesactivada = esAlertaMaterialDesactivada(fila, configMateriales)
     const estado = alertaDesactivada

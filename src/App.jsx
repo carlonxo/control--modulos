@@ -42,6 +42,15 @@ import {
 import { descargarProtocolosDiariosPdf } from './services/protocolosDiariosPdf'
 import { tienePermiso } from './utils/permisos'
 import {
+  BODEGA_BAYONA,
+  BODEGAS_DISPONIBLES,
+  PLANTA_BAYONA,
+  obtenerCodigoBodega,
+  obtenerCodigoPlanta,
+  obtenerNombreBodega,
+  obtenerNombrePlanta,
+} from './utils/ubicaciones'
+import {
   cargarRegistroAccionesDia,
   marcarRegistroAccionDeshecha,
   registrarRegistroAccionModulo,
@@ -221,7 +230,11 @@ import {
   eliminarEntradaPorId,
   hayCambiosPendientesPorId,
 } from './utils/ventanas'
-import { LINEAS_TABLERO } from './utils/lineas'
+import {
+  PLANTAS_DISPONIBLES,
+  etiquetaLinea,
+  obtenerConfiguracionPlanta,
+} from './utils/lineas'
 
 const seccionesFormularioElectrico = [
   {
@@ -447,15 +460,15 @@ function obtenerBodegaInventario(inventario = {}) {
 }
 
 function filtrarInventariosPorBodegaAsignada(inventarios = [], perfilActual = {}) {
-  const bodegaAsignada = normalizarBodega(perfilActual?.bodega_asignada)
-  if (perfilActual?.rol !== 'bodega' || !bodegaAsignada) return inventarios
+  const bodegaAsignada = normalizarBodega(perfilActual?.bodega_asignada) || BODEGA_BAYONA
   return inventarios.filter((inventario) => obtenerBodegaInventario(inventario) === bodegaAsignada)
 }
 
 function filtrarSolicitudesPorBodegaAsignada(solicitudes = [], perfilActual = {}) {
-  const bodegaAsignada = normalizarBodega(perfilActual?.bodega_asignada)
-  if (perfilActual?.rol !== 'bodega' || !bodegaAsignada) return solicitudes
-  return solicitudes.filter((solicitud) => obtenerBodegaDesdeObservacion(solicitud.observacion) === bodegaAsignada)
+  const bodegaAsignada = normalizarBodega(perfilActual?.bodega_asignada) || BODEGA_BAYONA
+  return solicitudes.filter((solicitud) => (
+    normalizarBodega(solicitud.bodega) || obtenerBodegaDesdeObservacion(solicitud.observacion) || BODEGA_BAYONA
+  ) === bodegaAsignada)
 }
 
 function construirCatalogoPreciosMaterialesCompleto({
@@ -730,6 +743,14 @@ const [proyectosFiltrados, setProyectosFiltrados] = useState([])
 const [mostrarFiltroProyectos, setMostrarFiltroProyectos] = useState(false)
 const [session, setSession] = useState(null)
 const [perfil, setPerfil] = useState(null)
+const [bodegaSeleccionadaAdmin, setBodegaSeleccionadaAdmin] = useState(() => {
+  const guardada = obtenerCodigoBodega(window.localStorage.getItem('bodega-admin-activa') || BODEGA_BAYONA)
+  return BODEGAS_DISPONIBLES.some((bodega) => bodega.valor === guardada) ? guardada : BODEGA_BAYONA
+})
+const [plantaSeleccionadaAdmin, setPlantaSeleccionadaAdmin] = useState(() => {
+  const guardada = obtenerCodigoPlanta(window.localStorage.getItem('planta-admin-activa') || PLANTA_BAYONA)
+  return PLANTAS_DISPONIBLES.some((planta) => planta.valor === guardada) ? guardada : PLANTA_BAYONA
+})
   const [serieEditada, setSerieEditada] = useState('')
 const [tipoEditado, setTipoEditado] = useState('')
 const [proyectoEditado, setProyectoEditado] = useState('')
@@ -929,6 +950,69 @@ const puedeRevisarSolicitudesBodega = ['admin', 'operador'].includes(perfil?.rol
 const puedeRecibirAvisosBodega = puedeRevisarSolicitudesBodega || puedeOperarComoBodega
 const puedeAdministrarUsuariosBodega = perfil?.rol === 'admin'
 const puedeAdministrarEquivalenciasMateriales = perfil?.rol === 'admin'
+const bodegaPerfil = obtenerCodigoBodega(perfil?.bodega_asignada || BODEGA_BAYONA)
+const bodegaActiva = perfil?.rol === 'admin' ? bodegaSeleccionadaAdmin : bodegaPerfil
+const plantaPerfil = obtenerCodigoPlanta(perfil?.planta_asignada || PLANTA_BAYONA)
+const plantaActiva = perfil?.rol === 'admin' ? plantaSeleccionadaAdmin : plantaPerfil
+const nombreBodegaActiva = obtenerNombreBodega(bodegaActiva)
+const nombrePlantaActiva = obtenerNombrePlanta(plantaActiva)
+const configuracionPlantaActiva = obtenerConfiguracionPlanta(plantaActiva)
+const lineasPlantaActiva = configuracionPlantaActiva.lineas
+const limiteModulosLineaActivo = configuracionPlantaActiva.limiteModulosPorLinea
+const extremosIngresoPlantaActiva = configuracionPlantaActiva.extremosIngreso
+const protocolosHabilitadosPlanta = plantaActiva === PLANTA_BAYONA
+const puedeUsarProtocoloPlanta = puedeUsarProtocolo && protocolosHabilitadosPlanta
+const puedeVerProtocolosMensualesPlanta = puedeVerProtocolosMensuales && protocolosHabilitadosPlanta
+const puedeDescargarProtocolosPlanta = puedeDescargarProtocolosDiarios && protocolosHabilitadosPlanta
+const puedeVerBalanceMaterialesPlanta = puedeVerBalanceMateriales && protocolosHabilitadosPlanta
+const puedeVerBalanceMantencionPlanta = puedeVerBalanceMantencion && protocolosHabilitadosPlanta
+const puedeVerPreciosMaterialesPlanta = puedeVerPreciosMateriales && protocolosHabilitadosPlanta
+const puedeAdministrarEquivalenciasPlanta = puedeAdministrarEquivalenciasMateriales && protocolosHabilitadosPlanta
+const plantaActivaRef = useRef(plantaActiva)
+plantaActivaRef.current = plantaActiva
+
+function cambiarBodegaActivaAdmin(nuevaBodega) {
+  if (perfil?.rol !== 'admin') return
+
+  const codigoBodega = obtenerCodigoBodega(nuevaBodega)
+  if (!BODEGAS_DISPONIBLES.some((bodega) => bodega.valor === codigoBodega)) return
+  if (codigoBodega === bodegaActiva) return
+
+  window.localStorage.setItem('bodega-admin-activa', codigoBodega)
+  setBodegaSeleccionadaAdmin(codigoBodega)
+
+  // Evita mostrar datos de la bodega anterior mientras se consulta la nueva.
+  setArchivoInventarioBodega(null)
+  setInventariosBodega([])
+  setInventarioBodegaSeleccionadoId('')
+  setAlertasBodega([])
+  setPedidosBodegaHoy([])
+  setDevolucionesBodegaHoy([])
+  setHistorialValesBodega([])
+  setRecepcionesBodega([])
+  setDespachosBodega([])
+  setCodigosBarraBodega([])
+  setSolicitudMaterialBodegaInicial(null)
+  setSeccionBodegaInicial(null)
+}
+
+function cambiarPlantaActivaAdmin(nuevaPlanta) {
+  if (perfil?.rol !== 'admin') return
+
+  const codigoPlanta = obtenerCodigoPlanta(nuevaPlanta)
+  if (!PLANTAS_DISPONIBLES.some((planta) => planta.valor === codigoPlanta)) return
+  if (codigoPlanta === plantaActiva) return
+
+  cerrarVentanasEmergentes()
+  window.localStorage.setItem('planta-admin-activa', codigoPlanta)
+  setPlantaSeleccionadaAdmin(codigoPlanta)
+  setDatos([])
+  setHistorial([])
+  setModuloEnDrag(null)
+  setSolicitantesPendientes({})
+  setAvisoPruebaElectrica(null)
+  setLineaReintegrar(obtenerConfiguracionPlanta(codigoPlanta).lineas[0])
+}
 const puedeDejarObservacionAlerta = puedeVerMenuModulo && esEstadoConObservacionAlerta(moduloSeleccionado?.estado)
 const normalizarProyectoFiltro = (proyecto) => String(proyecto || '')
   .replace(/\s*\([^)]*\)\s*$/g, '')
@@ -1398,7 +1482,7 @@ useEffect(() => {
 useEffect(() => {
   cargarTablero()
   cargarHistorial()
-}, [])
+}, [plantaActiva])
 
 useEffect(() => {
   const intervalo = setInterval(() => {
@@ -1406,7 +1490,7 @@ useEffect(() => {
   }, 30000)
 
   return () => clearInterval(intervalo)
-}, [])
+}, [plantaActiva])
 
 useEffect(() => {
   const canalModulos = supabase
@@ -1415,7 +1499,8 @@ useEffect(() => {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'modulos' },
       (cambio) => {
-        const moduloActualizado = cambio.new
+        const moduloActualizado = cambio.new?.id ? cambio.new : cambio.old
+        if (obtenerCodigoPlanta(moduloActualizado?.planta || PLANTA_BAYONA) !== plantaActiva) return
 
         if (
           recibeAvisosPrueba &&
@@ -1442,7 +1527,7 @@ useEffect(() => {
   return () => {
     supabase.removeChannel(canalModulos)
   }
-}, [perfil?.rol, recibeAvisosPrueba])
+}, [perfil?.rol, recibeAvisosPrueba, plantaActiva])
 
 useEffect(() => {
   if (!recibeAvisosPrueba) return
@@ -1484,6 +1569,7 @@ useEffect(() => {
     cargarRecepcionesBodega()
     cargarDespachosBodega()
     cargarCodigosBarraBodega()
+    if (mostrarHistorialValesBodega) cargarHistorialValesBodega(fechaHistorialValesBodega)
   }
 
   const intervalo = setInterval(() => {
@@ -1495,7 +1581,7 @@ useEffect(() => {
   }, 60000)
 
   return () => clearInterval(intervalo)
-}, [esRolBodega, puedeVerBodega, mostrarBodega, puedeRecibirAvisosBodega])
+}, [esRolBodega, puedeVerBodega, mostrarBodega, puedeRecibirAvisosBodega, bodegaActiva])
 
 if (!session) {
   return <Login supabase={supabase} />
@@ -1520,15 +1606,18 @@ async function cargarPerfil() {
 }
   
   async function cargarTablero() {
+    const plantaConsultada = plantaActiva
     const { data: mergedData, error } = await cargarDatosTablero({
       supabase,
       esSolicitudPruebaActiva,
+      planta: plantaConsultada,
     })
 
     if (error) {
       console.error(error)
       return
     }
+    if (plantaActivaRef.current !== plantaConsultada) return
 
     solicitudesPendientesRef.current = new Set(
       mergedData
@@ -1541,7 +1630,9 @@ async function cargarPerfil() {
 
   async function cargarHistorial() {
   try {
-    const data = await obtenerHistorial()
+    const plantaConsultada = plantaActiva
+    const data = await obtenerHistorial(plantaConsultada)
+    if (plantaActivaRef.current !== plantaConsultada) return
     setHistorial(data || [])
   } catch (error) {
     console.error(error)
@@ -1662,6 +1753,8 @@ async function crearModulo() {
         supabase,
         linea: posicionSeleccionada.linea,
         extremo: posicionSeleccionada.extremo,
+        planta: plantaActiva,
+        limiteModulos: limiteModulosLineaActivo,
       })
     } catch (error) {
       mostrarNotificacion(error.message)
@@ -1674,7 +1767,7 @@ async function crearModulo() {
   const fechaPruebaAnterior = pruebaAnteriorGarantia?.fechaPruebaAnterior || null
   const moduloEnGarantia = Boolean(fechaPruebaAnterior)
   const estadoInicial = moduloEnGarantia ? 'En garantía' : 'Sin iniciar'
-  const protocoloGarantia = moduloEnGarantia
+  const protocoloGarantia = moduloEnGarantia && protocolosHabilitadosPlanta
     ? agregarNotaGarantiaProtocolo({
         fecha: fechaParaInput(fechaPruebaAnterior),
         serie: serieIngreso,
@@ -1694,6 +1787,7 @@ async function crearModulo() {
     responsable: responsableIngreso,
     linea: lineaIngreso,
     posicion: posicionIngreso,
+    planta: plantaActiva,
     estado: estadoInicial,
     fechaPruebaElectrica: fechaPruebaAnterior,
     protocoloEntrega: protocoloGarantia,
@@ -1713,8 +1807,8 @@ async function crearModulo() {
     datosAntes: null,
     datosDespues: moduloCreado,
     descripcion: moduloEnGarantia
-      ? `Ingresó módulo en garantía en línea ${lineaIngreso}; prueba anterior ${formatearFecha(fechaPruebaAnterior)}`
-      : `Ingresó módulo en línea ${lineaIngreso}`,
+      ? `Ingresó módulo en garantía en línea ${etiquetaLinea(lineaIngreso)}; prueba anterior ${formatearFecha(fechaPruebaAnterior)}`
+      : `Ingresó módulo en línea ${etiquetaLinea(lineaIngreso)}`,
   })
 
   setMostrarNuevoModulo(false)
@@ -1729,11 +1823,12 @@ async function crearModulo() {
 
 function abrirIngresoModuloEnExtremo(linea, extremo) {
   if (!puedeAgregarModulos) return
+  if (!extremosIngresoPlantaActiva.includes(extremo)) return
   cerrarVentanasEmergentes()
 
   const cantidadModulos = datos.filter((x) => Number(x.linea) === Number(linea) && x.serie).length
-  if (cantidadModulos >= 9) {
-    mostrarNotificacion(`La línea ${linea} ya está completa`)
+  if (Number.isFinite(limiteModulosLineaActivo) && cantidadModulos >= limiteModulosLineaActivo) {
+    mostrarNotificacion(`La línea ${etiquetaLinea(linea)} ya está completa`)
     return
   }
 
@@ -1750,8 +1845,8 @@ function abrirReintegrarModulo() {
   setMostrarReintegrar(true)
   setSerieReintegrar('')
   setHistorialSeleccionadoReintegrar(null)
-  setLineaReintegrar(1)
-  setExtremoReintegrar('fin')
+  setLineaReintegrar(lineasPlantaActiva[0])
+  setExtremoReintegrar(extremosIngresoPlantaActiva[0])
 }
 
 function seleccionarHistorialParaReintegrar(item) {
@@ -1760,7 +1855,7 @@ function seleccionarHistorialParaReintegrar(item) {
 }
 
 function descargarProtocolosDiarios() {
-  if (!puedeDescargarProtocolosDiarios) return
+  if (!puedeDescargarProtocolosPlanta) return
   cerrarVentanasEmergentes()
   setFechaProtocolosDiarios(new Date().toISOString().slice(0, 10))
   setMostrarDescargaProtocolos(true)
@@ -1824,7 +1919,7 @@ async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompl
 }
 
 async function abrirPreciosMateriales() {
-  if (!puedeVerPreciosMateriales) return
+  if (!puedeVerPreciosMaterialesPlanta) return
   const debeAbrir = !mostrarPreciosMateriales
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
@@ -1872,7 +1967,7 @@ async function consultarAuditoria(filtros = {}) {
 }
 
 async function abrirEquivalenciasMateriales() {
-  if (!puedeAdministrarEquivalenciasMateriales) return
+  if (!puedeAdministrarEquivalenciasPlanta) return
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarEquivalenciasMateriales(true)
@@ -1894,7 +1989,7 @@ async function cargarEquivalenciasMateriales() {
 }
 
 async function guardarEquivalenciasMateriales(filas = []) {
-  if (!puedeAdministrarEquivalenciasMateriales) return
+  if (!puedeAdministrarEquivalenciasPlanta) return
 
   const equivalenciasLimpias = combinarEquivalenciasMateriales(filas)
   setGuardandoEquivalenciasMateriales(true)
@@ -2155,7 +2250,7 @@ async function obtenerRegistrosProtocolosPorRango(valor, rango) {
 }
 
 async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango = rangoProtocolosMensuales) {
-  if (!puedeVerProtocolosMensuales || !valor) return
+  if (!puedeVerProtocolosMensualesPlanta || !valor) return
 
   setCargandoProtocolosMensuales(true)
   const { registros, error } = await obtenerRegistrosProtocolosPorRango(valor, rango)
@@ -2170,7 +2265,7 @@ async function cargarProtocolosMensuales(valor = fechaProtocolosMensuales, rango
 }
 
 async function abrirProtocolosMensuales() {
-  if (!puedeVerProtocolosMensuales) return
+  if (!puedeVerProtocolosMensualesPlanta) return
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarProtocolosMensuales(true)
@@ -2178,7 +2273,7 @@ async function abrirProtocolosMensuales() {
 }
 
 async function cargarConfigBalanceMateriales() {
-  if (!puedeVerBalanceMateriales) return {}
+  if (!puedeVerBalanceMaterialesPlanta) return {}
 
   const { config, error } = await cargarConfigBalanceMaterialesSupabase({
     supabase,
@@ -2230,7 +2325,7 @@ async function cargarBalanceMateriales(
   rango = rangoBalanceMateriales,
   equivalenciasActuales = equivalenciasMateriales
 ) {
-  if (!puedeVerBalanceMateriales || !valor) return { registros: [], vales: [] }
+  if (!puedeVerBalanceMaterialesPlanta || !valor) return { registros: [], vales: [] }
 
   setCargandoBalanceMateriales(true)
   const { catalogo: catalogoGuardado, error: errorCatalogoGuardado } = await cargarCatalogoMaterialesGuardado({ supabase })
@@ -2280,7 +2375,7 @@ async function cargarBalanceMateriales(
 }
 
 async function abrirBalanceMateriales() {
-  if (!puedeVerBalanceMateriales) return
+  if (!puedeVerBalanceMaterialesPlanta) return
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarBalanceMateriales(true)
@@ -2323,7 +2418,7 @@ async function cargarBalanceMantencion(
   rango = rangoBalanceMantencion,
   equivalenciasActuales = equivalenciasMateriales
 ) {
-  if (!puedeVerBalanceMantencion || !valor) return
+  if (!puedeVerBalanceMantencionPlanta || !valor) return
 
   setCargandoBalanceMantencion(true)
   const preciosCargados = await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
@@ -2356,7 +2451,7 @@ async function cargarBalanceMantencion(
 }
 
 async function abrirBalanceMantencion() {
-  if (!puedeVerBalanceMantencion) return
+  if (!puedeVerBalanceMantencionPlanta) return
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
   setMostrarBalanceMantencion(true)
@@ -2373,6 +2468,7 @@ async function cargarValesBodegaPorRango(valor = fechaBalanceMateriales, rango =
     supabase,
     fechaInicio,
     fechaFin,
+    bodega: bodegaActiva,
   })
 
   if (error) {
@@ -2392,6 +2488,7 @@ async function cargarValesBodegaDia(fecha = fechaValeBodega) {
   const { vales, error } = await cargarValesBodegaDiaSupabase({
     supabase,
     fecha,
+    bodega: bodegaActiva,
   })
 
   setCargandoValesBodegaDia(false)
@@ -2413,6 +2510,7 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
   const { vales, error } = await cargarValesBodegaDiaSupabase({
     supabase,
     fecha,
+    bodega: bodegaActiva,
   })
 
   if (error) {
@@ -2444,6 +2542,7 @@ async function cargarHistorialValesBodega(fecha = fechaHistorialValesBodega) {
   const { vales, error } = await cargarValesBodegaDiaSupabase({
     supabase,
     fecha,
+    bodega: bodegaActiva,
   })
   setCargandoHistorialValesBodega(false)
 
@@ -2518,6 +2617,7 @@ async function cargarRecepcionesBodega(valor = fechaRecepcionesBodega, rango = r
 
   const { recepciones, error } = await cargarRecepcionesBodegaRangoSupabase({
     supabase,
+    bodega: bodegaActiva,
     fechaInicio: inicio.slice(0, 10),
     fechaFin: fin.slice(0, 10),
   })
@@ -2550,6 +2650,7 @@ async function cargarDespachosBodega(valor = fechaDespachosBodega, rango = rango
 
   const { despachos, error } = await cargarDespachosBodegaRangoSupabase({
     supabase,
+    bodega: bodegaActiva,
     fechaInicio: inicio.slice(0, 10),
     fechaFin: fin.slice(0, 10),
   })
@@ -2579,7 +2680,7 @@ async function cargarCodigosBarraBodega() {
   if (!puedeVerBodega) return []
 
   setCargandoCodigosBarraBodega(true)
-  const { codigos, error } = await cargarCodigosBarraBodegaSupabase({ supabase })
+  const { codigos, error } = await cargarCodigosBarraBodegaSupabase({ supabase, bodega: bodegaActiva })
   setCargandoCodigosBarraBodega(false)
 
   if (error) {
@@ -2609,6 +2710,7 @@ async function guardarCodigoBarraBodega(datos = {}) {
     codigoBarra: datos.codigoBarra,
     descripcion: datos.descripcion,
     cantidadPorEscaneo: datos.cantidadPorEscaneo,
+    bodega: bodegaActiva,
   })
   setGuardandoCodigoBarraBodega(false)
 
@@ -3029,6 +3131,7 @@ async function guardarValeBodega() {
 
   const { error, etapa } = await guardarValeBodegaSupabase({
     supabase,
+    bodega: bodegaActiva,
     fecha: fechaValeBodega,
     archivoNombre: archivoValeBodega?.name || '',
     usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
@@ -3090,8 +3193,11 @@ function cargarInventariosBodegaLocalesRespaldo() {
     if (!guardado) return
     const inventarios = JSON.parse(guardado)
     if (!Array.isArray(inventarios)) return
-    setInventariosBodega(inventarios)
-    setInventarioBodegaSeleccionadoId((actual) => actual || inventarios[0]?.id || '')
+    const inventariosBodegaActiva = inventarios.filter((inventario) => (
+      obtenerBodegaInventario(inventario) || BODEGA_BAYONA
+    ) === bodegaActiva)
+    setInventariosBodega(inventariosBodegaActiva)
+    setInventarioBodegaSeleccionadoId((actual) => actual || inventariosBodegaActiva[0]?.id || '')
   } catch (error) {
     console.error(error)
   }
@@ -3103,6 +3209,7 @@ async function cargarInventariosBodega(preferido = null) {
   setCargandoInventariosBodega(true)
   const { inventarios, error } = await cargarInventariosBodegaSupabase({
     supabase,
+    bodega: bodegaActiva,
   })
   setCargandoInventariosBodega(false)
 
@@ -3204,6 +3311,7 @@ async function cargarProyeccionMateriales(inventariosDisponibles = inventariosBo
 
   const { pedidos, error } = await cargarPedidosEntregadosBodegaPorRango({
     supabase,
+    bodega: bodegaActiva,
     fechaInicio: `${periodos[0]}-01`,
     fechaFin: fechaLocalDesplazadaDias(1),
   })
@@ -3216,7 +3324,9 @@ async function cargarProyeccionMateriales(inventariosDisponibles = inventariosBo
 
   setPedidosProyeccionMateriales(
     bodegaActual
-      ? pedidos.filter((pedido) => obtenerBodegaDesdeObservacion(pedido.observacion) === bodegaActual)
+      ? pedidos.filter((pedido) => (
+          normalizarBodega(pedido.bodega) || obtenerBodegaDesdeObservacion(pedido.observacion)
+        ) === bodegaActual)
       : pedidos
   )
 }
@@ -3251,6 +3361,7 @@ async function leerInventarioBodega() {
       inventarios,
       archivoNombre: archivoInventarioBodega?.name || '',
       cargadoPor: perfil?.nombre || perfil?.email || session?.user?.email || '',
+      bodega: bodegaActiva,
     })
 
     if (error) {
@@ -3394,7 +3505,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     proyecto: String(datosPedido?.proyecto || '').trim(),
     tipoModulo: String(datosPedido?.tipoModulo || '').trim(),
     serie: String(datosPedido?.serie || datosPedido?.linea || '').trim(),
-    bodega: String(datosPedido?.bodega || '').trim(),
+    bodega: bodegaActiva,
   }
 
   const retiraSeleccionado = solicitantesValeBodega.find((item) => (
@@ -3445,6 +3556,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
   setGuardandoPedidoBodega(true)
   const { vale, error, etapa } = await guardarValeBodegaSupabase({
     supabase,
+    bodega: pedido.bodega || bodegaActiva,
     fecha: pedido.fecha,
     archivoNombre: '',
     usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
@@ -3488,7 +3600,7 @@ async function guardarDevolucionBodega(datosDevolucion) {
   if (!puedeVerBodega) return false
 
   const fecha = datosDevolucion?.fecha || new Date().toISOString().slice(0, 10)
-  const bodega = String(datosDevolucion?.bodega || '').trim()
+  const bodega = bodegaActiva
   const motivo = String(datosDevolucion?.motivo || '').trim()
 
   if (!fecha) {
@@ -3585,6 +3697,7 @@ async function guardarDevolucionBodegaConMateriales(datosDevolucion, materialesD
   setGuardandoDevolucionBodega(true)
   const { error, etapa } = await guardarValeBodegaSupabase({
     supabase,
+    bodega: bodega || bodegaActiva,
     fecha,
     archivoNombre: '',
     usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
@@ -4191,7 +4304,7 @@ function fechaInicialProtocoloManual() {
 }
 
 function abrirIngresoManualProtocolo() {
-  if (!puedeVerProtocolosMensuales) return
+  if (!puedeVerProtocolosMensualesPlanta) return
 
   const fecha = fechaInicialProtocoloManual()
   const moduloManual = crearModuloManualProtocolo({
@@ -4213,7 +4326,7 @@ function abrirIngresoManualProtocolo() {
 }
 
 async function guardarIdOtProtocoloMensual(registro, valor) {
-  if (!puedeVerProtocolosMensuales || !registro?.id) return
+  if (!puedeVerProtocolosMensualesPlanta || !registro?.id) return
 
   const valorIdOt = String(valor ?? '').trim()
 
@@ -4268,7 +4381,7 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
 }
 
 async function guardarNotaAlertaProtocoloMensual(registro) {
-  if (!puedeVerProtocolosMensuales || !registro?.id) return
+  if (!puedeVerProtocolosMensualesPlanta || !registro?.id) return
 
   const textoActual = registro.notaAlertaMensual || registro.protocolo_entrega?.nota_alerta_mensual || ''
   const nota = window.prompt('Ingrese la nota de alerta del protocolo:', textoActual)
@@ -4766,7 +4879,7 @@ async function guardarPreciosMateriales() {
 }
 
 async function generarDescargaProtocolosDiarios() {
-  if (!puedeDescargarProtocolosDiarios || !fechaProtocolosDiarios || descargandoProtocolos) return
+  if (!puedeDescargarProtocolosPlanta || !fechaProtocolosDiarios || descargandoProtocolos) return
 
   setDescargandoProtocolos(true)
   try {
@@ -4809,6 +4922,7 @@ async function reintegrarModuloFinalizado() {
       const { data, error } = await buscarUltimoModuloFinalizadoPorSerie({
         supabase,
         serie,
+        planta: plantaActiva,
       })
 
       if (error) {
@@ -4829,6 +4943,8 @@ async function reintegrarModuloFinalizado() {
       moduloHistorial,
       linea: lineaReintegrar,
       extremo: extremoReintegrar,
+      planta: plantaActiva,
+      limiteModulos: limiteModulosLineaActivo,
     })
 
     if (!resultado.ok) {
@@ -4931,42 +5047,52 @@ function limpiarEstadosModal() {
 
     moduloAntesCambio = moduloActual
 
-    updatePayload.protocolo_entrega = sincronizarDatosModuloEnProtocolo(
-      moduloActual?.protocolo_entrega || {},
-      {
-        serie: serieEditada,
-        tipo: tipoEditado,
-        proyecto: proyectoEditado,
-        responsable: responsableEditado,
-        estado: estadoEditado,
-        linea: lineaEditada,
-      }
-    )
+    if (protocolosHabilitadosPlanta) {
+      updatePayload.protocolo_entrega = sincronizarDatosModuloEnProtocolo(
+        moduloActual?.protocolo_entrega || {},
+        {
+          serie: serieEditada,
+          tipo: tipoEditado,
+          proyecto: proyectoEditado,
+          responsable: responsableEditado,
+          estado: estadoEditado,
+          linea: lineaEditada,
+        }
+      )
+    }
   }
 
   if (shouldSetFechaPrueba) {
-    updatePayload = aplicarDatosPruebaElectricaEnPayload({
-      payload: updatePayload,
-      moduloSeleccionado,
-      moduloAntesCambio,
-      serieEditada,
-      tipoEditado,
-      proyectoEditado,
-      responsableEditado,
-      lineaEditada,
-      perfil,
-      formatearFechaInput,
-      completarDatosPruebaEnProtocolo,
-    })
+    if (protocolosHabilitadosPlanta) {
+      updatePayload = aplicarDatosPruebaElectricaEnPayload({
+        payload: updatePayload,
+        moduloSeleccionado,
+        moduloAntesCambio,
+        serieEditada,
+        tipoEditado,
+        proyectoEditado,
+        responsableEditado,
+        lineaEditada,
+        perfil,
+        formatearFechaInput,
+        completarDatosPruebaEnProtocolo,
+      })
+    } else {
+      updatePayload.fecha_prueba_electrica = new Date().toISOString()
+    }
   }
 
   if (isEnGarantia) {
-    updatePayload = aplicarGarantiaEnPayload({
-      payload: updatePayload,
-      moduloSeleccionado,
-      fechaPruebaEditada,
-      agregarNotaGarantiaProtocolo,
-    })
+    if (protocolosHabilitadosPlanta) {
+      updatePayload = aplicarGarantiaEnPayload({
+        payload: updatePayload,
+        moduloSeleccionado,
+        fechaPruebaEditada,
+        agregarNotaGarantiaProtocolo,
+      })
+    } else {
+      updatePayload.fecha_prueba_electrica = new Date(`${fechaPruebaEditada}T12:00:00`).toISOString()
+    }
   }
 
   let { error } = await actualizarModuloEditado({
@@ -5104,12 +5230,14 @@ async function aprobarPruebaElectrica() {
   }
 
   const fechaPruebaDb = new Date().toISOString()
-  const protocoloActualizado = completarDatosPruebaEnProtocolo(
-    moduloParaAprobar?.protocolo_entrega || {},
-    moduloParaAprobar,
-    fechaPruebaDb,
-    perfil?.nombre || ''
-  )
+  const protocoloActualizado = protocolosHabilitadosPlanta
+    ? completarDatosPruebaEnProtocolo(
+        moduloParaAprobar?.protocolo_entrega || {},
+        moduloParaAprobar,
+        fechaPruebaDb,
+        perfil?.nombre || ''
+      )
+    : undefined
 
   const { error } = await aprobarPruebaElectricaModulo({
     supabase,
@@ -5136,7 +5264,7 @@ async function aprobarPruebaElectrica() {
       solicitud_prueba: false,
       estado: 'Prueba eléctrica',
       fecha_prueba_electrica: fechaPruebaDb,
-      protocolo_entrega: protocoloActualizado,
+      ...(protocoloActualizado !== undefined ? { protocolo_entrega: protocoloActualizado } : {}),
     },
     descripcion: `Aprobada por ${perfil?.nombre || perfil?.rol || 'usuario'} (${perfil?.rol || 'sin rol'})`,
   })
@@ -5342,7 +5470,7 @@ async function guardarMaterialesModulo() {
 }
 
 async function abrirProtocoloEntrega() {
-  if (!moduloSeleccionado?.id || !puedeUsarProtocolo) return
+  if (!moduloSeleccionado?.id || !puedeUsarProtocoloPlanta) return
   cerrarVentanasEmergentes({ conservarModulo: true })
   setProtocoloSoloLecturaBusqueda(false)
   setProtocoloDesdeHistorial(false)
@@ -5399,7 +5527,7 @@ function prepararRegistroParaVisorProtocolo(registro = {}) {
 }
 
 async function abrirProtocoloDesdeBusqueda(item) {
-  if (!item?.id || !puedeUsarProtocolo) return
+  if (!item?.id || !puedeUsarProtocoloPlanta) return
 
   cerrarVentanasEmergentes({ conservarModulo: true })
   setMostrarMenuModulo(false)
@@ -5473,7 +5601,7 @@ async function guardarProtocoloEntrega(protocolo) {
   if (!moduloSeleccionado?.id) return
 
   if (protocoloManualMensual) {
-    if (!puedeVerProtocolosMensuales) return
+    if (!puedeVerProtocolosMensualesPlanta) return
 
     const fechaProtocolo = protocolo.fecha || new Date().toISOString().slice(0, 10)
     const protocoloNormalizado = {
@@ -5708,7 +5836,7 @@ async function finalizarModulo() {
     modulo,
     datosAntes: modulo,
     datosDespues: historialCreado || historialGuardadoPayload,
-    descripcion: `Finalizó módulo desde línea ${modulo.linea}`,
+    descripcion: `Finalizó módulo desde línea ${etiquetaLinea(modulo.linea)}`,
   })
 
   limpiarEstadosModal()
@@ -5760,6 +5888,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       moduloId,
       lineaDestino,
       posicionDestino,
+      planta: plantaActiva,
+      limiteModulos: limiteModulosLineaActivo,
     })
 
     if (!resultado.ok) {
@@ -5828,7 +5958,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   const itemsMenuLateral = [
     {
       id: 'inicio',
-      etiqueta: 'Planta Bayona',
+      etiqueta: nombrePlantaActiva,
       icono: '\u2302',
       visible: !esRolBodega,
       activo: !mostrarKPI && !mostrarHorasHombre,
@@ -5857,7 +5987,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       id: 'protocolos',
       etiqueta: 'Protocolos',
       icono: '\u25A4',
-      visible: puedeVerProtocolosMensuales,
+      visible: puedeVerProtocolosMensualesPlanta,
       activo: mostrarProtocolosMensuales,
       onClick: abrirProtocolosMensuales,
     },
@@ -5865,7 +5995,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       id: 'balance-materiales',
       etiqueta: 'Balance materiales',
       icono: '\u25A6',
-      visible: puedeVerBalanceMateriales,
+      visible: puedeVerBalanceMaterialesPlanta,
       activo: mostrarBalanceMateriales,
       onClick: abrirBalanceMateriales,
     },
@@ -5873,13 +6003,13 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       id: 'mantencion',
       etiqueta: 'Mantención',
       icono: '\u2692',
-      visible: puedeVerBalanceMantencion,
+      visible: puedeVerBalanceMantencionPlanta,
       activo: mostrarBalanceMantencion,
       onClick: abrirBalanceMantencion,
     },
     {
       id: 'bodega',
-      etiqueta: perfil?.rol === 'electrico' ? 'Solicitar material' : 'Bodega',
+      etiqueta: perfil?.rol === 'electrico' ? 'Solicitar material' : nombreBodegaActiva,
       icono: '\u25A3',
       visible: puedeVerBodega,
       activo: mostrarBodega || esRolBodega,
@@ -5934,7 +6064,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       id: 'descargar-protocolos',
       etiqueta: 'Descargar protocolos',
       icono: '\u21E9',
-      visible: puedeDescargarProtocolosDiarios,
+      visible: puedeDescargarProtocolosPlanta,
       activo: mostrarDescargaProtocolos,
       onClick: descargarProtocolosDiarios,
     },
@@ -5942,7 +6072,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       id: 'precios',
       etiqueta: 'Precios materiales',
       icono: '$',
-      visible: puedeVerPreciosMateriales,
+      visible: puedeVerPreciosMaterialesPlanta,
       activo: mostrarPreciosMateriales,
       onClick: abrirPreciosMateriales,
     },
@@ -5972,7 +6102,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       id: 'equivalencias',
       etiqueta: 'Equivalencias',
       icono: '\u21C4',
-      visible: puedeAdministrarEquivalenciasMateriales,
+      visible: puedeAdministrarEquivalenciasPlanta,
       activo: mostrarEquivalenciasMateriales,
       onClick: abrirEquivalenciasMateriales,
     },
@@ -6016,9 +6146,9 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       >
         <header className="encabezado-control-modular" onClick={(e) => e.stopPropagation()}>
           <div className="encabezado-marca">
-            <strong>Planta Bayona</strong>
+            <strong>{nombrePlantaActiva}</strong>
             <span className="encabezado-separador" />
-            <span>{mostrarBodega || esRolBodega ? 'Bodega' : 'Control modular'}</span>
+            <span>{mostrarBodega || esRolBodega ? nombreBodegaActiva : 'Control modular'}</span>
           </div>
 
           <div className="encabezado-usuario-acciones">
@@ -6054,6 +6184,41 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           </div>
         </header>
 
+        {perfil?.rol === 'admin' && !mostrarBodega && (
+          <div
+            onClick={(evento) => evento.stopPropagation()}
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              gap: '10px',
+              margin: '12px 0',
+            }}
+          >
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b8d4df', fontWeight: 800 }}>
+              Planta activa
+              <select
+                value={plantaActiva}
+                onChange={(evento) => cambiarPlantaActivaAdmin(evento.target.value)}
+                style={{
+                  minWidth: '180px',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #456575',
+                  background: '#142630',
+                  color: 'white',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {PLANTAS_DISPONIBLES.map((planta) => (
+                  <option key={planta.valor} value={planta.valor}>{planta.etiqueta}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
         {recibeAvisosPrueba && avisoPruebaElectrica && (
           <button
             onClick={() => {
@@ -6078,7 +6243,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
               cursor: 'pointer',
             }}
           >
-            Prueba eléctrica línea {avisoPruebaElectrica.linea}
+            Prueba eléctrica línea {etiquetaLinea(avisoPruebaElectrica.linea)}
           </button>
         )}
 
@@ -6184,7 +6349,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                               style={{ padding: '9px 0', borderBottom: '1px solid #444' }}
                             >
                               <strong style={{ display: 'block' }}>
-                                LÍNEA {modulo.linea}
+                                LÍNEA {etiquetaLinea(modulo.linea)}
                               </strong>
                               <span style={{ display: 'block', marginTop: '2px', fontSize: '13px', color: '#ccc' }}>
                                 {solicitantesPendientes[modulo.id] || 'Cargando...'} - {modulo.serie}
@@ -6316,7 +6481,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     Reintegrar
                   </button>
                 )}
-                {puedeDescargarProtocolosDiarios && (
+                {puedeDescargarProtocolosPlanta && (
                   <button
                     type="button"
                     onClick={descargarProtocolosDiarios}
@@ -6335,13 +6500,13 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     Descargar protocolos diarios
                   </button>
                 )}
-                {puedeVerPreciosMateriales && (
+                {puedeVerPreciosMaterialesPlanta && (
                   <button
                     type="button"
                     onClick={abrirPreciosMateriales}
                     style={{
                       width: '100%',
-                      marginTop: (puedeAgregarModulos || puedeDescargarProtocolosDiarios) ? '8px' : 0,
+                      marginTop: (puedeAgregarModulos || puedeDescargarProtocolosPlanta) ? '8px' : 0,
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #555',
@@ -6360,7 +6525,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     onClick={() => abrirBodega({ abrirSolicitudMaterial: true })}
                     style={{
                       width: '100%',
-                      marginTop: (puedeAgregarModulos || puedeDescargarProtocolosDiarios || puedeVerPreciosMateriales) ? '8px' : 0,
+                      marginTop: (puedeAgregarModulos || puedeDescargarProtocolosPlanta || puedeVerPreciosMaterialesPlanta) ? '8px' : 0,
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #555',
@@ -6392,7 +6557,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                     Proyección materiales
                   </button>
                 )}
-                {puedeAdministrarEquivalenciasMateriales && (
+                {puedeAdministrarEquivalenciasPlanta && (
                   <button
                     type="button"
                     onClick={abrirEquivalenciasMateriales}
@@ -6465,7 +6630,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   >
     {mostrarKPI ? 'Ocultar indicadores' : 'Ver indicadores'}
   </button>
-  {puedeVerProtocolosMensuales && (
+  {puedeVerProtocolosMensualesPlanta && (
     <button
       onClick={abrirProtocolosMensuales}
       style={{
@@ -6480,7 +6645,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       Protocolos mensuales
     </button>
   )}
-  {puedeVerBalanceMateriales && (
+  {puedeVerBalanceMaterialesPlanta && (
     <button
       onClick={(e) => {
         e.stopPropagation()
@@ -6498,7 +6663,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       Balance materiales
     </button>
   )}
-  {puedeVerBalanceMantencion && (
+  {puedeVerBalanceMantencionPlanta && (
     <button
       onClick={(e) => {
         e.stopPropagation()
@@ -6940,7 +7105,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
         {item.esActual && (
           <div style={{ marginTop: '4px', color: '#81c784', fontWeight: 700 }}>
-            (Actualmente en línea {item.linea})
+            (Actualmente en línea {etiquetaLinea(item.linea)})
           </div>
         )}
 
@@ -6959,7 +7124,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         </div>
       </div>
 
-      {puedeUsarProtocolo && (
+      {puedeUsarProtocoloPlanta && (
         <button
           type="button"
           onClick={(evento) => {
@@ -6995,11 +7160,11 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   <div onClick={cerrarPanelesYModulo} style={{ marginBottom: '20px', fontSize: '13px', lineHeight: 1.2 }}>
     <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Vista general de todas las líneas</h2>
 
-    {LINEAS_TABLERO.map((linea) => (
+    {lineasPlantaActiva.map((linea) => (
       <div key={linea} style={{ marginBottom: '14px' }}>
         <h3 style={{ marginBottom: '8px', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
           <span style={{ fontSize: '26px', fontWeight: '800', textTransform: 'uppercase' }}>
-            Línea {linea}
+            Línea {etiquetaLinea(linea)}
           </span>
           <span style={{ fontSize: '16px', fontWeight: '500', color: '#ccc' }}>
             ({datosFiltradosPorProyecto.filter((x) => Number(x.linea) === Number(linea) && x.serie).length} módulos)
@@ -7025,7 +7190,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             paddingBottom: '2px',
           }}
         >
-          {puedeAgregarModulos && (
+          {puedeAgregarModulos && extremosIngresoPlantaActiva.includes('inicio') && (
             <button
               type="button"
               onClick={(e) => {
@@ -7127,7 +7292,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 <ContenidoTarjetaModulo modulo={pos} compacto onMostrarObservacion={mostrarObservacionAlerta} />
               </div>
             ))}
-          {puedeAgregarModulos && (
+          {puedeAgregarModulos && extremosIngresoPlantaActiva.includes('fin') && (
             <button
               type="button"
               onClick={(e) => {
@@ -7136,6 +7301,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
               }}
               style={{
                 flex: '0 0 34px',
+                marginLeft: extremosIngresoPlantaActiva.includes('inicio') ? 0 : 'auto',
                 minHeight: '60px',
                 borderRadius: '5px',
                 border: '1px dashed #607d8b',
@@ -7145,7 +7311,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo por calle agua"
+              title={extremosIngresoPlantaActiva.includes('inicio') ? 'Ingresar módulo por calle agua' : 'Ingresar módulo por el extremo derecho'}
             >
               +
             </button>
@@ -7156,11 +7322,11 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   </div>
 ) : (
   <div onClick={cerrarPanelesYModulo}>
-    {LINEAS_TABLERO.map((linea) => (
+    {lineasPlantaActiva.map((linea) => (
       <div key={linea} style={{ marginBottom: '30px' }}>
         <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontSize: '22px' }}>
           <span style={{ fontWeight: '800', textTransform: 'uppercase' }}>
-            Línea {linea}
+            Línea {etiquetaLinea(linea)}
           </span>
           <span style={{ fontWeight: '500', fontSize: '18px', color: '#ccc' }}>
             ({datosFiltradosPorProyecto.filter((x) => Number(x.linea) === Number(linea) && x.serie).length} módulos)
@@ -7186,7 +7352,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             paddingBottom: '6px',
           }}
         >
-          {puedeAgregarModulos && (
+          {puedeAgregarModulos && extremosIngresoPlantaActiva.includes('inicio') && (
             <button
               type="button"
               onClick={(e) => {
@@ -7293,7 +7459,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 <ContenidoTarjetaModulo modulo={pos} onMostrarObservacion={mostrarObservacionAlerta} />
               </div>
             ))}
-          {puedeAgregarModulos && (
+          {puedeAgregarModulos && extremosIngresoPlantaActiva.includes('fin') && (
             <button
               type="button"
               onClick={(e) => {
@@ -7302,6 +7468,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
               }}
               style={{
                 flex: '0 0 54px',
+                marginLeft: extremosIngresoPlantaActiva.includes('inicio') ? 0 : 'auto',
                 minHeight: '120px',
                 borderRadius: '8px',
                 border: '1px dashed #607d8b',
@@ -7311,7 +7478,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                 fontWeight: 800,
                 cursor: 'pointer',
               }}
-              title="Ingresar módulo por calle agua"
+              title={extremosIngresoPlantaActiva.includes('inicio') ? 'Ingresar módulo por calle agua' : 'Ingresar módulo por el extremo derecho'}
             >
               +
             </button>
@@ -7355,7 +7522,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             {rolSolicitante && ` (${rolSolicitante})`}
           </p>
 
-          {puedeFinalizarModulos && (
+          {puedeFinalizarModulos && protocolosHabilitadosPlanta && (
             <button
               onClick={abrirResumenMateriales}
               style={{ width: '100%', marginBottom: '10px', padding: '12px' }}
@@ -7364,7 +7531,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
             </button>
           )}
 
-          {puedeUsarProtocolo && (
+          {puedeUsarProtocoloPlanta && (
             <button
               onClick={abrirProtocoloEntrega}
               style={{ width: '100%', marginBottom: '10px', padding: '12px' }}
@@ -7421,6 +7588,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       puedeFinalizarModulos={puedeFinalizarModulos}
       finalizandoModulo={finalizandoModulo}
       puedeEliminarModulo={perfil?.rol === 'admin'}
+      materialesProtocoloHabilitados={protocolosHabilitadosPlanta}
       mostrarMenuModulo={mostrarMenuModulo}
       pruebaBloqueada={
         esEstadoPruebaElectrica(moduloSeleccionado?.estado) ||
@@ -7452,11 +7620,11 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         notaEditada={notaEditada}
         setNotaEditada={setNotaEditada}
       >
-        <FormularioElectrico
+        {protocolosHabilitadosPlanta && <FormularioElectrico
           secciones={seccionesFormularioElectrico}
           valores={formulariosElectricos[moduloSeleccionado?.id] || {}}
           onChange={actualizarMaterialFormulario}
-        />
+        />}
       </VistaElectricoModulo>
     ) : (
       <FormularioDatosModulo
@@ -7476,6 +7644,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         setResponsableEditado={setResponsableEditado}
         notaEditada={notaEditada}
         setNotaEditada={setNotaEditada}
+        lineasDisponibles={lineasPlantaActiva}
         puedeEditarDatosModulo={puedeEditarDatosModulo}
         esTipoBodega={esTipoBodega}
         estaDentroDeGarantia={estaDentroDeGarantia}
@@ -7485,7 +7654,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       perfilRol={perfil?.rol}
       moduloSeleccionado={moduloSeleccionado}
       puedeEditarDatosModulo={puedeEditarDatosModulo}
-      puedeUsarProtocolo={puedeUsarProtocolo}
+      puedeUsarProtocolo={puedeUsarProtocoloPlanta}
+      materialesProtocoloHabilitados={protocolosHabilitadosPlanta}
       esEstadoPruebaElectrica={esEstadoPruebaElectrica}
       esSolicitudPruebaActiva={esSolicitudPruebaActiva}
       onGuardarCambios={guardarCambios}
@@ -7499,7 +7669,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   </ModalModulo>
 )}
 
-{mostrarResumenMateriales && moduloSeleccionado && (
+{mostrarResumenMateriales && moduloSeleccionado && protocolosHabilitadosPlanta && (
   <ResumenMaterialesModal
     modulo={moduloSeleccionado}
     cargandoMateriales={cargandoMateriales}
@@ -7509,7 +7679,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   />
 )}
 
-{mostrarEditorMateriales && moduloSeleccionado && puedeVerMenuModulo && (
+{mostrarEditorMateriales && moduloSeleccionado && puedeVerMenuModulo && protocolosHabilitadosPlanta && (
   <EditorMaterialesModal
     modulo={moduloSeleccionado}
     cargandoMateriales={cargandoMateriales}
@@ -7525,7 +7695,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   </EditorMaterialesModal>
 )}
 
-{mostrarProtocolosMensuales && puedeVerProtocolosMensuales && (
+{mostrarProtocolosMensuales && puedeVerProtocolosMensualesPlanta && (
   <ProtocolosMensualesModal onClickFondo={cerrarPanelesFlotantes}>
     <ProtocolosMensualesToolbar
       ingresos={ingresosProtocolosMensuales}
@@ -7580,7 +7750,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   </ProtocolosMensualesModal>
 )}
 
-{mostrarBalanceMateriales && puedeVerBalanceMateriales && (
+{mostrarBalanceMateriales && puedeVerBalanceMaterialesPlanta && (
   <BalanceMaterialesModal
     rango={rangoBalanceMateriales}
     fecha={fechaBalanceMateriales}
@@ -7599,7 +7769,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     equivalenciasMateriales={equivalenciasMateriales}
     preciosMateriales={preciosMateriales}
     preciosCompraMateriales={preciosCompraMateriales}
-    lineasDisponibles={LINEAS_TABLERO}
+    lineasDisponibles={lineasPlantaActiva}
     formatearPrecio={formatearPrecioMaterial}
     onCambiarRango={(nuevoRango) => {
       setRangoBalanceMateriales(nuevoRango)
@@ -7613,7 +7783,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   />
 )}
 
-{mostrarBalanceMantencion && puedeVerBalanceMantencion && (
+{mostrarBalanceMantencion && puedeVerBalanceMantencionPlanta && (
   <BalanceMantencionModal
     rango={rangoBalanceMantencion}
     fecha={fechaBalanceMantencion}
@@ -7681,6 +7851,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
 {(mostrarBodega || esRolBodega) && puedeVerBodega && (
   <BodegaModal
+    key={bodegaActiva}
     modoSoloBodega={esRolBodega}
     puedeOperarBodega={puedeOperarComoBodega}
     puedeAdministrar={puedeAdministrarBodega}
@@ -7691,6 +7862,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     puedeGestionarPedidos={puedeOperarComoBodega}
     puedeAprobarPedidos={puedeRevisarSolicitudesBodega}
     puedeCrearPedido={puedeCrearPedidoBodega}
+    bodegaActiva={bodegaActiva}
+    nombreBodegaActiva={nombreBodegaActiva}
+    puedeSeleccionarBodega={perfil?.rol === 'admin'}
+    bodegasDisponibles={BODEGAS_DISPONIBLES}
     archivo={archivoInventarioBodega}
     inventarios={inventariosBodega}
     solicitantes={solicitantesValeBodega}
@@ -7729,6 +7904,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     solicitudMaterialInicial={solicitudMaterialBodegaInicial}
     seccionInicial={seccionBodegaInicial}
     soloSolicitarMaterial={perfil?.rol === 'electrico'}
+    onCambiarBodegaActiva={cambiarBodegaActivaAdmin}
     onCambiarArchivo={setArchivoInventarioBodega}
     onLeerArchivo={leerInventarioBodega}
     onGuardarPedido={guardarPedidoBodega}
@@ -7786,7 +7962,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   />
 )}
 
-{mostrarPreciosMateriales && puedeVerPreciosMateriales && (
+{mostrarPreciosMateriales && puedeVerPreciosMaterialesPlanta && (
   <PreciosMaterialesModal
     puedeEditar={puedeEditarPreciosMateriales}
     cargando={cargandoPreciosMateriales}
@@ -7810,7 +7986,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   />
 )}
 
-{mostrarEquivalenciasMateriales && puedeAdministrarEquivalenciasMateriales && (
+{mostrarEquivalenciasMateriales && puedeAdministrarEquivalenciasPlanta && (
   <EquivalenciasMaterialesModal
     equivalencias={equivalenciasMateriales}
     materialesCatalogo={catalogoPreciosMaterialesCompleto.map((item) => item.material)}
@@ -7835,7 +8011,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   />
 )}
 
-{mostrarProtocoloEntrega && moduloSeleccionado && (
+{mostrarProtocoloEntrega && moduloSeleccionado && protocolosHabilitadosPlanta && (
   <ProtocoloEntrega
     key={`${protocoloManualMensual ? 'manual' : protocoloDesdeHistorial ? 'historial' : 'actual'}-${moduloSeleccionado.id}-${versionProtocoloEntrega}`}
     modulo={moduloSeleccionado}
@@ -7863,6 +8039,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     serie={serieReintegrar}
     linea={lineaReintegrar}
     extremo={extremoReintegrar}
+    lineasDisponibles={lineasPlantaActiva}
+    extremosDisponibles={extremosIngresoPlantaActiva}
     reintegrando={reintegrandoModulo}
     formatearFecha={formatearFecha}
     onSeleccionarHistorial={seleccionarHistorialParaReintegrar}
@@ -7881,7 +8059,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   </div>
 )}
 
-{mostrarDescargaProtocolos && puedeDescargarProtocolosDiarios && (
+{mostrarDescargaProtocolos && puedeDescargarProtocolosPlanta && (
   <DescargaProtocolosDiariosModal
     fecha={fechaProtocolosDiarios}
     descargando={descargandoProtocolos}
@@ -7939,7 +8117,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     <h2>Nuevo módulo</h2>
 
     <p>
-      <strong>Línea:</strong> {posicionSeleccionada?.linea}
+      <strong>Línea:</strong> {etiquetaLinea(posicionSeleccionada?.linea)}
     </p>
 
     <input

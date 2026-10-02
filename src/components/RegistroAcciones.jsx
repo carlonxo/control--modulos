@@ -1,3 +1,5 @@
+import { etiquetaLinea } from '../utils/lineas'
+
 export default function RegistroAcciones({
   visible,
   acciones,
@@ -118,7 +120,7 @@ export default function RegistroAcciones({
                 </div>
                 <div style={{ marginTop: '4px', fontSize: '13px', color: '#ddd' }}>
                   Serie: <strong>{accion.serie || '-'}</strong>
-                  {accion.linea ? ` | Línea ${accion.linea}` : ''}
+                  {accion.linea ? ` | Línea ${etiquetaLinea(accion.linea)}` : ''}
                   {' | '}
                   <span style={{ color: '#ccc' }}>{accion.usuario_nombre || 'No registrado'}</span>
                 </div>

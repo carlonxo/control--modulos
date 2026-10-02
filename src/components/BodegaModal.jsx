@@ -26,6 +26,10 @@ function BodegaModal({
   puedeGestionarPedidos,
   puedeAprobarPedidos,
   puedeCrearPedido = false,
+  bodegaActiva = 'bayona',
+  nombreBodegaActiva = 'Bodega Bayona',
+  puedeSeleccionarBodega = false,
+  bodegasDisponibles = [],
   archivo,
   inventarios = [],
   solicitantes = [],
@@ -64,6 +68,7 @@ function BodegaModal({
   solicitudMaterialInicial = null,
   seccionInicial = null,
   soloSolicitarMaterial = false,
+  onCambiarBodegaActiva,
   onCambiarArchivo,
   onLeerArchivo,
   onGuardarPedido,
@@ -164,12 +169,12 @@ function BodegaModal({
     proyecto: solicitudMaterialInicial?.proyecto || '',
     tipoModulo: solicitudMaterialInicial?.tipoModulo || '',
     serie: solicitudMaterialInicial?.serie || '',
-    bodega: 'bayona',
+    bodega: bodegaActiva,
     retira: '',
   })
   const [devolucionMaterial, setDevolucionMaterial] = useState({
     fecha: fechaActualInput(),
-    bodega: 'bayona',
+    bodega: bodegaActiva,
     motivo: '',
   })
   const [recepcionMaterial, setRecepcionMaterial] = useState({
@@ -411,7 +416,7 @@ function BodegaModal({
       proyecto: '',
       tipoModulo: '',
       serie: '',
-      bodega: 'bayona',
+      bodega: bodegaActiva,
       retira: '',
     })
     setMaterialesPedido([{ ...filaMovimientoVacia }])
@@ -424,7 +429,7 @@ function BodegaModal({
 
     setDevolucionMaterial({
       fecha: fechaActualInput(),
-      bodega: 'bayona',
+      bodega: bodegaActiva,
       motivo: '',
     })
     setMaterialesDevolucion([{ ...filaMovimientoVacia }])
@@ -495,11 +500,27 @@ function BodegaModal({
           padding: '24px',
         }}
       >
-      {!modoSoloBodega && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'flex-start', marginBottom: '18px' }}>
+      {(puedeSeleccionarBodega || !modoSoloBodega) && (
+        <div style={{ display: 'flex', justifyContent: puedeSeleccionarBodega ? 'space-between' : 'flex-end', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end', marginBottom: '18px' }}>
+          {puedeSeleccionarBodega && (
+            <label style={{ display: 'grid', gap: '6px', minWidth: '220px', fontWeight: 800, color: '#b8d4df' }}>
+              Bodega activa
+              <select
+                value={bodegaActiva}
+                onChange={(evento) => onCambiarBodegaActiva?.(evento.target.value)}
+                style={{ ...inputStyle, minWidth: '220px', cursor: 'pointer' }}
+              >
+                {bodegasDisponibles.map((bodega) => (
+                  <option key={bodega.valor} value={bodega.valor}>{bodega.etiqueta}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {!modoSoloBodega && (
           <button type="button" onClick={onCerrar} style={botonGris}>
             Volver a módulos
           </button>
+          )}
         </div>
       )}
 
@@ -892,6 +913,7 @@ function BodegaModal({
           {mostrarCrearPedido && (puedeAdministrar || puedeCrearPedido) && (
             <PanelCrearPedido
               pedido={pedidoMaterial}
+              nombreBodega={nombreBodegaActiva}
               electricos={electricosDisponibles}
               materialesPedido={materialesPedido}
               materialesInventario={materialesInventario}
@@ -908,6 +930,7 @@ function BodegaModal({
           {mostrarCrearDevolucion && (
             <PanelCrearDevolucion
               devolucion={devolucionMaterial}
+              nombreBodega={nombreBodegaActiva}
               materialesDevolucion={materialesDevolucion}
               materialesInventario={materialesInventario}
               guardando={guardandoDevolucion}
@@ -3174,6 +3197,7 @@ function tipoInputRangoRecepcion(rango) {
 
 function PanelCrearPedido({
   pedido,
+  nombreBodega,
   electricos,
   materialesPedido,
   materialesInventario,
@@ -3223,12 +3247,10 @@ function PanelCrearPedido({
           Bodega
           <select
             value={pedido.bodega}
-            onChange={(e) => onCambiarPedido('bodega', e.target.value)}
+            disabled
             style={inputStyle}
           >
-            <option value="bayona">Bayona</option>
-            <option value="rental">Rental</option>
-            <option value="montaña">Montaña</option>
+            <option value={pedido.bodega}>{nombreBodega}</option>
           </select>
         </label>
         <label style={labelStyle}>
@@ -3288,6 +3310,7 @@ function PanelCrearPedido({
 
 function PanelCrearDevolucion({
   devolucion,
+  nombreBodega,
   materialesDevolucion,
   materialesInventario,
   guardando,
@@ -3318,12 +3341,10 @@ function PanelCrearDevolucion({
           Bodega
           <select
             value={devolucion.bodega}
-            onChange={(e) => onCambiarDevolucion('bodega', e.target.value)}
+            disabled
             style={inputStyle}
           >
-            <option value="bayona">Bayona</option>
-            <option value="rental">Rental</option>
-            <option value="montaña">Montaña</option>
+            <option value={devolucion.bodega}>{nombreBodega}</option>
           </select>
         </label>
       </div>

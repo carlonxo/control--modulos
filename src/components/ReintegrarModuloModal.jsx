@@ -1,4 +1,4 @@
-import { LINEAS_TABLERO } from '../utils/lineas'
+import { LINEAS_TABLERO, etiquetaLinea } from '../utils/lineas'
 
 function ReintegrarModuloModal({
   ultimosFinalizados,
@@ -6,6 +6,8 @@ function ReintegrarModuloModal({
   serie,
   linea,
   extremo,
+  lineasDisponibles = LINEAS_TABLERO,
+  extremosDisponibles = ['inicio', 'fin'],
   reintegrando,
   formatearFecha,
   onSeleccionarHistorial,
@@ -88,7 +90,7 @@ function ReintegrarModuloModal({
         />
       </label>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: extremosDisponibles.length > 1 ? '1fr 1fr' : '1fr', gap: '12px', marginBottom: '16px' }}>
         <label>
           <strong>Línea</strong>
           <select
@@ -96,23 +98,23 @@ function ReintegrarModuloModal({
             onChange={(e) => onCambiarLinea(Number(e.target.value))}
             style={{ width: '100%', padding: '9px', marginTop: '5px' }}
           >
-            {LINEAS_TABLERO.map((n) => (
-              <option key={n} value={n}>{n}</option>
+            {lineasDisponibles.map((n) => (
+              <option key={n} value={n}>{etiquetaLinea(n)}</option>
             ))}
           </select>
         </label>
 
-        <label>
+        {extremosDisponibles.length > 1 && <label>
           <strong>Ubicación</strong>
           <select
             value={extremo}
             onChange={(e) => onCambiarExtremo(e.target.value)}
             style={{ width: '100%', padding: '9px', marginTop: '5px' }}
           >
-            <option value="inicio">Calle acopio</option>
-            <option value="fin">Calle agua</option>
+            {extremosDisponibles.includes('inicio') && <option value="inicio">Calle acopio</option>}
+            {extremosDisponibles.includes('fin') && <option value="fin">Calle agua</option>}
           </select>
-        </label>
+        </label>}
       </div>
 
       <div style={{ display: 'flex', gap: '10px' }}>

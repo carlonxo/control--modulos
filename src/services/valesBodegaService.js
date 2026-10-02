@@ -70,11 +70,13 @@ export async function cargarItemsValesBodegaPorRango({
   supabase,
   fechaInicio,
   fechaFin,
+  bodega = 'bayona',
 }) {
   const { vales, error: errorVales } = await cargarValesBodegaCabeceraPorRango({
     supabase,
     fechaInicio,
     fechaFin,
+    bodega,
   })
   if (!errorVales && vales.length > 0) {
     const { items, error: errorItems } = await cargarItemsPorVales({
@@ -125,10 +127,12 @@ export async function cargarPedidosEntregadosBodegaPorRango({
   supabase,
   fechaInicio,
   fechaFin,
+  bodega = 'bayona',
 }) {
   const { data: vales, error } = await supabase
     .from('vales_bodega')
-    .select('id, fecha, serie, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega')
+    .select('id, fecha, serie, bodega, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega')
+    .eq('bodega', bodega)
     .eq('tipo_ingreso', 'pedido_app')
     .eq('estado_bodega', 'entregado')
     .gte('fecha', fechaInicio)
@@ -180,10 +184,12 @@ async function cargarValesBodegaCabeceraPorRango({
   supabase,
   fechaInicio,
   fechaFin,
+  bodega = 'bayona',
 }) {
   let { data, error } = await supabase
     .from('vales_bodega')
-    .select('id, fecha, serie, solicitante_id, solicitante_nombre, tipo_ingreso')
+    .select('id, fecha, serie, bodega, solicitante_id, solicitante_nombre, tipo_ingreso')
+    .eq('bodega', bodega)
     .gte('fecha', fechaInicio)
     .lt('fecha', fechaFin)
 
@@ -191,6 +197,7 @@ async function cargarValesBodegaCabeceraPorRango({
     ;({ data, error } = await supabase
       .from('vales_bodega')
       .select('id, fecha, solicitante_id, solicitante_nombre, tipo_ingreso')
+      .eq('bodega', bodega)
       .gte('fecha', fechaInicio)
       .lt('fecha', fechaFin))
   }
@@ -199,6 +206,7 @@ async function cargarValesBodegaCabeceraPorRango({
     ;({ data, error } = await supabase
       .from('vales_bodega')
       .select('id, fecha')
+      .eq('bodega', bodega)
       .gte('fecha', fechaInicio)
       .lt('fecha', fechaFin))
   }
@@ -282,10 +290,12 @@ async function cargarItemsPorVales({
 export async function cargarValesBodegaDia({
   supabase,
   fecha,
+  bodega = 'bayona',
 }) {
   let { data: vales, error: errorVales } = await supabase
     .from('vales_bodega')
-    .select('id, fecha, serie, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
+    .select('id, fecha, serie, bodega, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
+    .eq('bodega', bodega)
     .eq('fecha', fecha)
     .order('created_at', { ascending: false })
 
@@ -293,6 +303,7 @@ export async function cargarValesBodegaDia({
     ;({ data: vales, error: errorVales } = await supabase
       .from('vales_bodega')
       .select('id, fecha, serie, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, created_at')
+      .eq('bodega', bodega)
       .eq('fecha', fecha)
       .order('created_at', { ascending: false }))
   }
@@ -301,6 +312,7 @@ export async function cargarValesBodegaDia({
     ;({ data: vales, error: errorVales } = await supabase
       .from('vales_bodega')
       .select('id, fecha, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, created_at')
+      .eq('bodega', bodega)
       .eq('fecha', fecha)
       .order('created_at', { ascending: false }))
   }
@@ -309,6 +321,7 @@ export async function cargarValesBodegaDia({
     ;({ data: vales, error: errorVales } = await supabase
       .from('vales_bodega')
       .select('id, fecha, archivo_nombre, usuario_nombre, observacion, created_at')
+      .eq('bodega', bodega)
       .eq('fecha', fecha)
       .order('created_at', { ascending: false }))
   }
@@ -317,6 +330,7 @@ export async function cargarValesBodegaDia({
     ;({ data: vales, error: errorVales } = await supabase
       .from('vales_bodega')
       .select('id, fecha, archivo_nombre, usuario_nombre, created_at')
+      .eq('bodega', bodega)
       .eq('fecha', fecha)
       .order('created_at', { ascending: false }))
   }
@@ -381,7 +395,7 @@ export async function cargarValeBodegaPorId({ supabase, id }) {
 
   const { data: vale, error: errorVale } = await supabase
     .from('vales_bodega')
-    .select('id, fecha, serie, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
+    .select('id, fecha, serie, bodega, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
     .eq('id', id)
     .maybeSingle()
 
@@ -407,12 +421,14 @@ export async function guardarValeBodega({
   tipoIngreso = 'archivo',
   observacion = '',
   estadoBodega = '',
+  bodega = 'bayona',
   items,
 }) {
   const { data: vale, error: errorVale } = await supabase
     .from('vales_bodega')
     .insert([{
       fecha,
+      bodega,
       serie: serie || '',
       archivo_nombre: archivoNombre || '',
       usuario_nombre: usuarioNombre || '',
