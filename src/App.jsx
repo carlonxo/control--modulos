@@ -451,17 +451,20 @@ function esSolicitudCerradaBodega(vale = {}) {
 }
 
 function obtenerBodegaInventario(inventario = {}) {
+  const bodegaExplicita = normalizarBodega(inventario.bodega)
+  if (bodegaExplicita) return bodegaExplicita
+
   return normalizarBodega([
-    inventario.bodega,
     inventario.archivoNombre,
     inventario.hoja,
-    inventario.fecha,
   ].filter(Boolean).join(' '))
 }
 
-function filtrarInventariosPorBodegaAsignada(inventarios = [], perfilActual = {}) {
-  const bodegaAsignada = normalizarBodega(perfilActual?.bodega_asignada) || BODEGA_BAYONA
-  return inventarios.filter((inventario) => obtenerBodegaInventario(inventario) === bodegaAsignada)
+function filtrarInventariosPorBodega(inventarios = [], bodega = BODEGA_BAYONA) {
+  const bodegaObjetivo = normalizarBodega(bodega) || BODEGA_BAYONA
+  return inventarios.filter((inventario) => (
+    obtenerBodegaInventario(inventario) || BODEGA_BAYONA
+  ) === bodegaObjetivo)
 }
 
 function filtrarSolicitudesPorBodegaAsignada(solicitudes = [], perfilActual = {}) {
@@ -1138,11 +1141,19 @@ const catalogoPreciosMaterialesCompleto = asignarIdsInternosMateriales(catalogoP
 const seccionesCatalogoPreciosCompleto = [
   ...new Set(catalogoPreciosMaterialesCompleto.map((item) => item.seccion)),
 ]
+const inventarioBodegaActivo = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId)
+  || inventariosBodega[0]
+const opcionesMaterialesInventarioActivo = (inventarioBodegaActivo?.items || [])
+  .map((item) => String(item.descripcion || item.codigo || '').trim())
+  .filter(Boolean)
 const opcionesMaterialesBalance = [...new Set(catalogoPreciosMaterialesCompleto
   .filter((item) => item.activo !== false)
   .map((item) => item.material)
   .filter(Boolean)
-  .concat(variantesCableBodega.flatMap((grupo) => grupo.nombres)))]
+  .concat(
+    variantesCableBodega.flatMap((grupo) => grupo.nombres),
+    opcionesMaterialesInventarioActivo
+  ))]
   .sort((a, b) => a.localeCompare(b, 'es', {
     numeric: true,
     sensitivity: 'base',
@@ -3182,6 +3193,7 @@ async function abrirValesBodega() {
   setObservacionValeBodega('')
   setModoValeManual(false)
   await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
+  await cargarInventariosBodega()
   await cargarSolicitantesValesBodega()
   setMostrarValesBodega(true)
   await cargarValesBodegaDia(new Date().toISOString().slice(0, 10))
@@ -3219,7 +3231,10 @@ async function cargarInventariosBodega(preferido = null) {
     return []
   }
 
-  const inventariosFiltrados = filtrarInventariosPorBodegaAsignada(inventarios, perfil)
+  // La consulta de Supabase ya viene limitada a la bodega activa. Conservamos
+  // este filtro defensivo usando esa misma bodega, nunca la asignación del perfil,
+  // para que operadores y administradores obtengan exactamente el mismo inventario.
+  const inventariosFiltrados = filtrarInventariosPorBodega(inventarios, bodegaActiva)
   setInventariosBodega(inventariosFiltrados)
   const inventarioPreferido = preferido
     ? inventariosFiltrados.find((inventario) => (

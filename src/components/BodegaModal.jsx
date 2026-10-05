@@ -3170,10 +3170,10 @@ function esCodigoEscaneable(codigo) {
 
 function obtenerSugerenciasMateriales(texto, materialesInventario = []) {
   const busqueda = normalizarBusqueda(texto)
-  if (!busqueda) return []
 
   return materialesInventario
     .filter((item) => (
+      !busqueda ||
       normalizarBusqueda(item.descripcion).includes(busqueda) ||
       normalizarBusqueda(item.codigo).includes(busqueda)
     ))
@@ -3185,7 +3185,7 @@ function obtenerSugerenciasMateriales(texto, materialesInventario = []) {
       if (disponibleA !== disponibleB) return disponibleB - disponibleA
       return stockB - stockA
     })
-    .slice(0, 8)
+    .slice(0, 12)
 }
 
 function tipoInputRangoRecepcion(rango) {
@@ -3485,7 +3485,7 @@ function TablaMovimientoMateriales({
   onCambiarMaterial,
   onQuitarMaterial,
 }) {
-  const [filaSugerenciasActiva, setFilaSugerenciasActiva] = useState(null)
+  const [campoSugerenciasActivo, setCampoSugerenciasActivo] = useState('')
 
   function obtenerSugerencias(texto) {
     return obtenerSugerenciasMateriales(texto, materialesInventario)
@@ -3496,7 +3496,7 @@ function TablaMovimientoMateriales({
     onCambiarMaterial(indice, 'descripcion', item.descripcion || '')
     onCambiarMaterial(indice, 'unidad', item.unidad || '')
     onCambiarMaterial(indice, 'stock', item.saldoFinal || 0)
-    setFilaSugerenciasActiva(null)
+    setCampoSugerenciasActivo('')
   }
 
   return (
@@ -3516,49 +3516,46 @@ function TablaMovimientoMateriales({
             {filas.map((fila, indice) => (
               <tr key={`${datalistId}-${indice}`}>
                 <td data-label="Código" style={tdStyle}>
-                  <input
-                    type="text"
-                    value={fila.codigo}
-                    onChange={(e) => onCambiarMaterial(indice, 'codigo', e.target.value)}
-                    style={inputTablaStyle}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={fila.codigo}
+                      onFocus={() => setCampoSugerenciasActivo(`codigo-${indice}`)}
+                      onBlur={() => setTimeout(() => setCampoSugerenciasActivo(''), 160)}
+                      onChange={(e) => {
+                        onCambiarMaterial(indice, 'codigo', e.target.value)
+                        setCampoSugerenciasActivo(`codigo-${indice}`)
+                      }}
+                      style={inputTablaStyle}
+                    />
+                    {campoSugerenciasActivo === `codigo-${indice}` && obtenerSugerencias(fila.codigo).length > 0 && (
+                      <ListaSugerenciasMaterial
+                        clave={`${datalistId}-${indice}-codigo`}
+                        items={obtenerSugerencias(fila.codigo)}
+                        onSeleccionar={(item) => seleccionarMaterial(indice, item)}
+                      />
+                    )}
+                  </div>
                 </td>
                 <td data-label="Material" style={tdStyle}>
                   <div style={{ position: 'relative' }}>
                     <input
                       type="text"
                       value={fila.descripcion}
-                      onFocus={() => setFilaSugerenciasActiva(indice)}
-                      onBlur={() => setTimeout(() => setFilaSugerenciasActiva(null), 160)}
+                      onFocus={() => setCampoSugerenciasActivo(`descripcion-${indice}`)}
+                      onBlur={() => setTimeout(() => setCampoSugerenciasActivo(''), 160)}
                       onChange={(e) => {
                         onCambiarMaterial(indice, 'descripcion', e.target.value)
-                        setFilaSugerenciasActiva(indice)
+                        setCampoSugerenciasActivo(`descripcion-${indice}`)
                       }}
                       style={inputTablaStyle}
                     />
-                    {filaSugerenciasActiva === indice && obtenerSugerencias(fila.descripcion).length > 0 && (
-                      <div style={sugerenciasMaterialStyle}>
-                        {obtenerSugerencias(fila.descripcion).map((item) => (
-                          <button
-                            key={`${datalistId}-${indice}-${item.codigo}-${item.descripcion}`}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault()
-                              seleccionarMaterial(indice, item)
-                            }}
-                            style={botonSugerenciaMaterialStyle}
-                            title={item.descripcion}
-                          >
-                            <span>{item.descripcion}</span>
-                            <span style={{ display: 'grid', gap: '2px', justifyItems: 'end', fontSize: '12px' }}>
-                              {item.codigo && <small style={{ color: '#9fb3c8' }}>{item.codigo}</small>}
-                              <small style={{ color: Number(item.saldoFinal || 0) > 0 ? '#81c784' : '#ff8a80', fontWeight: 900 }}>
-                                Stock: {formatearNumero(item.saldoFinal || 0)}
-                              </small>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
+                    {campoSugerenciasActivo === `descripcion-${indice}` && obtenerSugerencias(fila.descripcion).length > 0 && (
+                      <ListaSugerenciasMaterial
+                        clave={`${datalistId}-${indice}-descripcion`}
+                        items={obtenerSugerencias(fila.descripcion)}
+                        onSeleccionar={(item) => seleccionarMaterial(indice, item)}
+                      />
                     )}
                   </div>
                 </td>
@@ -3599,6 +3596,33 @@ function TablaMovimientoMateriales({
         </table>
       </div>
     </>
+  )
+}
+
+function ListaSugerenciasMaterial({ clave, items = [], onSeleccionar }) {
+  return (
+    <div style={sugerenciasMaterialStyle}>
+      {items.map((item) => (
+        <button
+          key={`${clave}-${item.codigo}-${item.descripcion}`}
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            onSeleccionar(item)
+          }}
+          style={botonSugerenciaMaterialStyle}
+          title={item.descripcion}
+        >
+          <span>{item.descripcion}</span>
+          <span style={{ display: 'grid', gap: '2px', justifyItems: 'end', fontSize: '12px' }}>
+            {item.codigo && <small style={{ color: '#9fb3c8' }}>{item.codigo}</small>}
+            <small style={{ color: Number(item.saldoFinal || 0) > 0 ? '#81c784' : '#ff8a80', fontWeight: 900 }}>
+              Stock: {formatearNumero(item.saldoFinal || 0)}
+            </small>
+          </span>
+        </button>
+      ))}
+    </div>
   )
 }
 
