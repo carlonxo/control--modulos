@@ -3170,13 +3170,16 @@ function esCodigoEscaneable(codigo) {
 
 function obtenerSugerenciasMateriales(texto, materialesInventario = []) {
   const busqueda = normalizarBusqueda(texto)
+  const terminos = busqueda.split(' ').filter(Boolean)
 
   return materialesInventario
-    .filter((item) => (
-      !busqueda ||
-      normalizarBusqueda(item.descripcion).includes(busqueda) ||
-      normalizarBusqueda(item.codigo).includes(busqueda)
-    ))
+    .filter((item) => {
+      if (!busqueda) return true
+      const descripcion = normalizarBusqueda(item.descripcion)
+      const codigo = normalizarBusqueda(item.codigo)
+      const textoMaterial = `${codigo} ${descripcion}`.trim()
+      return textoMaterial.includes(busqueda) || terminos.every((termino) => textoMaterial.includes(termino))
+    })
     .sort((a, b) => {
       const stockA = Number(a.saldoFinal || 0)
       const stockB = Number(b.saldoFinal || 0)
@@ -3499,6 +3502,16 @@ function TablaMovimientoMateriales({
     setCampoSugerenciasActivo('')
   }
 
+  const [campoActivo, indiceActivoTexto] = campoSugerenciasActivo.split('-')
+  const indiceActivo = Number(indiceActivoTexto)
+  const filaActiva = Number.isInteger(indiceActivo) ? filas[indiceActivo] : null
+  const textoBusquedaActivo = campoActivo === 'codigo'
+    ? filaActiva?.codigo
+    : filaActiva?.descripcion
+  const sugerenciasActivas = filaActiva
+    ? obtenerSugerencias(textoBusquedaActivo)
+    : []
+
   return (
     <>
       <div className="bodega-tabla-movimiento-wrap" style={{ overflowX: 'auto' }}>
@@ -3528,13 +3541,6 @@ function TablaMovimientoMateriales({
                       }}
                       style={inputTablaStyle}
                     />
-                    {campoSugerenciasActivo === `codigo-${indice}` && obtenerSugerencias(fila.codigo).length > 0 && (
-                      <ListaSugerenciasMaterial
-                        clave={`${datalistId}-${indice}-codigo`}
-                        items={obtenerSugerencias(fila.codigo)}
-                        onSeleccionar={(item) => seleccionarMaterial(indice, item)}
-                      />
-                    )}
                   </div>
                 </td>
                 <td data-label="Material" style={tdStyle}>
@@ -3550,13 +3556,6 @@ function TablaMovimientoMateriales({
                       }}
                       style={inputTablaStyle}
                     />
-                    {campoSugerenciasActivo === `descripcion-${indice}` && obtenerSugerencias(fila.descripcion).length > 0 && (
-                      <ListaSugerenciasMaterial
-                        clave={`${datalistId}-${indice}-descripcion`}
-                        items={obtenerSugerencias(fila.descripcion)}
-                        onSeleccionar={(item) => seleccionarMaterial(indice, item)}
-                      />
-                    )}
                   </div>
                 </td>
                 <td data-label={mostrarStock ? 'Stock' : 'Unidad'} style={tdStyle}>
@@ -3595,6 +3594,23 @@ function TablaMovimientoMateriales({
           </tbody>
         </table>
       </div>
+
+      {filaActiva && (
+        <div style={{ marginTop: '8px' }}>
+          <div style={{ color: '#9fc5d6', fontSize: '13px', fontWeight: 800, marginBottom: '5px' }}>
+            {sugerenciasActivas.length > 0
+              ? `Coincidencias del inventario (${sugerenciasActivas.length})`
+              : 'No se encontraron coincidencias en el inventario activo'}
+          </div>
+          {sugerenciasActivas.length > 0 && (
+            <ListaSugerenciasMaterial
+              clave={`${datalistId}-${indiceActivo}-${campoActivo}`}
+              items={sugerenciasActivas}
+              onSeleccionar={(item) => seleccionarMaterial(indiceActivo, item)}
+            />
+          )}
+        </div>
+      )}
     </>
   )
 }
@@ -3665,6 +3681,9 @@ function normalizarBusqueda(valor) {
   return String(valor || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
     .toLowerCase()
 }
 
