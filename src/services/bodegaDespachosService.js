@@ -170,13 +170,12 @@ export async function guardarDespachoBodega({
     .from('bodega_despachos')
     .insert({
       fecha,
-      documento: documento || '',
       bodega: bodega || '',
       destino_tipo: 'obra',
       obra_destino: obraDestino || '',
       usuario_nombre: usuarioNombre || '',
     })
-    .select('id')
+    .select('id, documento')
     .single()
 
   if (error) {

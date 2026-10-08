@@ -3559,7 +3559,16 @@ function PanelSalidaMaterial({
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px', marginBottom: '12px' }}>
         <CampoTexto label="Fecha" type="date" value={salidaMaterial.fecha} onChange={(valor) => onCambiarSalida('fecha', valor)} />
-        <CampoTexto label="N° documento" value={salidaMaterial.documento} onChange={(valor) => onCambiarSalida('documento', valor)} placeholder="N° vale o guía" />
+        <label style={labelStyle}>
+          N° documento
+          <input
+            type="text"
+            value="Automático al guardar"
+            readOnly
+            aria-readonly="true"
+            style={{ ...inputStyle, color: '#a5d6a7', fontWeight: 800, cursor: 'default' }}
+          />
+        </label>
         <label style={labelStyle}>
           Enviar a
           <select

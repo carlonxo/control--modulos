@@ -2938,7 +2938,7 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
   }
 
   const fecha = datosSalida?.fecha || new Date().toISOString().slice(0, 10)
-  const documento = String(datosSalida?.documento || '').trim()
+  const documento = ''
   const bodega = obtenerBodegaInventario(inventarioActual) || 'bayona'
   const destino = obtenerCodigoBodega(datosSalida?.destino || '')
   const esTraspasoBodega = datosSalida?.destino && datosSalida.destino !== 'obra'
@@ -2955,11 +2955,6 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
 
   if (!fecha) {
     mostrarNotificacion('Debes ingresar la fecha del despacho')
-    return false
-  }
-
-  if (!documento) {
-    mostrarNotificacion('Debes ingresar el N° documento')
     return false
   }
 
@@ -3060,13 +3055,13 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
     if (despachoId) {
       void enviarEventoPush({ supabase, tipo: 'traspaso_bodega', recursoId: despachoId })
     }
-    mostrarNotificacion(`Traspaso enviado a ${obtenerNombreBodega(destino)}. Quedará pendiente hasta su recepción.`)
+    mostrarNotificacion(`Traspaso N° ${despacho?.documento || '-'} enviado a ${obtenerNombreBodega(destino)}. Quedará pendiente hasta su recepción.`)
     await cargarInventariosBodega()
     await cargarDespachosBodega()
     return true
   }
 
-  const { error, etapa } = await guardarDespachoBodegaSupabase({
+  const { despacho, error, etapa } = await guardarDespachoBodegaSupabase({
     supabase,
     fecha,
     documento,
@@ -3102,7 +3097,7 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
   }
 
   setGuardandoDespachoBodega(false)
-  mostrarNotificacion('Material despachado y descontado del inventario')
+  mostrarNotificacion(`Despacho N° ${despacho?.documento || '-'} registrado y descontado del inventario`)
   await cargarInventariosBodega()
   await cargarDespachosBodega()
   return true

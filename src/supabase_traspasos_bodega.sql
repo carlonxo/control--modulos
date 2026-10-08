@@ -15,6 +15,49 @@ alter table public.bodega_despachos
 alter table public.bodega_recepciones
   add column if not exists despacho_origen_id uuid;
 
+create sequence if not exists public.bodega_despachos_documento_seq
+  as bigint
+  start with 1
+  increment by 1;
+
+do $$
+declare
+  v_maximo bigint;
+  v_actual bigint;
+  v_usada boolean;
+begin
+  select coalesce(max(documento::bigint), 0)
+  into v_maximo
+  from public.bodega_despachos
+  where btrim(coalesce(documento, '')) ~ '^[0-9]+$';
+
+  select last_value, is_called
+  into v_actual, v_usada
+  from public.bodega_despachos_documento_seq;
+
+  if v_maximo > v_actual or (v_maximo = v_actual and not v_usada and v_maximo > 0) then
+    perform setval('public.bodega_despachos_documento_seq', v_maximo, true);
+  end if;
+end $$;
+
+create or replace function public.asignar_numero_documento_despacho_bodega()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  new.documento := lpad(nextval('public.bodega_despachos_documento_seq')::text, 6, '0');
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_asignar_numero_documento_despacho_bodega on public.bodega_despachos;
+create trigger trg_asignar_numero_documento_despacho_bodega
+before insert on public.bodega_despachos
+for each row
+execute function public.asignar_numero_documento_despacho_bodega();
+
 create index if not exists idx_bodega_despachos_traspasos_pendientes
 on public.bodega_despachos (bodega_destino, estado_traspaso, creado_en desc)
 where destino_tipo = 'bodega';
@@ -44,6 +87,7 @@ declare
   v_bodega_origen text := lower(btrim(coalesce(p_bodega_origen, '')));
   v_bodega_destino text := lower(btrim(coalesce(p_bodega_destino, '')));
   v_despacho_id uuid;
+  v_documento text;
   v_item jsonb;
   v_inventario_item public.bodega_inventario_items%rowtype;
   v_cantidad numeric;
@@ -94,7 +138,7 @@ begin
     coalesce(nullif(btrim(p_usuario_nombre), ''), v_usuario_id::text),
     'bodega', v_bodega_destino, 'pendiente'
   )
-  returning id into v_despacho_id;
+  returning id, documento into v_despacho_id, v_documento;
 
   for v_item in select value from jsonb_array_elements(p_items)
   loop
@@ -151,6 +195,7 @@ begin
     'ok', true,
     'id', v_despacho_id,
     'despacho_id', v_despacho_id,
+    'documento', v_documento,
     'estado_traspaso', 'pendiente',
     'bodega_destino', v_bodega_destino
   );
