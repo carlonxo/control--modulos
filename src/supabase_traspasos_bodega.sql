@@ -330,7 +330,11 @@ declare
   v_usuario_id uuid := auth.uid();
   v_rol text;
   v_bodega_asignada text;
-  v_destino text := replace(lower(btrim(coalesce(p_bodega_destino, ''))), 'montana', 'montaña');
+  v_destino text := replace(
+    regexp_replace(lower(btrim(coalesce(p_bodega_destino, ''))), '^bodega[[:space:]]+', ''),
+    'montana',
+    'montaña'
+  );
   v_limite integer := greatest(1, least(coalesce(p_limite, 100), 500));
   v_despacho record;
   v_items jsonb;
@@ -342,7 +346,11 @@ begin
 
   select
     lower(coalesce(perfil.rol, '')),
-    replace(lower(btrim(coalesce(perfil.bodega_asignada, ''))), 'montana', 'montaña')
+    replace(
+      regexp_replace(lower(btrim(coalesce(perfil.bodega_asignada, ''))), '^bodega[[:space:]]+', ''),
+      'montana',
+      'montaña'
+    )
   into v_rol, v_bodega_asignada
   from public.perfiles perfil
   where perfil.id = v_usuario_id;
@@ -364,7 +372,11 @@ begin
     from public.bodega_despachos despacho
     where despacho.destino_tipo = 'bodega'
       and despacho.estado_traspaso = 'pendiente'
-      and replace(lower(btrim(coalesce(despacho.bodega_destino, ''))), 'montana', 'montaña') = v_destino
+      and replace(
+        regexp_replace(lower(btrim(coalesce(despacho.bodega_destino, ''))), '^bodega[[:space:]]+', ''),
+        'montana',
+        'montaña'
+      ) = v_destino
     order by despacho.creado_en desc
     limit v_limite
   loop

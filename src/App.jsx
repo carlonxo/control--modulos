@@ -2544,6 +2544,7 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
   }
   if (errorTraspasos && !errorTraspasos.message?.includes('destino_tipo')) {
     console.error(errorTraspasos)
+    mostrarNotificacion(`No se pudieron consultar los traspasos pendientes: ${errorTraspasos.message}`)
   }
 
   const solicitudesApp = (error ? [] : vales || []).filter((vale) => (
