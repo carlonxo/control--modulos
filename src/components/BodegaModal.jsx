@@ -195,6 +195,7 @@ function BodegaModal({
   const [materialesRecepcion, setMaterialesRecepcion] = useState([{ ...filaMovimientoVacia }])
   const inventarioSeleccionado = inventarios.find((item) => item.id === inventarioSeleccionadoId) || inventarios[0]
   const materialesInventario = inventarioSeleccionado?.items || []
+  const traspasosPendientes = alertasBodega.filter((alerta) => alerta.tipo_ingreso === 'traspaso_bodega')
   const mostrarPedidosHoy = Boolean(puedeVerPedidosHoy)
   const puedeVerHistorialVales = Boolean(puedeAdministrar || modoSoloBodega || puedeVerPedidosHoy)
 
@@ -745,6 +746,18 @@ function BodegaModal({
               </div>
             )}
 
+            {puedeOperarBodega && (
+              <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+                <Tarjeta
+                  titulo="Traspasos por recibir"
+                  valor={traspasosPendientes.length}
+                  onClick={() => {
+                    if (traspasosPendientes[0]) setAlertaBodegaSeleccionada(traspasosPendientes[0])
+                  }}
+                />
+              </div>
+            )}
+
             {mostrarPedidosHoy && (
               <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
                 <Tarjeta
@@ -883,6 +896,27 @@ function BodegaModal({
               </div>
             )}
           </div>
+
+          {puedeOperarBodega && traspasosPendientes.length > 0 && (
+            <div style={{ display: 'grid', gap: '8px', padding: '12px', marginBottom: '12px', border: '1px solid #43a047', borderRadius: '10px', background: '#122d1a' }}>
+              <strong style={{ color: '#81c784', fontSize: '1.05rem' }}>Material pendiente de recepción</strong>
+              {traspasosPendientes.map((traspaso) => (
+                <button
+                  key={traspaso.id}
+                  type="button"
+                  onClick={() => setAlertaBodegaSeleccionada(traspaso)}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '11px 13px', border: '1px solid #4f7658', borderRadius: '8px', background: '#1c3b24', color: 'white', textAlign: 'left', cursor: 'pointer' }}
+                >
+                  <span>
+                    <strong>{formatearNombreBodega(traspaso.bodega)}</strong>
+                    {' · Documento '}{traspaso.documento || '-'}
+                    {' · '}{(traspaso.items || []).length} material(es)
+                  </span>
+                  <strong style={{ color: '#a5d6a7' }}>Ver y recepcionar</strong>
+                </button>
+              ))}
+            </div>
+          )}
 
           {mostrarPedidosHoy && mostrarPedidosBodegaHoy && (
             <PanelPedidosBodegaHoy

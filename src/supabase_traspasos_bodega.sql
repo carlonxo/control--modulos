@@ -316,6 +316,72 @@ begin
 end;
 $$;
 
+create or replace function public.cargar_traspasos_pendientes_bodega(
+  p_bodega_destino text,
+  p_limite integer default 100
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_usuario_id uuid := auth.uid();
+  v_rol text;
+  v_bodega_asignada text;
+  v_destino text := replace(lower(btrim(coalesce(p_bodega_destino, ''))), 'montana', 'montaña');
+  v_limite integer := greatest(1, least(coalesce(p_limite, 100), 500));
+  v_despacho record;
+  v_items jsonb;
+  v_resultado jsonb := '[]'::jsonb;
+begin
+  if v_usuario_id is null then
+    raise exception using errcode = '42501', message = 'Debes iniciar sesion para consultar traspasos.';
+  end if;
+
+  select
+    lower(coalesce(perfil.rol, '')),
+    replace(lower(btrim(coalesce(perfil.bodega_asignada, ''))), 'montana', 'montaña')
+  into v_rol, v_bodega_asignada
+  from public.perfiles perfil
+  where perfil.id = v_usuario_id;
+
+  if coalesce(v_rol, '') not in ('admin', 'analista', 'bodega') then
+    raise exception using errcode = '42501', message = 'Tu rol no tiene permiso para consultar traspasos.';
+  end if;
+
+  if v_destino not in ('bayona', 'rental', 'montaña') then
+    raise exception 'La bodega de destino no es valida.';
+  end if;
+
+  if v_rol <> 'admin' and v_bodega_asignada <> v_destino then
+    raise exception using errcode = '42501', message = 'Solo puedes consultar traspasos destinados a tu bodega.';
+  end if;
+
+  for v_despacho in
+    select despacho.*
+    from public.bodega_despachos despacho
+    where despacho.destino_tipo = 'bodega'
+      and despacho.estado_traspaso = 'pendiente'
+      and replace(lower(btrim(coalesce(despacho.bodega_destino, ''))), 'montana', 'montaña') = v_destino
+    order by despacho.creado_en desc
+    limit v_limite
+  loop
+    select coalesce(jsonb_agg(to_jsonb(item) order by item.creado_en, item.id), '[]'::jsonb)
+    into v_items
+    from public.bodega_despacho_items item
+    where item.despacho_id = v_despacho.id;
+
+    v_resultado := v_resultado || jsonb_build_array(
+      to_jsonb(v_despacho) || jsonb_build_object('items', v_items)
+    );
+  end loop;
+
+  return jsonb_build_object('bodega_destino', v_destino, 'traspasos', v_resultado);
+end;
+$$;
+
 revoke all on function public.crear_traspaso_bodega(uuid, date, text, text, text, text, jsonb) from public;
 revoke all on function public.crear_traspaso_bodega(uuid, date, text, text, text, text, jsonb) from anon;
 grant execute on function public.crear_traspaso_bodega(uuid, date, text, text, text, text, jsonb) to authenticated;
@@ -323,6 +389,10 @@ grant execute on function public.crear_traspaso_bodega(uuid, date, text, text, t
 revoke all on function public.recepcionar_traspaso_bodega(uuid, uuid, text) from public;
 revoke all on function public.recepcionar_traspaso_bodega(uuid, uuid, text) from anon;
 grant execute on function public.recepcionar_traspaso_bodega(uuid, uuid, text) to authenticated;
+
+revoke all on function public.cargar_traspasos_pendientes_bodega(text, integer) from public;
+revoke all on function public.cargar_traspasos_pendientes_bodega(text, integer) from anon;
+grant execute on function public.cargar_traspasos_pendientes_bodega(text, integer) to authenticated;
 
 -- Las cabeceras y sus detalles deben poder leerse para mostrar la notificación.
 grant select on table public.bodega_despachos to authenticated;
@@ -358,5 +428,5 @@ select
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
-  and p.proname in ('crear_traspaso_bodega', 'recepcionar_traspaso_bodega')
+  and p.proname in ('crear_traspaso_bodega', 'recepcionar_traspaso_bodega', 'cargar_traspasos_pendientes_bodega')
 order by p.proname;

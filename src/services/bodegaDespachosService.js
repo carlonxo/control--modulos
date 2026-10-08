@@ -60,6 +60,29 @@ export async function cargarTraspasosPendientesBodega({
 }) {
   if (!bodegaDestino) return { traspasos: [], error: null }
 
+  const { data: resultadoSeguro, error: errorSeguro } = await supabase.rpc(
+    'cargar_traspasos_pendientes_bodega',
+    {
+      p_bodega_destino: bodegaDestino,
+      p_limite: limite,
+    }
+  )
+
+  if (!errorSeguro) {
+    return {
+      traspasos: (resultadoSeguro?.traspasos || []).map((despacho) => ({
+        ...despacho,
+        tipo_ingreso: 'traspaso_bodega',
+        items: despacho.items || [],
+      })),
+      error: null,
+    }
+  }
+
+  if (errorSeguro.code !== 'PGRST202' && !String(errorSeguro.message || '').includes('cargar_traspasos_pendientes_bodega')) {
+    return { traspasos: [], error: errorSeguro }
+  }
+
   const { data: despachos, error } = await supabase
     .from('bodega_despachos')
     .select('id, fecha, documento, bodega, usuario_nombre, creado_en, destino_tipo, bodega_destino, estado_traspaso')

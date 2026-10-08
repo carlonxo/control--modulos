@@ -2541,13 +2541,12 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
 
   if (error) {
     console.error(error)
-    return
   }
   if (errorTraspasos && !errorTraspasos.message?.includes('destino_tipo')) {
     console.error(errorTraspasos)
   }
 
-  const solicitudesApp = (vales || []).filter((vale) => (
+  const solicitudesApp = (error ? [] : vales || []).filter((vale) => (
     vale.tipo_ingreso === 'pedido_app' || vale.tipo_ingreso === 'devolucion_app'
   ))
   const solicitudesFiltradas = filtrarSolicitudesPorBodegaAsignada(solicitudesApp, perfil)
