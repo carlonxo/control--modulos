@@ -211,6 +211,7 @@ import {
 import {
   agregarNotaGarantiaProtocolo,
   completarDatosPruebaEnProtocolo,
+  obtenerFechaRevisionGarantiaProtocolo,
   sincronizarDatosModuloEnProtocolo,
 } from './utils/protocolo'
 import {
@@ -669,7 +670,8 @@ coloresCableBodega.forEach((color) => {
 function claseEstadoVisualModulo(modulo = {}) {
   const estado = normalizarTexto(modulo.estado)
   if (estado === 'en garantia') {
-    return estaDentroDeGarantia(modulo.fecha_prueba_electrica) ? 'garantia' : 'alerta'
+    const fechaGarantia = obtenerFechaRevisionGarantiaProtocolo(modulo.protocolo_entrega, modulo.fecha_prueba_electrica)
+    return estaDentroDeGarantia(fechaGarantia) ? 'garantia' : 'alerta'
   }
   return ({
     'sin iniciar': 'sin-iniciar',
@@ -685,7 +687,10 @@ function iconoEstadoModulo(modulo = {}) {
   if (esSolicitudPruebaActiva(modulo.solicitud_prueba)) return '\u26A1'
   const estado = normalizarTexto(modulo.estado)
   if (['prueba electrica', 'sin instalacion'].includes(estado)) return '\u2713'
-  if (estado === 'en garantia') return estaDentroDeGarantia(modulo.fecha_prueba_electrica) ? '\u2713' : '!'
+  if (estado === 'en garantia') {
+    const fechaGarantia = obtenerFechaRevisionGarantiaProtocolo(modulo.protocolo_entrega, modulo.fecha_prueba_electrica)
+    return estaDentroDeGarantia(fechaGarantia) ? '\u2713' : '!'
+  }
   if (['canalizado', 'cableado', 'terminaciones'].includes(estado)) return '\u2692'
   return '\u25CB'
 }
@@ -1058,6 +1063,7 @@ const protocolosMensualesFiltrados = protocolosMensuales.filter((registro) => {
   return normalizarTexto(registro.serie).includes(busqueda) || normalizarTexto(registro.idOt).includes(busqueda)
 })
 const conteoClavesProtocolos = protocolosMensuales.reduce((conteo, registro) => {
+  if (registro.esGarantia) return conteo
   const clave = claveProtocoloUnico(registro.serie, registro.fecha_prueba_electrica)
   if (!clave) return conteo
   conteo[clave] = (conteo[clave] || 0) + 1
@@ -1787,9 +1793,10 @@ async function crearModulo() {
   const fechaPruebaAnterior = pruebaAnteriorGarantia?.fechaPruebaAnterior || null
   const moduloEnGarantia = Boolean(fechaPruebaAnterior)
   const estadoInicial = moduloEnGarantia ? 'En garantía' : 'Sin iniciar'
+  const fechaIngresoGarantia = moduloEnGarantia ? new Date().toISOString() : null
   const protocoloGarantia = moduloEnGarantia && protocolosHabilitadosPlanta
     ? agregarNotaGarantiaProtocolo({
-        fecha: fechaParaInput(fechaPruebaAnterior),
+        fecha: fechaParaInput(fechaIngresoGarantia),
         serie: serieIngreso,
         tipo: tipoIngreso,
         proyecto: proyectoIngreso,
@@ -1809,7 +1816,7 @@ async function crearModulo() {
     posicion: posicionIngreso,
     planta: plantaActiva,
     estado: estadoInicial,
-    fechaPruebaElectrica: fechaPruebaAnterior,
+    fechaPruebaElectrica: fechaIngresoGarantia,
     protocoloEntrega: protocoloGarantia,
   })
 
@@ -5809,7 +5816,13 @@ async function guardarProtocoloEntrega(protocolo) {
   if (!protocoloDesdeHistorial && !puedeEditarDatosProtocolo) return
 
   const protocoloParaGuardar = esEstadoGarantia(moduloSeleccionado?.estado || protocolo?.estado)
-    ? agregarNotaGarantiaProtocolo(protocolo, protocolo?.fecha || moduloSeleccionado?.fecha_prueba_electrica)
+    ? agregarNotaGarantiaProtocolo(
+        protocolo,
+        obtenerFechaRevisionGarantiaProtocolo(
+          protocolo,
+          moduloSeleccionado?.protocolo_entrega?.fecha_prueba_anterior_garantia || moduloSeleccionado?.fecha_prueba_electrica
+        )
+      )
     : protocolo
 
   const {
@@ -5922,7 +5935,10 @@ async function finalizarModulo() {
   }
 
   const protocoloHistorial = esEstadoGarantia(modulo.estado)
-    ? agregarNotaGarantiaProtocolo(modulo.protocolo_entrega || {}, modulo.fecha_prueba_electrica)
+    ? agregarNotaGarantiaProtocolo(
+        modulo.protocolo_entrega || {},
+        obtenerFechaRevisionGarantiaProtocolo(modulo.protocolo_entrega, modulo.fecha_prueba_electrica)
+      )
     : modulo.protocolo_entrega || {}
 
   const historialPayload = construirHistorialModulo({

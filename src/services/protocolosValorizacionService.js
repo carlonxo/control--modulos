@@ -1,3 +1,5 @@
+import { obtenerFechaRevisionGarantiaProtocolo } from '../utils/protocolo'
+
 export const valorBaseManoObraMantencion = 18900
 
 export function claveItemCobro(tipo, item = {}) {
@@ -35,6 +37,10 @@ export function prepararRegistroProtocoloMensual({
   })
   const datosProtocolo = registro?.protocolo_entrega || {}
   const fechaProtocolo = fechaDocumentoProtocolo(registro)
+  const esGarantiaRegistro = esEstadoGarantia(registro?.estado || datosProtocolo.estado)
+  const fechaGarantiaAnterior = esGarantiaRegistro
+    ? obtenerFechaRevisionGarantiaProtocolo(datosProtocolo)
+    : ''
   const ajusteValorizacion = datosProtocolo.ajuste_valorizacion || {}
   const ajustesItems = datosProtocolo.ajustes_valorizacion_items || {}
   const tieneAjustesItems = Object.keys(ajustesItems).length > 0
@@ -49,6 +55,8 @@ export function prepararRegistroProtocoloMensual({
     proyecto: datosProtocolo.proyecto || registro?.proyecto || '',
     linea: datosProtocolo.linea || registro?.linea || '',
     fecha_prueba_electrica: fechaProtocolo,
+    esGarantia: esGarantiaRegistro,
+    fechaGarantiaAnterior,
     origen,
     esActual: origen === 'actual',
     valorMantencion,

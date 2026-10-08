@@ -24,8 +24,21 @@ export function agregarNotaGarantiaProtocolo(
 
   return {
     ...protocolo,
+    fecha_prueba_anterior_garantia: fechaParaInput(fechaRevision),
     observaciones: [observacionesSinNota, notaGarantia].filter(Boolean).join('\n'),
   }
+}
+
+export function obtenerFechaRevisionGarantiaProtocolo(protocolo = {}, respaldo = '') {
+  const fechaExplicita = fechaParaInput(protocolo.fecha_prueba_anterior_garantia)
+  if (fechaExplicita) return fechaExplicita
+
+  const coincidencia = String(protocolo.observaciones || '').match(
+    /en\s+garantia,?\s*ultima\s+revision\s*:\s*(\d{2})[-/](\d{2})[-/](\d{4})/i
+  )
+  if (coincidencia) return `${coincidencia[3]}-${coincidencia[2]}-${coincidencia[1]}`
+
+  return fechaParaInput(respaldo)
 }
 
 export function completarDatosPruebaEnProtocolo(

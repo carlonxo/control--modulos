@@ -1,4 +1,4 @@
-import { estaDentroDeGarantia, fechaDocumentoProtocolo } from '../utils/modulos'
+import { esEstadoGarantia, estaDentroDeGarantia, fechaDocumentoProtocolo } from '../utils/modulos'
 
 async function actualizarPosicionModulo({ supabase, id, posicion }) {
   const { error } = await supabase
@@ -20,7 +20,7 @@ export async function buscarPruebaRecienteGarantiaPorSerie({
 
   const seleccionarRegistros = (tabla) => supabase
     .from(tabla)
-    .select('id, serie, fecha_prueba_electrica, protocolo_entrega')
+    .select('id, serie, estado, fecha_ingreso, fecha_prueba_electrica, protocolo_entrega')
     .ilike('serie', serieLimpia)
     .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
     .limit(5)
@@ -38,6 +38,7 @@ export async function buscarPruebaRecienteGarantiaPorSerie({
     ...(respuestaHistorial.data || []).map((registro) => ({ ...registro, origen: 'historial' })),
     ...(tablaManualNoExiste ? [] : respuestaManuales.data || []).map((registro) => ({ ...registro, origen: 'manual' })),
   ]
+    .filter((registro) => !esEstadoGarantia(registro.estado || registro.protocolo_entrega?.estado))
     .map((registro) => ({
       ...registro,
       fechaPruebaAnterior: fechaDocumentoProtocolo(registro),

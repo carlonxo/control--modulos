@@ -97,13 +97,13 @@ export async function cargarRegistrosProtocolosPorRango({
   const [respuestaActivos, respuestaHistorial, respuestaManuales] = await Promise.all([
     cargarTablaProtocolos(
       'modulos',
-      'id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
-      'id, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, protocolo_entrega, materiales',
+      'id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_ingreso, fecha_prueba_electrica, protocolo_entrega, materiales',
+      'id, serie, tipo, proyecto, responsable, estado, fecha_ingreso, fecha_prueba_electrica, protocolo_entrega, materiales',
     ),
     cargarTablaProtocolos(
       'historial_modulos',
-      'id, modulo_id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
-      'id, modulo_id, serie, tipo, proyecto, responsable, estado, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
+      'id, modulo_id, id_ot, serie, tipo, proyecto, responsable, estado, fecha_ingreso, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
+      'id, modulo_id, serie, tipo, proyecto, responsable, estado, fecha_ingreso, fecha_prueba_electrica, fecha_salida, protocolo_entrega, materiales',
     ),
     cargarTablaProtocolos(
       'protocolos_manuales',

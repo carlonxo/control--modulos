@@ -41,6 +41,9 @@ export function fechaParaInput(valor) {
 }
 
 export function fechaDocumentoProtocolo(registro = {}) {
+  if (esEstadoGarantia(registro?.estado || registro?.protocolo_entrega?.estado) && registro?.fecha_ingreso) {
+    return registro.fecha_ingreso
+  }
   const fechaInterna = registro?.protocolo_entrega?.fecha
   if (fechaInterna) return `${fechaInterna}T00:00:00`
   return registro?.fecha_prueba_electrica || null

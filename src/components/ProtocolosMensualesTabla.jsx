@@ -122,7 +122,7 @@ function ProtocolosMensualesTabla({
           ) : protocolosFiltrados.map((registro) => {
             const claveRegistro = `${registro.origen}-${registro.id}`
             const claveUnica = claveProtocoloUnico(registro.serie, registro.fecha_prueba_electrica)
-            const estaDuplicado = claveUnica && conteoClaves[claveUnica] > 1
+            const estaDuplicado = !registro.esGarantia && claveUnica && conteoClaves[claveUnica] > 1
 
             return (
               <ProtocolosMensualesFila

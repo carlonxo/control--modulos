@@ -93,14 +93,22 @@ export function aplicarGarantiaEnPayload({
   fechaPruebaEditada,
   agregarNotaGarantiaProtocolo,
 }) {
-  const fechaPruebaDb = new Date(`${fechaPruebaEditada}T12:00:00`).toISOString()
+  const fechaPruebaAnterior = new Date(`${fechaPruebaEditada}T12:00:00`).toISOString()
+  const fechaRegistroGarantia = moduloSeleccionado?.fecha_ingreso || new Date().toISOString()
+  const fechaProtocolo = String(fechaRegistroGarantia).match(/^(\d{4}-\d{2}-\d{2})/)?.[1]
+    || new Date(fechaRegistroGarantia).toISOString().slice(0, 10)
+  const protocoloGarantia = agregarNotaGarantiaProtocolo(
+    payload.protocolo_entrega || moduloSeleccionado?.protocolo_entrega || {},
+    fechaPruebaAnterior
+  )
 
   return {
     ...payload,
-    fecha_prueba_electrica: fechaPruebaDb,
-    protocolo_entrega: agregarNotaGarantiaProtocolo(
-      payload.protocolo_entrega || moduloSeleccionado?.protocolo_entrega || {},
-      fechaPruebaDb
-    ),
+    fecha_prueba_electrica: fechaRegistroGarantia,
+    protocolo_entrega: {
+      ...protocoloGarantia,
+      fecha: fechaProtocolo,
+      estado: 'En garantía',
+    },
   }
 }

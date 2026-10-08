@@ -18,9 +18,11 @@ function ProtocolosMensualesFila({
   onGuardarNotaAlerta,
 }) {
   const tieneNotaAlerta = Boolean(String(registro.notaAlertaMensual || '').trim())
+  const esGarantia = Boolean(registro.esGarantia)
+  const fechaGarantia = formatearFechaGarantia(registro.fechaGarantiaAnterior)
 
   return (
-    <tr style={{ background: estaDuplicado ? 'rgba(255, 152, 0, 0.16)' : 'transparent' }}>
+    <tr style={{ background: estaDuplicado || esGarantia ? 'rgba(255, 152, 0, 0.16)' : 'transparent' }}>
       <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'center', position: 'relative', overflow: 'visible' }}>
         {puedeEliminarProtocolosMensuales && (
           <button
@@ -71,7 +73,11 @@ function ProtocolosMensualesFila({
       </td>
       <td style={{ padding: '8px', border: '1px solid #444', fontWeight: 700 }}>
         {registro.serie}
-        {estaDuplicado && (
+        {esGarantia ? (
+          <div style={{ color: '#ffb74d', fontSize: '11px', marginTop: '2px' }}>
+            Garantía{fechaGarantia ? ` ${fechaGarantia}` : ''}
+          </div>
+        ) : estaDuplicado && (
           <div style={{ color: '#ffb74d', fontSize: '11px', marginTop: '2px' }}>
             Duplicado
           </div>
@@ -201,6 +207,18 @@ function ProtocolosMensualesFila({
       </td>
     </tr>
   )
+}
+
+function formatearFechaGarantia(valor) {
+  const coincidencia = String(valor || '').match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (coincidencia) return `${coincidencia[3]}/${coincidencia[2]}/${coincidencia[1].slice(-2)}`
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return ''
+  return [
+    String(fecha.getDate()).padStart(2, '0'),
+    String(fecha.getMonth() + 1).padStart(2, '0'),
+    String(fecha.getFullYear()).slice(-2),
+  ].join('/')
 }
 
 export default ProtocolosMensualesFila
