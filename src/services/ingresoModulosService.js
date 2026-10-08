@@ -1,4 +1,9 @@
-import { esEstadoGarantia, estaDentroDeGarantia, fechaDocumentoProtocolo } from '../utils/modulos'
+import {
+  esEstadoGarantia,
+  estaDentroDeGarantia,
+  fechaDocumentoProtocolo,
+  fechaParaInput,
+} from '../utils/modulos'
 
 async function actualizarPosicionModulo({ supabase, id, posicion }) {
   const { error } = await supabase
@@ -48,6 +53,56 @@ export async function buscarPruebaRecienteGarantiaPorSerie({
 
   return {
     data: candidatos[0] || null,
+    error: null,
+  }
+}
+
+export async function buscarProtocoloAnteriorGarantia({
+  supabase,
+  serie,
+  fechaReferencia = '',
+}) {
+  const serieLimpia = String(serie || '').trim()
+  if (!serieLimpia) return { data: null, error: null }
+
+  const seleccionarRegistros = (tabla) => supabase
+    .from(tabla)
+    .select('*')
+    .ilike('serie', serieLimpia)
+    .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
+    .limit(100)
+
+  const [respuestaHistorial, respuestaManuales] = await Promise.all([
+    seleccionarRegistros('historial_modulos'),
+    seleccionarRegistros('protocolos_manuales'),
+  ])
+
+  const tablaManualNoExiste = respuestaManuales.error?.message?.includes('protocolos_manuales')
+  const error = respuestaHistorial.error || (tablaManualNoExiste ? null : respuestaManuales.error)
+  if (error) return { data: null, error }
+
+  const fechaBuscada = fechaParaInput(fechaReferencia)
+  const candidatos = [
+    ...(respuestaHistorial.data || []).map((registro) => ({ ...registro, origen: 'historial' })),
+    ...(tablaManualNoExiste ? [] : respuestaManuales.data || []).map((registro) => ({ ...registro, origen: 'manual' })),
+  ]
+    .filter((registro) => !esEstadoGarantia(registro.estado || registro.protocolo_entrega?.estado))
+    .map((registro) => ({
+      ...registro,
+      fechaDocumento: fechaParaInput(fechaDocumentoProtocolo(registro)),
+    }))
+    .filter((registro) => registro.fechaDocumento)
+    .sort((a, b) => b.fechaDocumento.localeCompare(a.fechaDocumento))
+
+  const coincidenciaExacta = fechaBuscada
+    ? candidatos.find((registro) => registro.fechaDocumento === fechaBuscada)
+    : null
+  const anteriorMasReciente = fechaBuscada
+    ? candidatos.find((registro) => registro.fechaDocumento <= fechaBuscada)
+    : candidatos[0]
+
+  return {
+    data: coincidenciaExacta || anteriorMasReciente || candidatos[0] || null,
     error: null,
   }
 }

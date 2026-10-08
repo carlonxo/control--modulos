@@ -135,6 +135,7 @@ import {
   guardarHistorialModuloFinalizado,
 } from './services/finalizacionModulosService'
 import {
+  buscarProtocoloAnteriorGarantia,
   buscarPruebaRecienteGarantiaPorSerie,
   crearModuloActivo,
   prepararLineaParaIngresoModulo,
@@ -5608,6 +5609,19 @@ async function guardarMaterialesModulo() {
 async function abrirProtocoloEntrega() {
   if (!moduloSeleccionado?.id || !puedeUsarProtocoloPlanta) return
   cerrarVentanasEmergentes({ conservarModulo: true })
+
+  if (esEstadoGarantia(moduloSeleccionado.estado || moduloSeleccionado.protocolo_entrega?.estado)) {
+    const fechaReferencia = obtenerFechaRevisionGarantiaProtocolo(
+      moduloSeleccionado.protocolo_entrega,
+      moduloSeleccionado.fecha_prueba_electrica
+    )
+    await abrirProtocoloAnteriorGarantia({
+      serie: moduloSeleccionado.serie,
+      fechaReferencia,
+    })
+    return
+  }
+
   setProtocoloSoloLecturaBusqueda(false)
   setProtocoloDesdeHistorial(false)
 
@@ -5662,11 +5676,62 @@ function prepararRegistroParaVisorProtocolo(registro = {}) {
   }
 }
 
+function mostrarRegistroEnVisorProtocolo(registro, { soloLectura = true } = {}) {
+  const moduloVisor = prepararRegistroParaVisorProtocolo(registro)
+  setModuloSeleccionado(moduloVisor)
+  setFormulariosElectricos((actuales) => ({
+    ...actuales,
+    [moduloVisor.id]: moduloVisor.materiales || {},
+  }))
+  setDatosProtocoloEntrega({
+    ...(moduloVisor.protocolo_entrega || {}),
+  })
+  setResponsableProtocolo(moduloVisor.protocolo_entrega?.responsable || moduloVisor.responsable || '')
+  setProtocoloSoloLecturaBusqueda(soloLectura)
+  setProtocoloDesdeHistorial(registro.origen === 'historial')
+  setProtocoloManualMensual(false)
+  setVersionProtocoloEntrega((version) => version + 1)
+  setMostrarProtocoloEntrega(true)
+}
+
+async function abrirProtocoloAnteriorGarantia({ serie, fechaReferencia }) {
+  const { data: protocoloAnterior, error } = await buscarProtocoloAnteriorGarantia({
+    supabase,
+    serie,
+    fechaReferencia,
+  })
+
+  if (error) {
+    mostrarNotificacion('No se pudo cargar la prueba eléctrica anterior: ' + error.message)
+    return false
+  }
+
+  if (!protocoloAnterior) {
+    mostrarNotificacion('No se encontró un protocolo de prueba eléctrica anterior para este módulo')
+    return false
+  }
+
+  mostrarRegistroEnVisorProtocolo(protocoloAnterior, { soloLectura: true })
+  return true
+}
+
 async function abrirProtocoloDesdeBusqueda(item) {
   if (!item?.id || !puedeUsarProtocoloPlanta) return
 
   cerrarVentanasEmergentes({ conservarModulo: true })
   setMostrarMenuModulo(false)
+
+  if (item.esGarantia || esEstadoGarantia(item.estado || item.protocolo_entrega?.estado)) {
+    const fechaReferencia = item.fechaGarantiaAnterior || obtenerFechaRevisionGarantiaProtocolo(
+      item.protocolo_entrega,
+      item.fecha_prueba_electrica
+    )
+    await abrirProtocoloAnteriorGarantia({
+      serie: item.serie,
+      fechaReferencia,
+    })
+    return
+  }
 
   if (item.origen === 'manual') {
     const moduloVisor = prepararRegistroParaVisorProtocolo(item)
