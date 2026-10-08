@@ -91,7 +91,10 @@ import {
 } from './services/bodegaRecepcionesService'
 import {
   cargarDespachosBodegaRango as cargarDespachosBodegaRangoSupabase,
+  cargarTraspasosPendientesBodega,
   guardarDespachoBodega as guardarDespachoBodegaSupabase,
+  guardarTraspasoBodega as guardarTraspasoBodegaSupabase,
+  recepcionarTraspasoBodega as recepcionarTraspasoBodegaSupabase,
 } from './services/bodegaDespachosService'
 import {
   cargarCodigosBarraBodega as cargarCodigosBarraBodegaSupabase,
@@ -797,6 +800,7 @@ const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
 const [mostrarBalanceMantencion, setMostrarBalanceMantencion] = useState(false)
 const [mostrarValesBodega, setMostrarValesBodega] = useState(false)
 const [mostrarBodega, setMostrarBodega] = useState(false)
+const [traspasoBodegaInicialId, setTraspasoBodegaInicialId] = useState('')
 const [mostrarProyeccionMateriales, setMostrarProyeccionMateriales] = useState(false)
 const [pedidosProyeccionMateriales, setPedidosProyeccionMateriales] = useState([])
 const [resumenProyeccionMateriales, setResumenProyeccionMateriales] = useState([])
@@ -887,6 +891,7 @@ useEffect(() => {
 const [guardandoDespachoBodega, setGuardandoDespachoBodega] = useState(false)
 const [entregandoSolicitudBodega, setEntregandoSolicitudBodega] = useState(false)
 const [recepcionandoDevolucionBodega, setRecepcionandoDevolucionBodega] = useState(false)
+const [recepcionandoTraspasoBodega, setRecepcionandoTraspasoBodega] = useState(false)
 const [usuariosBodega, setUsuariosBodega] = useState([])
 const [cargandoUsuariosBodega, setCargandoUsuariosBodega] = useState(false)
 const [guardandoUsuarioBodegaId, setGuardandoUsuarioBodegaId] = useState(null)
@@ -1475,13 +1480,17 @@ useEffect(() => {
     const destinoPush = url.searchParams.get('push')
     if (!destinoPush) return
 
-    if (destinoPush === 'material' && puedeVerBodega) {
+    if (destinoPush === 'traspaso' && puedeVerBodega) {
+      setTraspasoBodegaInicialId(url.searchParams.get('traspaso') || '')
+      abrirBodega()
+    } else if (destinoPush === 'material' && puedeVerBodega) {
       abrirBodega()
     } else if (destinoPush === 'prueba' || destinoPush === 'avisos') {
       setMostrarLlamadosPendientes(true)
     }
 
     url.searchParams.delete('push')
+    url.searchParams.delete('traspaso')
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`)
   }, 0)
 
@@ -2518,15 +2527,24 @@ async function cargarValesBodegaDia(fecha = fechaValeBodega) {
 async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
   if (!fecha || !puedeVerBodega) return
 
-  const { vales, error } = await cargarValesBodegaDiaSupabase({
-    supabase,
-    fecha,
-    bodega: bodegaActiva,
-  })
+  const [{ vales, error }, { traspasos, error: errorTraspasos }] = await Promise.all([
+    cargarValesBodegaDiaSupabase({
+      supabase,
+      fecha,
+      bodega: bodegaActiva,
+    }),
+    cargarTraspasosPendientesBodega({
+      supabase,
+      bodegaDestino: bodegaActiva,
+    }),
+  ])
 
   if (error) {
     console.error(error)
     return
+  }
+  if (errorTraspasos && !errorTraspasos.message?.includes('destino_tipo')) {
+    console.error(errorTraspasos)
   }
 
   const solicitudesApp = (vales || []).filter((vale) => (
@@ -2543,7 +2561,7 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
 
   setPedidosBodegaHoy(solicitudesVisibles.filter((vale) => vale.tipo_ingreso === 'pedido_app'))
   setDevolucionesBodegaHoy(solicitudesVisibles.filter((vale) => vale.tipo_ingreso === 'devolucion_app'))
-  setAlertasBodega(alertasVisibles)
+  setAlertasBodega([...alertasVisibles, ...(errorTraspasos ? [] : traspasos || [])])
 }
 
 async function cargarHistorialValesBodega(fecha = fechaHistorialValesBodega) {
@@ -2922,6 +2940,9 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
   const fecha = datosSalida?.fecha || new Date().toISOString().slice(0, 10)
   const documento = String(datosSalida?.documento || '').trim()
   const bodega = obtenerBodegaInventario(inventarioActual) || 'bayona'
+  const destino = obtenerCodigoBodega(datosSalida?.destino || '')
+  const esTraspasoBodega = datosSalida?.destino && datosSalida.destino !== 'obra'
+  const nombreObra = String(datosSalida?.nombreObra || '').trim()
 
   const items = (materialesSalida || [])
     .map((item) => ({
@@ -2939,6 +2960,21 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
 
   if (!documento) {
     mostrarNotificacion('Debes ingresar el N° documento')
+    return false
+  }
+
+  if (!datosSalida?.destino) {
+    mostrarNotificacion('Debes seleccionar dónde se enviará el material')
+    return false
+  }
+
+  if (esTraspasoBodega && destino === bodega) {
+    mostrarNotificacion('La bodega de destino debe ser diferente de la bodega de origen')
+    return false
+  }
+
+  if (!esTraspasoBodega && !nombreObra) {
+    mostrarNotificacion('Debes indicar el nombre de la obra a la que se enviará el material')
     return false
   }
 
@@ -2995,11 +3031,47 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
 
   setGuardandoDespachoBodega(true)
 
+  if (esTraspasoBodega) {
+    const { despacho, error } = await guardarTraspasoBodegaSupabase({
+      supabase,
+      inventarioOrigenId: inventarioActual.id,
+      fecha,
+      documento,
+      bodegaOrigen: bodega,
+      bodegaDestino: destino,
+      usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+      items,
+    })
+
+    setGuardandoDespachoBodega(false)
+
+    if (error) {
+      const funcionNoInstalada = error?.code === 'PGRST202'
+      mostrarNotificacion(
+        funcionNoInstalada
+          ? 'Falta habilitar los traspasos en Supabase. Ejecuta el archivo supabase_traspasos_bodega.sql.'
+          : `No se pudo crear el traspaso. No se aplicaron cambios. Detalle: ${error.message}`
+      )
+      await cargarInventariosBodega()
+      return false
+    }
+
+    const despachoId = despacho?.despacho_id || despacho?.id
+    if (despachoId) {
+      void enviarEventoPush({ supabase, tipo: 'traspaso_bodega', recursoId: despachoId })
+    }
+    mostrarNotificacion(`Traspaso enviado a ${obtenerNombreBodega(destino)}. Quedará pendiente hasta su recepción.`)
+    await cargarInventariosBodega()
+    await cargarDespachosBodega()
+    return true
+  }
+
   const { error, etapa } = await guardarDespachoBodegaSupabase({
     supabase,
     fecha,
     documento,
     bodega,
+    obraDestino: nombreObra,
     usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
     items,
   })
@@ -3033,6 +3105,53 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
   mostrarNotificacion('Material despachado y descontado del inventario')
   await cargarInventariosBodega()
   await cargarDespachosBodega()
+  return true
+}
+
+async function recepcionarTraspasoBodega(traspaso) {
+  if (!puedeOperarComoBodega || !traspaso?.id) return false
+
+  const inventarioDestino = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId)
+    || inventariosBodega[0]
+  if (!inventarioDestino?.id) {
+    mostrarNotificacion(`No hay inventario cargado para ${nombreBodegaActiva}`)
+    return false
+  }
+
+  if (obtenerCodigoBodega(traspaso.bodega_destino) !== bodegaActiva) {
+    mostrarNotificacion('Este traspaso pertenece a otra bodega de destino')
+    return false
+  }
+
+  setRecepcionandoTraspasoBodega(true)
+  const { resultado, error } = await recepcionarTraspasoBodegaSupabase({
+    supabase,
+    despachoId: traspaso.id,
+    inventarioDestinoId: inventarioDestino.id,
+    usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
+  })
+  setRecepcionandoTraspasoBodega(false)
+
+  if (error) {
+    const funcionNoInstalada = error?.code === 'PGRST202'
+    mostrarNotificacion(
+      funcionNoInstalada
+        ? 'Falta habilitar la recepción de traspasos en Supabase. Ejecuta el archivo supabase_traspasos_bodega.sql.'
+        : `No se pudo recepcionar el traspaso. No se aplicaron cambios. Detalle: ${error.message}`
+    )
+    await cargarInventariosBodega()
+    await cargarAlertasBodega()
+    return false
+  }
+
+  mostrarNotificacion(
+    resultado?.ya_recepcionado
+      ? 'Este traspaso ya había sido recepcionado; no se volvió a sumar al inventario.'
+      : `Traspaso recepcionado y agregado al inventario de ${nombreBodegaActiva}`
+  )
+  await cargarInventariosBodega()
+  await cargarAlertasBodega()
+  await cargarRecepcionesBodega()
   return true
 }
 
@@ -7893,8 +8012,10 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     guardandoSalida={guardandoDespachoBodega}
     entregandoSolicitudBodega={entregandoSolicitudBodega}
     recepcionandoDevolucionBodega={recepcionandoDevolucionBodega}
+    recepcionandoTraspasoBodega={recepcionandoTraspasoBodega}
     puedeExportarInventario={puedeExportarInventarioBodega}
     alertasBodega={alertasBodega}
+    alertaInicialId={traspasoBodegaInicialId}
     mostrarAlertasBodega={mostrarAlertasBodega}
     pedidosBodegaHoy={pedidosBodegaHoy}
     mostrarPedidosBodegaHoy={mostrarPedidosBodegaHoy}
@@ -7928,6 +8049,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarSalida={guardarDespachoBodega}
     onEntregarSolicitudBodega={entregarSolicitudBodega}
     onRecepcionarDevolucionBodega={recepcionarDevolucionBodega}
+    onRecepcionarTraspasoBodega={recepcionarTraspasoBodega}
     onAprobarSolicitudBodega={aprobarSolicitudBodega}
     onDenegarSolicitudBodega={denegarSolicitudBodega}
     onEditarSolicitudBodega={editarSolicitudBodega}
@@ -7960,6 +8082,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarCodigoBarraBodega={guardarCodigoBarraBodega}
     onEliminarCodigoBarraBodega={eliminarCodigoBarraBodega}
     onActualizarAlertasBodega={cargarAlertasBodega}
+    onConsumirAlertaInicial={() => setTraspasoBodegaInicialId('')}
     onActualizarPedidoBodega={async (id) => {
       const { vale, error } = await cargarValeBodegaPorIdSupabase({ supabase, id })
       if (error) console.error('No se pudo actualizar el pedido abierto', error)

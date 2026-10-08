@@ -42,8 +42,10 @@ function BodegaModal({
   guardandoSalida,
   entregandoSolicitudBodega,
   recepcionandoDevolucionBodega,
+  recepcionandoTraspasoBodega,
   puedeExportarInventario,
   alertasBodega = [],
+  alertaInicialId = '',
   mostrarAlertasBodega,
   pedidosBodegaHoy = [],
   mostrarPedidosBodegaHoy,
@@ -77,6 +79,7 @@ function BodegaModal({
   onGuardarSalida,
   onEntregarSolicitudBodega,
   onRecepcionarDevolucionBodega,
+  onRecepcionarTraspasoBodega,
   onAprobarSolicitudBodega,
   onDenegarSolicitudBodega,
   onEditarSolicitudBodega,
@@ -102,6 +105,7 @@ function BodegaModal({
   onGuardarCodigoBarraBodega,
   onEliminarCodigoBarraBodega,
   onActualizarAlertasBodega,
+  onConsumirAlertaInicial,
   onActualizarPedidoBodega,
   onSeleccionarInventario,
   onCerrar,
@@ -131,7 +135,8 @@ function BodegaModal({
     tipoDocumento: 'vale',
     documento: '',
     solicitante: '',
-    destino: '',
+    destino: 'obra',
+    nombreObra: '',
     observacion: '',
   })
 
@@ -198,7 +203,16 @@ function BodegaModal({
   }, [onActualizarPedidoBodega])
 
   useEffect(() => {
+    if (!alertaInicialId) return
+    const alerta = alertasBodega.find((item) => String(item.id) === String(alertaInicialId))
+    if (!alerta) return
+    setAlertaBodegaSeleccionada(alerta)
+    onConsumirAlertaInicial?.()
+  }, [alertaInicialId, alertasBodega, onConsumirAlertaInicial])
+
+  useEffect(() => {
     if (!alertaBodegaSeleccionada?.id) return undefined
+    if (alertaBodegaSeleccionada.tipo_ingreso === 'traspaso_bodega') return undefined
     let activo = true
     let consultando = false
     const id = alertaBodegaSeleccionada.id
@@ -459,7 +473,8 @@ function BodegaModal({
       tipoDocumento: 'vale',
       documento: '',
       solicitante: '',
-      destino: '',
+      destino: 'obra',
+      nombreObra: '',
       observacion: '',
     })
     setMaterialesSalida([{ ...filaMovimientoVacia }])
@@ -534,7 +549,21 @@ function BodegaModal({
         />
       )}
 
-      {alertaBodegaSeleccionada && (
+      {alertaBodegaSeleccionada?.tipo_ingreso === 'traspaso_bodega' && (
+        <DetalleTraspasoBodega
+          traspaso={alertaBodegaSeleccionada}
+          recepcionando={recepcionandoTraspasoBodega}
+          onRecepcionar={async () => {
+            const ok = await onRecepcionarTraspasoBodega?.(alertaBodegaSeleccionada)
+            if (!ok) return
+            setAlertaBodegaSeleccionada(null)
+            onActualizarAlertasBodega?.()
+          }}
+          onCerrar={() => setAlertaBodegaSeleccionada(null)}
+        />
+      )}
+
+      {alertaBodegaSeleccionada && alertaBodegaSeleccionada.tipo_ingreso !== 'traspaso_bodega' && (
         <DetalleSolicitudBodega
           alerta={alertaBodegaSeleccionada}
           entregando={entregandoSolicitudBodega}
@@ -961,6 +990,8 @@ function BodegaModal({
               salidaMaterial={salidaMaterial}
               materialesSalida={materialesSalida}
               materialesInventario={materialesInventario}
+              bodegaActiva={bodegaActiva}
+              bodegasDisponibles={bodegasDisponibles}
               onCambiarSalida={cambiarSalidaMaterial}
               onCambiarMaterial={cambiarMaterialSalida}
               onAgregarMaterial={agregarMaterialSalida}
@@ -1191,14 +1222,14 @@ function CampanaBodega({
           style={panelCampanaBodegaStyle}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
-            <h3 style={{ margin: 0 }}>Solicitudes bodega</h3>
+            <h3 style={{ margin: 0 }}>Notificaciones bodega</h3>
             <button type="button" onClick={onActualizar} style={botonMiniGris}>
               Actualizar
             </button>
           </div>
 
           {alertas.length === 0 ? (
-            <p style={{ margin: 0, color: '#ccc' }}>No hay pedidos o devoluciones registrados hoy.</p>
+            <p style={{ margin: 0, color: '#ccc' }}>No hay pedidos, devoluciones o traspasos pendientes.</p>
           ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
               {alertas.map((alerta) => {
@@ -1669,6 +1700,72 @@ function DetalleRecepcionBodega({ recepcion, onCerrar }) {
   )
 }
 
+function DetalleTraspasoBodega({ traspaso, recepcionando, onRecepcionar, onCerrar }) {
+  const nombreOrigen = formatearNombreBodega(traspaso.bodega)
+  const nombreDestino = formatearNombreBodega(traspaso.bodega_destino)
+
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={modalDetalleBodegaOverlayStyle}>
+      <div style={modalDetalleBodegaStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '12px' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Material por recepcionar</h3>
+            <p style={{ margin: '6px 0 0', color: '#ccc' }}>
+              {traspaso.fecha || ''} | {traspaso.usuario_nombre || 'Sin usuario'}
+            </p>
+          </div>
+          <button type="button" onClick={onCerrar} style={botonMiniGris}>Cerrar</button>
+        </div>
+
+        <div style={{ padding: '10px', border: '1px solid #2e7d32', borderRadius: '8px', background: '#142c1b', color: '#a5d6a7', marginBottom: '12px' }}>
+          <div><strong>Documento:</strong> {traspaso.documento || '-'}</div>
+          <div><strong>Desde:</strong> {nombreOrigen}</div>
+          <div><strong>Hacia:</strong> {nombreDestino}</div>
+          <div><strong>Estado:</strong> Pendiente de recepción</div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
+            <thead>
+              <tr style={{ background: '#333' }}>
+                <th style={{ ...thStyle, width: '190px' }}>Código</th>
+                <th style={thStyle}>Material</th>
+                <th style={thStyle}>Unidad</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(traspaso.items || []).map((item) => (
+                <tr key={item.id || `${item.codigo_bodega}-${item.descripcion}`}>
+                  <td style={tdStyle}>{item.codigo_bodega || '-'}</td>
+                  <td style={tdStyle}>{item.descripcion || '-'}</td>
+                  <td style={tdStyle}>{item.unidad || '-'}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>{formatearNumero(item.cantidad)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
+          <button
+            type="button"
+            onClick={onRecepcionar}
+            disabled={recepcionando || !(traspaso.items || []).length}
+            style={{
+              ...botonVerde,
+              opacity: recepcionando || !(traspaso.items || []).length ? 0.65 : 1,
+              cursor: recepcionando ? 'wait' : 'pointer',
+            }}
+          >
+            {recepcionando ? 'Recepcionando...' : 'Recepcionar material'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DetalleDespachoBodega({ despacho, onCerrar }) {
   return (
     <div
@@ -1691,6 +1788,16 @@ function DetalleDespachoBodega({ despacho, onCerrar }) {
         <div style={{ padding: '10px', border: '1px solid #5d4037', borderRadius: '8px', background: '#2a1d18', color: '#ffcc80', marginBottom: '12px' }}>
           <div><strong>N° documento:</strong> {despacho.documento || '-'}</div>
           <div><strong>Bodega:</strong> {despacho.bodega || '-'}</div>
+          {despacho.destino_tipo === 'bodega' && (
+            <>
+              <div><strong>Enviado a:</strong> {formatearNombreBodega(despacho.bodega_destino)}</div>
+              <div><strong>Estado del traspaso:</strong> {despacho.estado_traspaso === 'recibido' ? 'Recepcionado' : 'Pendiente de recepción'}</div>
+              {despacho.recibido_por && <div><strong>Recibido por:</strong> {despacho.recibido_por}</div>}
+            </>
+          )}
+          {despacho.destino_tipo !== 'bodega' && (
+            <div><strong>Obra de destino:</strong> {despacho.obra_destino || 'Sin especificar'}</div>
+          )}
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -3397,6 +3504,8 @@ function PanelSalidaMaterial({
   salidaMaterial,
   materialesSalida,
   materialesInventario,
+  bodegaActiva,
+  bodegasDisponibles,
   onCambiarSalida,
   onCambiarMaterial,
   onAgregarMaterial,
@@ -3414,9 +3523,35 @@ function PanelSalidaMaterial({
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(180px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px', marginBottom: '12px' }}>
         <CampoTexto label="Fecha" type="date" value={salidaMaterial.fecha} onChange={(valor) => onCambiarSalida('fecha', valor)} />
         <CampoTexto label="N° documento" value={salidaMaterial.documento} onChange={(valor) => onCambiarSalida('documento', valor)} placeholder="N° vale o guía" />
+        <label style={labelStyle}>
+          Enviar a
+          <select
+            value={salidaMaterial.destino || 'obra'}
+            onChange={(e) => {
+              onCambiarSalida('destino', e.target.value)
+              if (e.target.value !== 'obra') onCambiarSalida('nombreObra', '')
+            }}
+            style={inputStyle}
+          >
+            <option value="obra">Obra</option>
+            {(bodegasDisponibles || [])
+              .filter((bodega) => bodega.valor !== bodegaActiva)
+              .map((bodega) => (
+                <option key={bodega.valor} value={bodega.valor}>{bodega.etiqueta}</option>
+              ))}
+          </select>
+        </label>
+        {(salidaMaterial.destino || 'obra') === 'obra' && (
+          <CampoTexto
+            label="Nombre de la obra"
+            value={salidaMaterial.nombreObra || ''}
+            onChange={(valor) => onCambiarSalida('nombreObra', valor)}
+            placeholder="Ej: Proyecto Teleton"
+          />
+        )}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
@@ -3694,9 +3829,18 @@ function fechaActualInput() {
 }
 
 function obtenerEtiquetaAlertaBodega(alerta = {}) {
+  if (alerta.tipo_ingreso === 'traspaso_bodega') {
+    return `Traspaso desde ${formatearNombreBodega(alerta.bodega)}`
+  }
   if (alerta.tipo_ingreso === 'devolucion_app') return 'Devolución'
   if (alerta.tipo_ingreso === 'pedido_app') return 'Pedido'
   return 'Movimiento'
+}
+
+function formatearNombreBodega(codigo = '') {
+  const valor = String(codigo || '').trim().toLowerCase()
+  if (!valor) return 'Bodega sin identificar'
+  return `Bodega ${valor.charAt(0).toUpperCase()}${valor.slice(1)}`
 }
 
 function obtenerEstadoVisualPedidoBodega(pedido = {}) {

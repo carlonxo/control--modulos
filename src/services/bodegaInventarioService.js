@@ -1,10 +1,34 @@
 export async function cargarInventariosBodega({ supabase, bodega = 'bayona', limite = 1 }) {
+  const bodegaNormalizada = normalizarBodegaInventario(bodega) || 'bayona'
+  const { data: resultadoSeguro, error: errorSeguro } = await supabase.rpc(
+    'cargar_inventario_bodega_asignada',
+    {
+      p_bodega: bodegaNormalizada,
+      p_limite: limite,
+    }
+  )
+
+  if (!errorSeguro) {
+    const inventariosSeguros = Array.isArray(resultadoSeguro?.inventarios)
+      ? resultadoSeguro.inventarios
+      : []
+    return {
+      inventarios: inventariosSeguros.map(normalizarInventarioBodegaDesdeSupabase),
+      error: null,
+    }
+  }
+
+  // Compatibilidad mientras se instala la función segura en Supabase.
+  if (errorSeguro.code !== 'PGRST202' && !String(errorSeguro.message || '').includes('cargar_inventario_bodega_asignada')) {
+    return { inventarios: [], error: errorSeguro }
+  }
+
   let consulta = supabase
     .from('bodega_inventarios')
     .select('*')
     .order('fecha', { ascending: false })
     .limit(limite)
-  if (bodega) consulta = consulta.eq('bodega', normalizarBodegaInventario(bodega) || 'bayona')
+  if (bodega) consulta = consulta.eq('bodega', bodegaNormalizada)
   const { data: inventarios, error } = await consulta
 
   if (error) return { inventarios: [], error }
@@ -38,28 +62,34 @@ export async function cargarInventariosBodega({ supabase, bodega = 'bayona', lim
 
   const itemsPorInventario = (items || []).reduce((mapa, item) => {
     if (!mapa[item.inventario_id]) mapa[item.inventario_id] = []
-    mapa[item.inventario_id].push(normalizarItemBodegaDesdeSupabase(item))
+    mapa[item.inventario_id].push(item)
     return mapa
   }, {})
 
   return {
-    inventarios: (inventarios || []).map((inventario) => {
-      const itemsInventario = itemsPorInventario[inventario.id] || []
-      return {
-        id: inventario.id,
-        fecha: inventario.fecha,
-        hoja: inventario.hoja_nombre,
-        bodega: normalizarBodegaInventario(inventario.bodega || inventario.archivo_nombre || inventario.hoja_nombre),
-        archivoNombre: inventario.archivo_nombre || '',
-        cargadoPor: inventario.cargado_por || '',
-        creadoEn: inventario.creado_en,
-        totalItems: itemsInventario.length,
-        movimientos: movimientosPorInventario[inventario.id] || 0,
-        resumen: calcularResumenItemsBodega(itemsInventario),
-        items: itemsInventario,
-      }
-    }),
+    inventarios: (inventarios || []).map((inventario) => normalizarInventarioBodegaDesdeSupabase({
+      ...inventario,
+      items: itemsPorInventario[inventario.id] || [],
+      movimientos: movimientosPorInventario[inventario.id] || 0,
+    })),
     error: null,
+  }
+}
+
+function normalizarInventarioBodegaDesdeSupabase(inventario = {}) {
+  const itemsInventario = (inventario.items || []).map(normalizarItemBodegaDesdeSupabase)
+  return {
+    id: inventario.id,
+    fecha: inventario.fecha,
+    hoja: inventario.hoja_nombre,
+    bodega: normalizarBodegaInventario(inventario.bodega || inventario.archivo_nombre || inventario.hoja_nombre),
+    archivoNombre: inventario.archivo_nombre || '',
+    cargadoPor: inventario.cargado_por || '',
+    creadoEn: inventario.creado_en,
+    totalItems: itemsInventario.length,
+    movimientos: Number(inventario.movimientos || 0),
+    resumen: calcularResumenItemsBodega(itemsInventario),
+    items: itemsInventario,
   }
 }
 

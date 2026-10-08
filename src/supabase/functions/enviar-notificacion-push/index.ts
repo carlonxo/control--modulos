@@ -9,6 +9,7 @@ const corsHeaders = {
 const rolesPorTipo: Record<string, string[]> = {
   solicitud_prueba: ['admin', 'control_calidad', 'operador'],
   solicitud_material: ['admin', 'operador', 'analista', 'bodega'],
+  traspaso_bodega: ['bodega'],
 }
 
 export default {
@@ -44,6 +45,7 @@ export default {
       const { data: perfil } = await admin.from('perfiles').select('rol, nombre').eq('id', usuarioId).maybeSingle()
       const aviso = await prepararAviso({ admin, tipo, recursoId, usuarioId, rol: perfil?.rol || '' })
       if (!aviso) return responder({ error: 'El evento no existe o no pertenece al usuario' }, 403)
+      const { targetBodega, ...contenidoAviso } = aviso as Record<string, any>
 
       const { data: eventoExistente } = await admin
         .from('push_eventos')
@@ -55,11 +57,14 @@ export default {
 
       const { data: perfiles, error: errorPerfiles } = await admin
         .from('perfiles')
-        .select('id')
+        .select('id, bodega_asignada')
         .in('rol', rolesPorTipo[tipo])
       if (errorPerfiles) throw errorPerfiles
 
-      const idsDestinatarios = (perfiles || []).map((item) => item.id).filter((id) => id !== usuarioId)
+      const idsDestinatarios = (perfiles || [])
+        .filter((item) => !targetBodega || normalizarBodega(item.bodega_asignada) === normalizarBodega(targetBodega))
+        .map((item) => item.id)
+        .filter((id) => id !== usuarioId)
       const { data: suscripciones, error: errorSuscripciones } = idsDestinatarios.length
         ? await admin
           .from('push_suscripciones')
@@ -76,7 +81,7 @@ export default {
 
       let entregadas = 0
       if (destinos.length) {
-        const resultado = await sendPushBatch(destinos, aviso, {
+        const resultado = await sendPushBatch(destinos, contenidoAviso, {
           publicKey: vapidPublicKey,
           privateKey: vapidPrivateKey,
           subject: 'https://control-modulos.vercel.app',
@@ -143,7 +148,33 @@ async function prepararAviso({ admin, tipo, recursoId, usuarioId, rol }: any) {
     }
   }
 
+  if (tipo === 'traspaso_bodega') {
+    if (!['admin', 'analista', 'bodega'].includes(rol)) return null
+    const { data: despacho } = await admin
+      .from('bodega_despachos')
+      .select('id, documento, bodega, bodega_destino, destino_tipo, estado_traspaso')
+      .eq('id', recursoId)
+      .maybeSingle()
+    if (!despacho || despacho.destino_tipo !== 'bodega' || despacho.estado_traspaso !== 'pendiente') return null
+    return {
+      title: 'Traspaso de material pendiente',
+      body: `${nombreBodega(despacho.bodega)} → ${nombreBodega(despacho.bodega_destino)} · Documento ${despacho.documento || '-'}`,
+      url: `/?push=traspaso&traspaso=${encodeURIComponent(despacho.id)}`,
+      tag: `traspaso-${despacho.id}`,
+      targetBodega: despacho.bodega_destino,
+    }
+  }
+
   return null
+}
+
+function normalizarBodega(valor: unknown) {
+  return String(valor || '').trim().toLocaleLowerCase('es')
+}
+
+function nombreBodega(valor: unknown) {
+  const codigo = normalizarBodega(valor)
+  return codigo ? `Bodega ${codigo.charAt(0).toLocaleUpperCase('es')}${codigo.slice(1)}` : 'Bodega'
 }
 
 function obtenerClaveAdministrativa() {

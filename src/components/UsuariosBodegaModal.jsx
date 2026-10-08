@@ -113,7 +113,7 @@ function UsuariosBodegaModal({
             <Campo etiqueta="Correo"><input required type="email" value={nuevoUsuario.email} onChange={(e) => cambiarNuevo('email', e.target.value, setNuevoUsuario)} style={inputStyle} /></Campo>
             <Campo etiqueta="Contraseña temporal"><input required minLength={8} type="password" value={nuevoUsuario.password} onChange={(e) => cambiarNuevo('password', e.target.value, setNuevoUsuario)} style={inputStyle} /></Campo>
             <Campo etiqueta="Rol"><SelectorRol value={nuevoUsuario.rol} onChange={(valor) => cambiarNuevo('rol', valor, setNuevoUsuario)} /></Campo>
-            <Campo etiqueta="Bodega"><Selector opciones={bodegasDisponibles} value={nuevoUsuario.bodega_asignada} onChange={(valor) => cambiarNuevo('bodega_asignada', valor, setNuevoUsuario)} /></Campo>
+            <Campo etiqueta="Bodega"><Selector opciones={bodegasDisponibles} value={nuevoUsuario.bodega_asignada} required={nuevoUsuario.rol === 'bodega'} onChange={(valor) => cambiarNuevo('bodega_asignada', valor, setNuevoUsuario)} /></Campo>
             <Campo etiqueta="Planta"><Selector opciones={plantasDisponibles} value={nuevoUsuario.planta_asignada} onChange={(valor) => cambiarNuevo('planta_asignada', valor, setNuevoUsuario)} /></Campo>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
               <button type="submit" disabled={guardando} style={botonAccion(guardando)}>{guardando ? 'Creando cuenta...' : 'Crear usuario'}</button>
@@ -170,8 +170,8 @@ function Campo({ etiqueta, children }) {
   return <label style={{ display: 'grid', gap: '6px', color: '#d6e1e7', fontWeight: 700 }}><span>{etiqueta}</span>{children}</label>
 }
 
-function Selector({ opciones, value, onChange, disabled }) {
-  return <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={selectStyle(disabled)}>{opciones.map((opcion) => <option key={opcion.valor || 'sin-asignar'} value={opcion.valor}>{opcion.etiqueta}</option>)}</select>
+function Selector({ opciones, value, onChange, disabled, required = false }) {
+  return <select value={value} disabled={disabled} required={required} onChange={(e) => onChange(e.target.value)} style={selectStyle(disabled)}>{opciones.map((opcion) => <option key={opcion.valor || 'sin-asignar'} value={opcion.valor}>{opcion.etiqueta}</option>)}</select>
 }
 
 function SelectorRol({ value, onChange, disabled }) {
