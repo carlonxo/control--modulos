@@ -39,7 +39,17 @@ function BodegaModal({
   guardandoPedido,
   guardandoDevolucion,
   guardandoRecepcion,
+  proximoNumeroRecepcion = '',
+  cargandoProximoNumeroRecepcion = false,
+  guardandoCorreccionInventario = false,
+  mermasInventario = [],
+  cargandoMermasInventario = false,
+  guardandoMermaInventario = false,
+  proximoNumeroMerma = '',
+  cargandoProximoNumeroMerma = false,
   guardandoSalida,
+  proximoNumeroDespacho = '',
+  cargandoProximoNumeroDespacho = false,
   entregandoSolicitudBodega,
   recepcionandoDevolucionBodega,
   recepcionandoTraspasoBodega,
@@ -76,7 +86,13 @@ function BodegaModal({
   onGuardarPedido,
   onGuardarDevolucion,
   onGuardarRecepcion,
+  onActualizarProximoNumeroRecepcion,
+  onCorregirInventario,
+  onActualizarMermasInventario,
+  onRegistrarMermaInventario,
+  onActualizarProximoNumeroMerma,
   onGuardarSalida,
+  onActualizarProximoNumeroDespacho,
   onEntregarSolicitudBodega,
   onRecepcionarDevolucionBodega,
   onRecepcionarTraspasoBodega,
@@ -119,6 +135,14 @@ function BodegaModal({
   const [mostrarCrearPedido, setMostrarCrearPedido] = useState(false)
   const [mostrarCrearDevolucion, setMostrarCrearDevolucion] = useState(false)
   const [mostrarRecepcionarMaterial, setMostrarRecepcionarMaterial] = useState(false)
+  const [mostrarCorreccionInventario, setMostrarCorreccionInventario] = useState(false)
+  const [itemCorreccionInventario, setItemCorreccionInventario] = useState(null)
+  const [mostrarMermaInventario, setMostrarMermaInventario] = useState(false)
+  const [mermaInventario, setMermaInventario] = useState({
+    fecha: fechaActualInput(),
+    motivo: 'Daño durante traslado',
+    observacion: '',
+  })
   const [mostrarCodigosBarra, setMostrarCodigosBarra] = useState(false)
   const [alertaBodegaSeleccionada, setAlertaBodegaSeleccionada] = useState(null)
   const actualizarPedidoBodegaRef = useRef(onActualizarPedidoBodega)
@@ -193,6 +217,7 @@ function BodegaModal({
   const [materialesPedido, setMaterialesPedido] = useState([{ ...filaMovimientoVacia }])
   const [materialesDevolucion, setMaterialesDevolucion] = useState([{ ...filaMovimientoVacia }])
   const [materialesRecepcion, setMaterialesRecepcion] = useState([{ ...filaMovimientoVacia }])
+  const [materialesMerma, setMaterialesMerma] = useState([{ ...filaMovimientoVacia }])
   const inventarioSeleccionado = inventarios.find((item) => item.id === inventarioSeleccionadoId) || inventarios[0]
   const materialesInventario = inventarioSeleccionado?.items || []
   const traspasosPendientes = alertasBodega.filter((alerta) => alerta.tipo_ingreso === 'traspaso_bodega')
@@ -327,6 +352,10 @@ function BodegaModal({
     setRecepcionMaterial((actual) => ({ ...actual, [campo]: valor }))
   }
 
+  function cambiarMermaInventario(campo, valor) {
+    setMermaInventario((actual) => ({ ...actual, [campo]: valor }))
+  }
+
   function completarDatosMaterial(fila, campo, valor) {
     const actualizada = { ...fila, [campo]: valor }
     if (campo === 'descripcion') {
@@ -372,6 +401,12 @@ function BodegaModal({
     )))
   }
 
+  function cambiarMaterialMerma(indice, campo, valor) {
+    setMaterialesMerma((actuales) => actuales.map((fila, i) => (
+      i === indice ? completarDatosMaterial(fila, campo, valor) : fila
+    )))
+  }
+
   function agregarMaterialIngreso() {
     setMaterialesIngreso((actuales) => [...actuales, { ...filaMovimientoVacia }])
   }
@@ -390,6 +425,10 @@ function BodegaModal({
 
   function agregarMaterialRecepcion() {
     setMaterialesRecepcion((actuales) => [...actuales, { ...filaMovimientoVacia }])
+  }
+
+  function agregarMaterialMerma() {
+    setMaterialesMerma((actuales) => [...actuales, { ...filaMovimientoVacia }])
   }
 
   function quitarMaterialIngreso(indice) {
@@ -418,6 +457,12 @@ function BodegaModal({
 
   function quitarMaterialRecepcion(indice) {
     setMaterialesRecepcion((actuales) => (
+      actuales.length <= 1 ? [{ ...filaMovimientoVacia }] : actuales.filter((_, i) => i !== indice)
+    ))
+  }
+
+  function quitarMaterialMerma(indice) {
+    setMaterialesMerma((actuales) => (
       actuales.length <= 1 ? [{ ...filaMovimientoVacia }] : actuales.filter((_, i) => i !== indice)
     ))
   }
@@ -480,6 +525,18 @@ function BodegaModal({
     })
     setMaterialesSalida([{ ...filaMovimientoVacia }])
     setMostrarSalidaMaterial(false)
+  }
+
+  async function guardarMermaActual() {
+    const guardado = await onRegistrarMermaInventario?.(mermaInventario, materialesMerma)
+    if (!guardado) return
+
+    setMermaInventario({
+      fecha: fechaActualInput(),
+      motivo: 'Daño durante traslado',
+      observacion: '',
+    })
+    setMaterialesMerma([{ ...filaMovimientoVacia }])
   }
 
   return (
@@ -794,7 +851,9 @@ function BodegaModal({
                   className="bodega-resumen-boton"
                   type="button"
                   onClick={() => {
-                    setMostrarSalidaMaterial((actual) => !actual)
+                    const abrir = !mostrarSalidaMaterial
+                    setMostrarSalidaMaterial(abrir)
+                    if (abrir) onActualizarProximoNumeroDespacho?.()
                     setMostrarRecepcionarMaterial(false)
                     setMostrarCrearPedido(false)
                     setMostrarCrearDevolucion(false)
@@ -813,7 +872,9 @@ function BodegaModal({
                   className="bodega-resumen-boton"
                   type="button"
                   onClick={() => {
-                    setMostrarRecepcionarMaterial((actual) => !actual)
+                    const abrir = !mostrarRecepcionarMaterial
+                    setMostrarRecepcionarMaterial(abrir)
+                    if (abrir) onActualizarProximoNumeroRecepcion?.()
                     setMostrarCrearPedido(false)
                     setMostrarCrearDevolucion(false)
                     setMostrarIngresoProveedor(false)
@@ -831,8 +892,66 @@ function BodegaModal({
               </div>
             )}
 
+            {(puedeAdministrar || puedeOperarBodega) && (
+              <div className="bodega-resumen-grupo-acciones" style={{ display: 'flex', gap: '10px', alignItems: 'stretch' }}>
+                <button
+                  className="bodega-resumen-boton"
+                  type="button"
+                  onClick={() => {
+                    const abrir = !mostrarMermaInventario
+                    setMostrarMermaInventario(abrir)
+                    setMostrarCorreccionInventario(false)
+                    setItemCorreccionInventario(null)
+                    setMostrarCrearPedido(false)
+                    setMostrarCrearDevolucion(false)
+                    setMostrarIngresoProveedor(false)
+                    setMostrarSalidaMaterial(false)
+                    setMostrarRecepcionarMaterial(false)
+                    cerrarPanelesResumenBodega()
+                    if (abrir) {
+                      onActualizarMermasInventario?.()
+                      onActualizarProximoNumeroMerma?.()
+                    }
+                  }}
+                  style={{
+                    ...botonAccionInventarioCompacto,
+                    width: '128px',
+                    background: mostrarMermaInventario ? '#9a3412' : '#6d321d',
+                    borderColor: '#ff8a65',
+                  }}
+                >
+                  <span>{mostrarMermaInventario ? 'Cerrar registro' : 'Registrar'}</span>
+                  <span>{mostrarMermaInventario ? 'de mermas' : 'merma'}</span>
+                </button>
+              </div>
+            )}
+
             {puedeAdministrar && (
               <div className="bodega-resumen-grupo-acciones" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: 'auto' }}>
+                <button
+                  className="bodega-resumen-boton"
+                  type="button"
+                  onClick={() => {
+                    setMostrarCorreccionInventario((actual) => {
+                      if (actual) setItemCorreccionInventario(null)
+                      return !actual
+                    })
+                    setMostrarMermaInventario(false)
+                    setMostrarCrearPedido(false)
+                    setMostrarCrearDevolucion(false)
+                    setMostrarIngresoProveedor(false)
+                    setMostrarSalidaMaterial(false)
+                    setMostrarRecepcionarMaterial(false)
+                    cerrarPanelesResumenBodega()
+                  }}
+                  style={{
+                    ...botonAzul,
+                    background: mostrarCorreccionInventario ? '#8a5a00' : '#5d430f',
+                    borderColor: '#ffb74d',
+                  }}
+                >
+                  {mostrarCorreccionInventario ? 'Cancelar corrección' : 'Corregir inventario'}
+                </button>
                 <button
                   className="bodega-resumen-boton"
                   type="button"
@@ -969,6 +1088,9 @@ function BodegaModal({
               onQuitarMaterial={quitarMaterialRecepcion}
               onGuardar={guardarRecepcionActual}
               guardando={guardandoRecepcion}
+              proximoNumero={proximoNumeroRecepcion}
+              cargandoProximoNumero={cargandoProximoNumeroRecepcion}
+              onActualizarProximoNumero={onActualizarProximoNumeroRecepcion}
               onCerrar={() => setMostrarRecepcionarMaterial(false)}
             />
           )}
@@ -1032,12 +1154,63 @@ function BodegaModal({
               onQuitarMaterial={quitarMaterialSalida}
               onGuardar={guardarSalidaActual}
               guardando={guardandoSalida}
+              proximoNumero={proximoNumeroDespacho}
+              cargandoProximoNumero={cargandoProximoNumeroDespacho}
+              onActualizarProximoNumero={onActualizarProximoNumeroDespacho}
               onCerrar={() => setMostrarSalidaMaterial(false)}
             />
           )}
 
+          {mostrarCorreccionInventario && puedeAdministrar && itemCorreccionInventario && (
+            <PanelCorreccionInventario
+              key={itemCorreccionInventario.id}
+              item={itemCorreccionInventario}
+              guardando={guardandoCorreccionInventario}
+              onGuardar={async (datos) => {
+                const guardado = await onCorregirInventario?.(datos)
+                if (guardado) {
+                  setItemCorreccionInventario(null)
+                  setMostrarCorreccionInventario(false)
+                }
+              }}
+              onCerrar={() => setItemCorreccionInventario(null)}
+            />
+          )}
+
+          {mostrarCorreccionInventario && puedeAdministrar && !itemCorreccionInventario && (
+            <div style={{ marginBottom: '12px', padding: '11px 14px', border: '1px solid #b27b25', borderRadius: '8px', background: '#2b220f', color: '#ffd180' }}>
+              Selecciona <strong>Corregir</strong> junto al material que deseas ajustar.
+            </div>
+          )}
+
+          {mostrarMermaInventario && (puedeAdministrar || puedeOperarBodega) && (
+            <PanelMermaInventario
+              merma={mermaInventario}
+              materialesMerma={materialesMerma}
+              materialesInventario={materialesInventario}
+              guardando={guardandoMermaInventario}
+              proximoNumero={proximoNumeroMerma}
+              cargandoProximoNumero={cargandoProximoNumeroMerma}
+              onActualizarProximoNumero={onActualizarProximoNumeroMerma}
+              onCambiarMerma={cambiarMermaInventario}
+              onCambiarMaterial={cambiarMaterialMerma}
+              onAgregarMaterial={agregarMaterialMerma}
+              onQuitarMaterial={quitarMaterialMerma}
+              onGuardar={guardarMermaActual}
+              onCerrar={() => setMostrarMermaInventario(false)}
+            />
+          )}
+
+          {mostrarMermaInventario && (puedeAdministrar || puedeOperarBodega) && (
+            <PanelHistorialMermas
+              mermas={mermasInventario}
+              cargando={cargandoMermasInventario}
+              onActualizar={onActualizarMermasInventario}
+            />
+          )}
+
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: mostrarCorreccionInventario ? '850px' : '760px' }}>
               <thead>
                 <tr style={{ background: '#333' }}>
                   <th style={thStyle}>Código bodega</th>
@@ -1046,6 +1219,9 @@ function BodegaModal({
                   <th style={{ ...thStyle, textAlign: 'right' }}>Entradas</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Salidas</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Saldo final</th>
+                  {mostrarCorreccionInventario && puedeAdministrar && (
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Acción</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1057,6 +1233,27 @@ function BodegaModal({
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{formatearNumero(item.entradas)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{formatearNumero(item.salidas)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>{formatearNumero(item.saldoFinal)}</td>
+                    {mostrarCorreccionInventario && puedeAdministrar && (
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        {mostrarCorreccionInventario && puedeAdministrar && (
+                          <button
+                            type="button"
+                            onClick={() => setItemCorreccionInventario(item)}
+                            style={{
+                              padding: '7px 12px',
+                              border: '1px solid #ffb74d',
+                              borderRadius: '7px',
+                              background: '#5d430f',
+                              color: '#fff3e0',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Corregir
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1073,6 +1270,241 @@ function BodegaModal({
       </div>
     </div>
   )
+}
+
+function PanelCorreccionInventario({
+  item,
+  guardando,
+  onGuardar,
+  onCerrar,
+}) {
+  const [nuevoSaldo, setNuevoSaldo] = useState(String(item?.saldoFinal ?? ''))
+  const [motivo, setMotivo] = useState('')
+
+  async function guardar(evento) {
+    evento.preventDefault()
+    await onGuardar?.({ item, nuevoSaldo, motivo })
+  }
+
+  return (
+    <form
+      onSubmit={guardar}
+      style={{
+        display: 'grid',
+        gap: '13px',
+        marginBottom: '14px',
+        padding: '16px',
+        border: '1px solid #b27b25',
+        borderRadius: '10px',
+        background: '#241d10',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <strong style={{ display: 'block', color: '#ffd180', fontSize: '1.08rem' }}>Corrección administrativa de inventario</strong>
+          <span style={{ color: '#eee' }}>{item?.codigo} · {item?.descripcion}</span>
+        </div>
+        <button type="button" onClick={onCerrar} disabled={guardando} style={botonGris}>Cerrar</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
+        <label style={labelStyle}>
+          Saldo actual
+          <input value={formatearNumero(item?.saldoFinal)} readOnly style={{ ...inputStyle, opacity: 0.78 }} />
+        </label>
+        <label style={labelStyle}>
+          Saldo físico corregido
+          <input
+            type="number"
+            min="0"
+            step="any"
+            required
+            value={nuevoSaldo}
+            onChange={(evento) => setNuevoSaldo(evento.target.value)}
+            style={inputStyle}
+          />
+        </label>
+        <label style={labelStyle}>
+          Motivo de la corrección
+          <input
+            value={motivo}
+            minLength={5}
+            required
+            placeholder="Ej.: diferencia detectada en conteo físico"
+            onChange={(evento) => setMotivo(evento.target.value)}
+            style={inputStyle}
+          />
+        </label>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          type="submit"
+          disabled={guardando}
+          style={{ ...botonAzul, background: '#8a5a00', borderColor: '#ffb74d' }}
+        >
+          {guardando ? 'Guardando corrección...' : 'Guardar corrección'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function PanelMermaInventario({
+  merma,
+  materialesMerma,
+  materialesInventario,
+  guardando,
+  proximoNumero,
+  cargandoProximoNumero,
+  onActualizarProximoNumero,
+  onCambiarMerma,
+  onCambiarMaterial,
+  onAgregarMaterial,
+  onQuitarMaterial,
+  onGuardar,
+  onCerrar,
+}) {
+  return (
+    <div style={{ ...panelMovimientoStyle, borderColor: '#bf5a39', background: '#2b1711' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+        <h3 style={{ margin: 0, color: '#ffccbc' }}>Registrar merma de materiales</h3>
+        <button type="button" onClick={onCerrar} disabled={guardando} style={botonGris}>Cerrar</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+        <CampoTexto
+          label="Fecha"
+          type="date"
+          value={merma.fecha}
+          onChange={(valor) => onCambiarMerma('fecha', valor)}
+        />
+        <label style={labelStyle}>
+          N° documento
+          <input
+            type="text"
+            value={cargandoProximoNumero ? '...' : (proximoNumero || '—')}
+            readOnly
+            aria-readonly="true"
+            onFocus={() => {
+              if (!proximoNumero && !cargandoProximoNumero) onActualizarProximoNumero?.()
+            }}
+            style={{ ...inputStyle, color: '#a5d6a7', fontWeight: 800, cursor: 'default' }}
+          />
+        </label>
+        <label style={labelStyle}>
+          Motivo
+          <select value={merma.motivo} onChange={(evento) => onCambiarMerma('motivo', evento.target.value)} style={inputStyle}>
+            <option>Daño durante traslado</option>
+            <option>Daño durante almacenamiento</option>
+            <option>Deterioro o vencimiento</option>
+            <option>Pérdida o extravío</option>
+            <option>Error de manipulación</option>
+            <option>Otro</option>
+          </select>
+        </label>
+        <label style={labelStyle}>
+          Observación
+          <input
+            value={merma.observacion}
+            placeholder="Detalle del daño, traslado, responsable, etc."
+            onChange={(evento) => onCambiarMerma('observacion', evento.target.value)}
+            style={inputStyle}
+          />
+        </label>
+      </div>
+
+      <h4 style={{ margin: '14px 0 8px' }}>Material dañado, perdido o deteriorado</h4>
+      <TablaMovimientoMateriales
+        datalistId="materiales-bodega-merma"
+        materialesInventario={materialesInventario}
+        filas={materialesMerma}
+        mostrarStock
+        onCambiarMaterial={onCambiarMaterial}
+        onQuitarMaterial={onQuitarMaterial}
+      />
+
+      <div style={accionesPanelStyle}>
+        <button type="button" onClick={onAgregarMaterial} disabled={guardando} style={botonGris}>
+          + Agregar material
+        </button>
+        <button
+          type="button"
+          onClick={onGuardar}
+          disabled={guardando}
+          style={{ ...botonAzul, background: '#9a3412', borderColor: '#ff8a65' }}
+        >
+          {guardando ? 'Registrando merma...' : 'Registrar y descontar merma'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PanelHistorialMermas({ mermas = [], cargando, onActualizar }) {
+  return (
+    <details open style={{ marginBottom: '14px', padding: '12px', border: '1px solid #694033', borderRadius: '9px', background: '#211713' }}>
+      <summary style={{ color: '#ffab91', fontWeight: 900, cursor: 'pointer' }}>
+        Historial de mermas ({mermas.length})
+      </summary>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '10px 0' }}>
+        <button type="button" onClick={onActualizar} disabled={cargando} style={botonMiniGris}>
+          {cargando ? 'Actualizando...' : 'Actualizar historial'}
+        </button>
+      </div>
+      {cargando ? (
+        <p style={{ color: '#ccc' }}>Cargando mermas...</p>
+      ) : mermas.length === 0 ? (
+        <p style={{ color: '#bbb', marginBottom: 0 }}>Aún no existen mermas registradas para esta bodega.</p>
+      ) : (
+        <div style={{ overflowX: 'auto', maxHeight: '320px', overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+            <thead>
+              <tr style={{ background: '#3a2923' }}>
+                <th style={thStyle}>N° documento</th>
+                <th style={thStyle}>Fecha</th>
+                <th style={thStyle}>Código</th>
+                <th style={thStyle}>Material</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Cantidad</th>
+                <th style={thStyle}>Motivo</th>
+                <th style={thStyle}>Observación</th>
+                <th style={thStyle}>Registrado por</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mermas.map((merma) => (
+                <tr key={merma.id}>
+                  <td style={{ ...tdStyle, fontWeight: 900 }}>{merma.numero_documento || '-'}</td>
+                  <td style={tdStyle}>{formatearFechaMerma(merma.fecha, merma.creado_en)}</td>
+                  <td style={tdStyle}>{merma.codigo_bodega}</td>
+                  <td style={tdStyle}>{merma.descripcion}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>{formatearNumero(merma.cantidad)} {merma.unidad || ''}</td>
+                  <td style={tdStyle}>{merma.motivo}</td>
+                  <td style={tdStyle}>{merma.observacion || '-'}</td>
+                  <td style={tdStyle}>{merma.registrado_por_nombre || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </details>
+  )
+}
+
+function formatearFechaMerma(fechaMerma, creadoEn) {
+  const fechaTexto = String(fechaMerma || '')
+  const coincidencia = fechaTexto.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (coincidencia) return `${coincidencia[3]}-${coincidencia[2]}-${coincidencia[1]}`
+
+  if (!creadoEn) return '-'
+  const fecha = new Date(creadoEn)
+  if (Number.isNaN(fecha.getTime())) return String(creadoEn)
+  return fecha.toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
 }
 
 function PanelIngresoProveedor({
@@ -1137,6 +1569,9 @@ function PanelRecepcionarMaterial({
   onQuitarMaterial,
   onGuardar,
   guardando,
+  proximoNumero,
+  cargandoProximoNumero,
+  onActualizarProximoNumero,
   onCerrar,
 }) {
   return (
@@ -1167,12 +1602,21 @@ function PanelRecepcionarMaterial({
           onChange={(valor) => onCambiarRecepcion('factura', valor)}
           placeholder="N° factura"
         />
-        <CampoTexto
-          label="N° recepción"
-          value={recepcion.recepcion}
-          onChange={(valor) => onCambiarRecepcion('recepcion', valor)}
-          placeholder="N° recepción"
-        />
+        <label style={labelStyle}>
+          N° recepción
+          <input
+            type="text"
+            value={cargandoProximoNumero
+              ? '...'
+              : (proximoNumero || '—')}
+            readOnly
+            aria-readonly="true"
+            onFocus={() => {
+              if (!proximoNumero && !cargandoProximoNumero) onActualizarProximoNumero?.()
+            }}
+            style={{ ...inputStyle, color: '#a5d6a7', fontWeight: 800, cursor: 'default' }}
+          />
+        </label>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
@@ -3546,6 +3990,9 @@ function PanelSalidaMaterial({
   onQuitarMaterial,
   onGuardar,
   guardando,
+  proximoNumero,
+  cargandoProximoNumero,
+  onActualizarProximoNumero,
   onCerrar,
 }) {
   return (
@@ -3563,9 +4010,12 @@ function PanelSalidaMaterial({
           N° documento
           <input
             type="text"
-            value="Automático al guardar"
+            value={cargandoProximoNumero ? '...' : (proximoNumero || '—')}
             readOnly
             aria-readonly="true"
+            onFocus={() => {
+              if (!proximoNumero && !cargandoProximoNumero) onActualizarProximoNumero?.()
+            }}
             style={{ ...inputStyle, color: '#a5d6a7', fontWeight: 800, cursor: 'default' }}
           />
         </label>

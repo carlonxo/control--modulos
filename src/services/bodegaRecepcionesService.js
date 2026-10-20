@@ -58,7 +58,6 @@ export async function guardarRecepcionBodega({
   fecha,
   ordenCompra,
   numeroFactura,
-  numeroRecepcion,
   bodega,
   usuarioNombre,
   items = [],
@@ -69,11 +68,11 @@ export async function guardarRecepcionBodega({
       fecha,
       orden_compra: ordenCompra || '',
       numero_factura: numeroFactura || '',
-      numero_recepcion: numeroRecepcion || '',
+      numero_recepcion: '',
       bodega: bodega || '',
       usuario_nombre: usuarioNombre || '',
     })
-    .select('id')
+    .select('id, numero_recepcion')
     .single()
 
   if (error) {
@@ -101,6 +100,32 @@ export async function guardarRecepcionBodega({
   }
 
   return { recepcion, error: null, etapa: null }
+}
+
+export async function cargarProximoNumeroRecepcionBodega({ supabase }) {
+  const { data, error } = await supabase.rpc('proximo_numero_recepcion_bodega')
+  if (!error && data) return { numero: data, error: null }
+
+  // Respaldo visual mientras PostgREST actualiza su esquema o aún no se instala
+  // la función de vista previa. El correlativo definitivo siempre lo asigna el trigger.
+  const { data: recepciones, error: errorRespaldo } = await supabase
+    .from('bodega_recepciones')
+    .select('numero_recepcion')
+    .not('numero_recepcion', 'is', null)
+    .limit(5000)
+
+  if (errorRespaldo) return { numero: '', error: error || errorRespaldo }
+
+  const maximo = (recepciones || []).reduce((mayor, recepcion) => {
+    const texto = String(recepcion.numero_recepcion || '').trim()
+    if (!/^\d+$/.test(texto)) return mayor
+    return Math.max(mayor, Number(texto))
+  }, 0)
+
+  return {
+    numero: String(maximo + 1).padStart(4, '0'),
+    error: null,
+  }
 }
 
 export async function cargarRecepcionesBodegaDia({

@@ -11,6 +11,7 @@ const tablasAuditadas = [
   'bodega_recepcion_items',
   'bodega_despachos',
   'bodega_despacho_items',
+  'bodega_mermas',
 ]
 
 function fechaLocal(diasAtras = 0) {

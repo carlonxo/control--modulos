@@ -76,6 +76,95 @@ export async function cargarInventariosBodega({ supabase, bodega = 'bayona', lim
   }
 }
 
+export async function corregirInventarioBodega({
+  supabase,
+  itemId,
+  nuevoSaldo,
+  motivo,
+}) {
+  const { data, error } = await supabase.rpc('corregir_inventario_bodega', {
+    p_item_id: itemId,
+    p_nuevo_saldo: Number(nuevoSaldo),
+    p_motivo: String(motivo || '').trim(),
+  })
+
+  return { data, error }
+}
+
+export async function registrarMermaInventarioBodega({
+  supabase,
+  itemId,
+  cantidad,
+  motivo,
+  observacion = '',
+}) {
+  const { data, error } = await supabase.rpc('registrar_merma_inventario_bodega', {
+    p_item_id: itemId,
+    p_cantidad: Number(cantidad),
+    p_motivo: String(motivo || '').trim(),
+    p_observacion: String(observacion || '').trim(),
+  })
+
+  return { data, error }
+}
+
+export async function registrarMermasInventarioBodega({
+  supabase,
+  items = [],
+  fecha,
+  motivo,
+  observacion = '',
+}) {
+  const { data, error } = await supabase.rpc('registrar_mermas_inventario_bodega', {
+    p_items: items,
+    p_fecha: fecha,
+    p_motivo: String(motivo || '').trim(),
+    p_observacion: String(observacion || '').trim(),
+  })
+
+  return { data, error }
+}
+
+export async function cargarProximoNumeroMermaBodega({ supabase }) {
+  const { data, error } = await supabase.rpc('proximo_numero_documento_merma_bodega')
+  if (!error && data) return { numero: data, error: null }
+
+  const { data: mermas, error: errorRespaldo } = await supabase
+    .from('bodega_mermas')
+    .select('numero_documento')
+    .not('numero_documento', 'is', null)
+    .limit(5000)
+
+  if (errorRespaldo) return { numero: '', error: error || errorRespaldo }
+
+  const maximo = (mermas || []).reduce((mayor, merma) => {
+    const texto = String(merma.numero_documento || '').trim()
+    if (!/^\d+$/.test(texto)) return mayor
+    return Math.max(mayor, Number(texto))
+  }, 0)
+
+  return {
+    numero: String(maximo + 1).padStart(6, '0'),
+    error: null,
+  }
+}
+
+export async function cargarMermasInventarioBodega({
+  supabase,
+  bodega,
+  limite = 100,
+}) {
+  const { data, error } = await supabase
+    .from('bodega_mermas')
+    .select('*')
+    .eq('bodega', normalizarBodegaInventario(bodega) || 'bayona')
+    .order('fecha', { ascending: false })
+    .order('creado_en', { ascending: false })
+    .limit(limite)
+
+  return { mermas: data || [], error }
+}
+
 function normalizarInventarioBodegaDesdeSupabase(inventario = {}) {
   const itemsInventario = (inventario.items || []).map(normalizarItemBodegaDesdeSupabase)
   return {

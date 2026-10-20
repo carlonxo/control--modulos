@@ -58,8 +58,12 @@ import {
 import { leerFilasValeBodegaDesdeArchivo } from './services/valesBodegaArchivoService'
 import { leerInventariosBodegaDesdeExcel } from './services/bodegaInventarioArchivoService'
 import {
+  cargarMermasInventarioBodega as cargarMermasInventarioBodegaSupabase,
+  cargarProximoNumeroMermaBodega as cargarProximoNumeroMermaBodegaSupabase,
   cargarInventariosBodega as cargarInventariosBodegaSupabase,
+  corregirInventarioBodega as corregirInventarioBodegaSupabase,
   guardarInventariosBodega as guardarInventariosBodegaSupabase,
+  registrarMermasInventarioBodega as registrarMermasInventarioBodegaSupabase,
 } from './services/bodegaInventarioService'
 import { compilarBalanceMateriales } from './services/balanceMaterialesService'
 import { compilarTrazabilidadMaterialesPorSolicitante } from './services/trazabilidadMaterialesService'
@@ -86,11 +90,13 @@ import {
   recepcionarDevolucionBodegaTransaccional,
 } from './services/valesBodegaService'
 import {
+  cargarProximoNumeroRecepcionBodega as cargarProximoNumeroRecepcionBodegaSupabase,
   cargarRecepcionesBodegaRango as cargarRecepcionesBodegaRangoSupabase,
   guardarRecepcionBodega as guardarRecepcionBodegaSupabase,
 } from './services/bodegaRecepcionesService'
 import {
   cargarDespachosBodegaRango as cargarDespachosBodegaRangoSupabase,
+  cargarProximoNumeroDespachoBodega as cargarProximoNumeroDespachoBodegaSupabase,
   cargarTraspasosPendientesBodega,
   guardarDespachoBodega as guardarDespachoBodegaSupabase,
   guardarTraspasoBodega as guardarTraspasoBodegaSupabase,
@@ -884,6 +890,14 @@ const [seccionBodegaInicial, setSeccionBodegaInicial] = useState(null)
 const [guardandoPedidoBodega, setGuardandoPedidoBodega] = useState(false)
 const [guardandoDevolucionBodega, setGuardandoDevolucionBodega] = useState(false)
 const [guardandoRecepcionBodega, setGuardandoRecepcionBodega] = useState(false)
+const [proximoNumeroRecepcionBodega, setProximoNumeroRecepcionBodega] = useState('')
+const [cargandoProximoNumeroRecepcion, setCargandoProximoNumeroRecepcion] = useState(false)
+const [guardandoCorreccionInventario, setGuardandoCorreccionInventario] = useState(false)
+const [mermasInventarioBodega, setMermasInventarioBodega] = useState([])
+const [cargandoMermasInventario, setCargandoMermasInventario] = useState(false)
+const [guardandoMermaInventario, setGuardandoMermaInventario] = useState(false)
+const [proximoNumeroMermaBodega, setProximoNumeroMermaBodega] = useState('')
+const [cargandoProximoNumeroMerma, setCargandoProximoNumeroMerma] = useState(false)
 
 useEffect(() => {
   const cuadro = window.requestAnimationFrame(() => {
@@ -895,6 +909,8 @@ useEffect(() => {
   return () => window.cancelAnimationFrame(cuadro)
 }, [perfil?.id, mostrarVistaGeneral])
 const [guardandoDespachoBodega, setGuardandoDespachoBodega] = useState(false)
+const [proximoNumeroDespachoBodega, setProximoNumeroDespachoBodega] = useState('')
+const [cargandoProximoNumeroDespacho, setCargandoProximoNumeroDespacho] = useState(false)
 const [entregandoSolicitudBodega, setEntregandoSolicitudBodega] = useState(false)
 const [recepcionandoDevolucionBodega, setRecepcionandoDevolucionBodega] = useState(false)
 const [recepcionandoTraspasoBodega, setRecepcionandoTraspasoBodega] = useState(false)
@@ -1005,6 +1021,7 @@ function cambiarBodegaActivaAdmin(nuevaBodega) {
   setHistorialValesBodega([])
   setRecepcionesBodega([])
   setDespachosBodega([])
+  setMermasInventarioBodega([])
   setCodigosBarraBodega([])
   setSolicitudMaterialBodegaInicial(null)
   setSeccionBodegaInicial(null)
@@ -2668,6 +2685,21 @@ async function cargarRecepcionesBodega(valor = fechaRecepcionesBodega, rango = r
   setRecepcionesBodega(recepciones || [])
 }
 
+async function cargarProximoNumeroRecepcionBodega() {
+  setCargandoProximoNumeroRecepcion(true)
+  const { numero, error } = await cargarProximoNumeroRecepcionBodegaSupabase({ supabase })
+  setCargandoProximoNumeroRecepcion(false)
+
+  if (error) {
+    console.error(error)
+    setProximoNumeroRecepcionBodega('')
+    return ''
+  }
+
+  setProximoNumeroRecepcionBodega(numero)
+  return numero
+}
+
 function cambiarRangoRecepcionesBodega(rango) {
   const valor = obtenerValorInicialRangoProtocolo(rango)
   setRangoRecepcionesBodega(rango)
@@ -2699,6 +2731,21 @@ async function cargarDespachosBodega(valor = fechaDespachosBodega, rango = rango
   }
 
   setDespachosBodega(despachos || [])
+}
+
+async function cargarProximoNumeroDespachoBodega() {
+  setCargandoProximoNumeroDespacho(true)
+  const { numero, error } = await cargarProximoNumeroDespachoBodegaSupabase({ supabase })
+  setCargandoProximoNumeroDespacho(false)
+
+  if (error) {
+    console.error(error)
+    setProximoNumeroDespachoBodega('')
+    return ''
+  }
+
+  setProximoNumeroDespachoBodega(numero)
+  return numero
 }
 
 function cambiarRangoDespachosBodega(rango) {
@@ -2794,7 +2841,6 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
   const fecha = datosRecepcion?.fecha || new Date().toISOString().slice(0, 10)
   const ordenCompra = String(datosRecepcion?.ordenCompra || '').trim()
   const numeroFactura = String(datosRecepcion?.factura || '').trim()
-  const numeroRecepcion = String(datosRecepcion?.recepcion || '').trim()
   const bodega = obtenerBodegaInventario(inventarioActual) || 'bayona'
 
   const items = (materialesRecepcion || [])
@@ -2808,11 +2854,6 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
 
   if (!fecha) {
     mostrarNotificacion('Debes ingresar la fecha de recepción')
-    return false
-  }
-
-  if (!ordenCompra && !numeroFactura && !numeroRecepcion) {
-    mostrarNotificacion('Debes ingresar orden de compra, factura o número de recepción')
     return false
   }
 
@@ -2863,12 +2904,11 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
 
   setGuardandoRecepcionBodega(true)
 
-  const { error, etapa } = await guardarRecepcionBodegaSupabase({
+  const { recepcion, error, etapa } = await guardarRecepcionBodegaSupabase({
     supabase,
     fecha,
     ordenCompra,
     numeroFactura,
-    numeroRecepcion,
     bodega,
     usuarioNombre: perfil?.nombre || perfil?.email || session?.user?.email || '',
     items,
@@ -2928,8 +2968,8 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
   setGuardandoRecepcionBodega(false)
   mostrarNotificacion(
     nuevosItemsInventario.length > 0
-      ? `Material recepcionado. Nuevos materiales creados: ${nuevosItemsInventario.length}`
-      : 'Material recepcionado y sumado al inventario'
+      ? `Recepción N° ${recepcion?.numero_recepcion || '-'} guardada. Nuevos materiales creados: ${nuevosItemsInventario.length}`
+      : `Recepción N° ${recepcion?.numero_recepcion || '-'} guardada y sumada al inventario`
   )
   await cargarInventariosBodega()
   await cargarRecepcionesBodega()
@@ -3547,6 +3587,195 @@ function exportarInventarioBodegaActual() {
   if (!puedeExportarInventarioBodega) return
   const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
   exportarInventarioBodegaExcel(inventarioActual)
+}
+
+async function corregirInventarioBodega({ item, nuevoSaldo, motivo }) {
+  if (perfil?.rol !== 'admin' || !item?.id) return false
+
+  const saldoActual = Number(item.saldoFinal || 0)
+  const saldoCorregido = Number(nuevoSaldo)
+  const motivoLimpio = String(motivo || '').trim()
+
+  if (!Number.isFinite(saldoCorregido) || saldoCorregido < 0) {
+    mostrarNotificacion('El saldo corregido debe ser un número igual o mayor que cero')
+    return false
+  }
+  if (saldoCorregido === saldoActual) {
+    mostrarNotificacion('El nuevo saldo es igual al saldo actual')
+    return false
+  }
+  if (motivoLimpio.length < 5) {
+    mostrarNotificacion('Indica el motivo de la corrección (mínimo 5 caracteres)')
+    return false
+  }
+
+  const diferencia = saldoCorregido - saldoActual
+  const confirmado = window.confirm(
+    `¿Confirmar corrección de inventario?\n\n` +
+    `${item.codigo} · ${item.descripcion}\n` +
+    `Saldo actual: ${saldoActual.toLocaleString('es-CL')}\n` +
+    `Saldo corregido: ${saldoCorregido.toLocaleString('es-CL')}\n` +
+    `Diferencia: ${diferencia > 0 ? '+' : ''}${diferencia.toLocaleString('es-CL')}\n\n` +
+    `Motivo: ${motivoLimpio}`
+  )
+  if (!confirmado) return false
+
+  setGuardandoCorreccionInventario(true)
+  const { error } = await corregirInventarioBodegaSupabase({
+    supabase,
+    itemId: item.id,
+    nuevoSaldo: saldoCorregido,
+    motivo: motivoLimpio,
+  })
+  setGuardandoCorreccionInventario(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudo corregir el inventario: ' + error.message)
+    return false
+  }
+
+  await cargarInventariosBodega()
+  mostrarNotificacion(
+    `Inventario corregido: ${item.codigo} quedó con saldo ${saldoCorregido.toLocaleString('es-CL')}`
+  )
+  return true
+}
+
+async function cargarMermasInventarioBodega() {
+  setCargandoMermasInventario(true)
+  const { mermas, error } = await cargarMermasInventarioBodegaSupabase({
+    supabase,
+    bodega: bodegaActiva,
+    limite: 100,
+  })
+  setCargandoMermasInventario(false)
+
+  if (error) {
+    setMermasInventarioBodega([])
+    mostrarNotificacion('No se pudo cargar el historial de mermas: ' + error.message)
+    return []
+  }
+
+  setMermasInventarioBodega(mermas)
+  return mermas
+}
+
+async function cargarProximoNumeroMermaBodega() {
+  setCargandoProximoNumeroMerma(true)
+  const { numero, error } = await cargarProximoNumeroMermaBodegaSupabase({ supabase })
+  setCargandoProximoNumeroMerma(false)
+
+  if (error) {
+    console.error(error)
+    setProximoNumeroMermaBodega('')
+    return ''
+  }
+
+  setProximoNumeroMermaBodega(numero)
+  return numero
+}
+
+async function registrarMermaInventarioBodega(merma, filas = []) {
+  if (!puedeAdministrarBodega && !puedeOperarComoBodega) return false
+
+  const motivoLimpio = String(merma?.motivo || '').trim()
+  if (motivoLimpio.length < 3) {
+    mostrarNotificacion('Selecciona el motivo de la merma')
+    return false
+  }
+
+  const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId)
+    || inventariosBodega[0]
+  const materiales = inventarioActual?.items || []
+  const filasCompletas = (filas || []).filter((fila) => (
+    String(fila.codigo || fila.descripcion || '').trim() || Number(fila.cantidad || 0) > 0
+  ))
+
+  if (filasCompletas.length === 0) {
+    mostrarNotificacion('Agrega al menos un material a la merma')
+    return false
+  }
+
+  const itemsAgrupados = new Map()
+  const errores = []
+  for (const fila of filasCompletas) {
+    const material = materiales.find((item) => (
+      normalizarTextoComparacion(item.codigo) === normalizarTextoComparacion(fila.codigo)
+    )) || materiales.find((item) => (
+      normalizarTextoComparacion(item.descripcion) === normalizarTextoComparacion(fila.descripcion)
+    ))
+    const cantidad = Number(fila.cantidad)
+
+    if (!material?.id) {
+      errores.push(`${fila.codigo || fila.descripcion || 'Material'}: no existe en el inventario activo`)
+      continue
+    }
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      errores.push(`${material.codigo}: cantidad inválida`)
+      continue
+    }
+
+    const anterior = itemsAgrupados.get(material.id)
+    itemsAgrupados.set(material.id, {
+      material,
+      cantidad: Number(anterior?.cantidad || 0) + cantidad,
+    })
+  }
+
+  const items = Array.from(itemsAgrupados.values())
+  for (const item of items) {
+    const saldo = Number(item.material.saldoFinal || 0)
+    if (item.cantidad > saldo) {
+      errores.push(`${item.material.codigo}: merma ${item.cantidad.toLocaleString('es-CL')}, stock ${saldo.toLocaleString('es-CL')}`)
+    }
+  }
+
+  if (errores.length > 0) {
+    mostrarNotificacion('Revisa los materiales de la merma:\n' + errores.join('\n'))
+    return false
+  }
+
+  const totalUnidades = items.reduce((total, item) => total + item.cantidad, 0)
+  const detalle = items
+    .slice(0, 8)
+    .map((item) => `${item.material.codigo}: ${item.cantidad.toLocaleString('es-CL')} ${item.material.unidad || ''}`)
+    .join('\n')
+
+  const confirmado = window.confirm(
+    `¿Confirmar registro de merma?\n\n` +
+    `Materiales: ${items.length}\n` +
+    `Cantidad total: ${totalUnidades.toLocaleString('es-CL')}\n` +
+    `Motivo: ${motivoLimpio}\n\n${detalle}` +
+    `${items.length > 8 ? `\n... y ${items.length - 8} material(es) más` : ''}`
+  )
+  if (!confirmado) return false
+
+  setGuardandoMermaInventario(true)
+  const { data, error } = await registrarMermasInventarioBodegaSupabase({
+    supabase,
+    items: items.map((item) => ({
+      item_id: item.material.id,
+      cantidad: item.cantidad,
+    })),
+    fecha: merma?.fecha || fechaActualLocalInput(),
+    motivo: motivoLimpio,
+    observacion: merma?.observacion,
+  })
+  setGuardandoMermaInventario(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudo registrar la merma: ' + error.message)
+    return false
+  }
+
+  await Promise.all([
+    cargarInventariosBodega(),
+    cargarMermasInventarioBodega(),
+  ])
+  mostrarNotificacion(
+    `Merma N° ${data?.numero_documento || '-'} registrada: ${items.length} material(es) descontados del inventario`
+  )
+  return true
 }
 
 function obtenerMaterialesInventarioBodegaActual() {
@@ -8085,7 +8314,17 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     guardandoPedido={guardandoPedidoBodega}
     guardandoDevolucion={guardandoDevolucionBodega}
     guardandoRecepcion={guardandoRecepcionBodega}
+    proximoNumeroRecepcion={proximoNumeroRecepcionBodega}
+    cargandoProximoNumeroRecepcion={cargandoProximoNumeroRecepcion}
+    guardandoCorreccionInventario={guardandoCorreccionInventario}
+    mermasInventario={mermasInventarioBodega}
+    cargandoMermasInventario={cargandoMermasInventario}
+    guardandoMermaInventario={guardandoMermaInventario}
+    proximoNumeroMerma={proximoNumeroMermaBodega}
+    cargandoProximoNumeroMerma={cargandoProximoNumeroMerma}
     guardandoSalida={guardandoDespachoBodega}
+    proximoNumeroDespacho={proximoNumeroDespachoBodega}
+    cargandoProximoNumeroDespacho={cargandoProximoNumeroDespacho}
     entregandoSolicitudBodega={entregandoSolicitudBodega}
     recepcionandoDevolucionBodega={recepcionandoDevolucionBodega}
     recepcionandoTraspasoBodega={recepcionandoTraspasoBodega}
@@ -8122,7 +8361,13 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarPedido={guardarPedidoBodega}
     onGuardarDevolucion={guardarDevolucionBodegaConMateriales}
     onGuardarRecepcion={guardarRecepcionBodega}
+    onActualizarProximoNumeroRecepcion={cargarProximoNumeroRecepcionBodega}
+    onCorregirInventario={corregirInventarioBodega}
+    onActualizarMermasInventario={cargarMermasInventarioBodega}
+    onRegistrarMermaInventario={registrarMermaInventarioBodega}
+    onActualizarProximoNumeroMerma={cargarProximoNumeroMermaBodega}
     onGuardarSalida={guardarDespachoBodega}
+    onActualizarProximoNumeroDespacho={cargarProximoNumeroDespachoBodega}
     onEntregarSolicitudBodega={entregarSolicitudBodega}
     onRecepcionarDevolucionBodega={recepcionarDevolucionBodega}
     onRecepcionarTraspasoBodega={recepcionarTraspasoBodega}

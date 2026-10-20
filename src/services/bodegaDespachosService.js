@@ -53,6 +53,30 @@ export async function cargarDespachosBodegaRango({
   }
 }
 
+export async function cargarProximoNumeroDespachoBodega({ supabase }) {
+  const { data, error } = await supabase.rpc('proximo_numero_documento_despacho_bodega')
+  if (!error && data) return { numero: data, error: null }
+
+  const { data: despachos, error: errorRespaldo } = await supabase
+    .from('bodega_despachos')
+    .select('documento')
+    .not('documento', 'is', null)
+    .limit(5000)
+
+  if (errorRespaldo) return { numero: '', error: error || errorRespaldo }
+
+  const maximo = (despachos || []).reduce((mayor, despacho) => {
+    const texto = String(despacho.documento || '').trim()
+    if (!/^\d+$/.test(texto)) return mayor
+    return Math.max(mayor, Number(texto))
+  }, 0)
+
+  return {
+    numero: String(maximo + 1).padStart(6, '0'),
+    error: null,
+  }
+}
+
 export async function cargarTraspasosPendientesBodega({
   supabase,
   bodegaDestino,
