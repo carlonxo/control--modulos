@@ -159,6 +159,32 @@ export async function cargarPedidosEntregadosBodegaPorRango({
   }
 }
 
+export async function cargarItemsRetiradosBodegaPorSerie({
+  supabase,
+  serie,
+}) {
+  const serieLimpia = String(serie || '').trim()
+  if (!serieLimpia) return { items: [], vales: [], error: null }
+
+  const { data: vales, error } = await supabase
+    .from('vales_bodega')
+    .select('id, fecha, serie, bodega, solicitante_id, solicitante_nombre, tipo_ingreso, estado_bodega, fecha_entrega_bodega')
+    .eq('serie', serieLimpia)
+    .eq('tipo_ingreso', 'pedido_app')
+    .eq('estado_bodega', 'entregado')
+    .order('fecha_entrega_bodega', { ascending: true, nullsFirst: false })
+
+  if (error) return { items: [], vales: [], error }
+  if (!vales?.length) return { items: [], vales: [], error: null }
+
+  const { items, error: errorItems } = await cargarItemsPorVales({ supabase, vales })
+  return {
+    items: errorItems ? [] : items,
+    vales,
+    error: errorItems,
+  }
+}
+
 export async function cargarResumenOperacionalMensual({
   supabase,
   periodos = [],

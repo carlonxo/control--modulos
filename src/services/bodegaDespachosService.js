@@ -183,6 +183,7 @@ export async function recepcionarTraspasoBodega({
 
 export async function guardarDespachoBodega({
   supabase,
+  inventarioId,
   fecha,
   documento,
   bodega,
@@ -190,40 +191,18 @@ export async function guardarDespachoBodega({
   usuarioNombre,
   items = [],
 }) {
-  const { data: despacho, error } = await supabase
-    .from('bodega_despachos')
-    .insert({
-      fecha,
-      bodega: bodega || '',
-      destino_tipo: 'obra',
-      obra_destino: obraDestino || '',
-      usuario_nombre: usuarioNombre || '',
-    })
-    .select('id, documento')
-    .single()
+  const { data: despacho, error } = await supabase.rpc('crear_despacho_obra_bodega', {
+    p_inventario_origen_id: inventarioId,
+    p_fecha: fecha,
+    p_documento: documento || '',
+    p_bodega_origen: bodega || '',
+    p_obra_destino: obraDestino || '',
+    p_usuario_nombre: usuarioNombre || '',
+    p_items: items,
+  })
 
   if (error) {
-    return { despacho: null, error, etapa: 'cabecera' }
-  }
-
-  const filas = items.map((item) => ({
-    despacho_id: despacho.id,
-    codigo_bodega: item.codigo || '',
-    descripcion: item.descripcion || '',
-    unidad: item.unidad || '',
-    cantidad: Number(item.cantidad || 0),
-  }))
-
-  if (filas.length === 0) {
-    return { despacho, error: null, etapa: null }
-  }
-
-  const { error: errorItems } = await supabase
-    .from('bodega_despacho_items')
-    .insert(filas)
-
-  if (errorItems) {
-    return { despacho, error: errorItems, etapa: 'items' }
+    return { despacho: null, error, etapa: 'operación segura' }
   }
 
   return { despacho, error: null, etapa: null }

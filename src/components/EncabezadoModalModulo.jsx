@@ -29,6 +29,7 @@ export default function EncabezadoModalModulo({
   onToggleMenu,
   onEliminarModulo,
   onAbrirEditorMateriales,
+  onAbrirSolicitadoVsCobrado,
   onSolicitarPrueba,
   onDejarObservacion,
   onFinalizarModulo,
@@ -116,6 +117,25 @@ export default function EncabezadoModalModulo({
                   }}
                 >
                   Materiales {'\u{1F4DC}'}
+                </button>}
+
+                {materialesProtocoloHabilitados && <button
+                  type="button"
+                  onClick={onAbrirSolicitadoVsCobrado}
+                  style={{
+                    width: '100%',
+                    background: '#00695c',
+                    color: 'white',
+                    padding: '10px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontWeight: 700,
+                    marginBottom: '6px',
+                  }}
+                >
+                  Solicitado vs cobrado
                 </button>}
 
                 <button

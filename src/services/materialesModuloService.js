@@ -3,7 +3,7 @@ export async function cargarMaterialesModuloSupabase({ supabase, moduloId }) {
     .from('modulos')
     .select('materiales')
     .eq('id', moduloId)
-    .single()
+    .maybeSingle()
 }
 
 export function fusionarMaterialesEditados({

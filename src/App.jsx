@@ -12,6 +12,7 @@ import FormularioElectrico from './components/FormularioElectrico'
 import BotonesModalModulo from './components/BotonesModalModulo'
 import ResumenMaterialesModal from './components/ResumenMaterialesModal'
 import EditorMaterialesModal from './components/EditorMaterialesModal'
+import SolicitadoVsCobradoModal from './components/SolicitadoVsCobradoModal'
 import ProtocolosMensualesToolbar from './components/ProtocolosMensualesToolbar'
 import ProtocolosMensualesTabla from './components/ProtocolosMensualesTabla'
 import ProtocolosMensualesModal from './components/ProtocolosMensualesModal'
@@ -79,6 +80,7 @@ import {
 } from './services/balanceMaterialesConfigService'
 import {
   cargarItemsValesBodegaPorRango,
+  cargarItemsRetiradosBodegaPorSerie,
   cargarPedidosEntregadosBodegaPorRango,
   cargarResumenOperacionalMensual,
   cargarValeBodegaPorId as cargarValeBodegaPorIdSupabase,
@@ -788,6 +790,10 @@ const [materialesEditados, setMaterialesEditados] = useState({})
 const [mostrarResumenMateriales, setMostrarResumenMateriales] = useState(false)
 const [mostrarEditorMateriales, setMostrarEditorMateriales] = useState(false)
 const [cargandoMateriales, setCargandoMateriales] = useState(false)
+const [mostrarSolicitadoVsCobrado, setMostrarSolicitadoVsCobrado] = useState(false)
+const [filasSolicitadoVsCobrado, setFilasSolicitadoVsCobrado] = useState([])
+const [cargandoSolicitadoVsCobrado, setCargandoSolicitadoVsCobrado] = useState(false)
+const [errorSolicitadoVsCobrado, setErrorSolicitadoVsCobrado] = useState('')
 const [avisoPruebaElectrica, setAvisoPruebaElectrica] = useState(null)
 const [mostrarLlamadosPendientes, setMostrarLlamadosPendientes] = useState(false)
 const [mostrarRegistroAcciones, setMostrarRegistroAcciones] = useState(false)
@@ -978,6 +984,7 @@ const esRolBodega = perfil?.rol === 'bodega'
 const puedeOperarComoBodega = esRolBodega || perfil?.rol === 'analista'
 const puedeRevisarSolicitudesBodega = ['admin', 'operador'].includes(perfil?.rol)
 const puedeRecibirAvisosBodega = puedeRevisarSolicitudesBodega || puedeOperarComoBodega
+const puedeConsultarTraspasosBodega = ['admin', 'analista', 'bodega'].includes(perfil?.rol)
 const puedeAdministrarUsuariosBodega = perfil?.rol === 'admin'
 const puedeAdministrarEquivalenciasMateriales = perfil?.rol === 'admin'
 const bodegaPerfil = obtenerCodigoBodega(perfil?.bodega_asignada || BODEGA_BAYONA)
@@ -1438,6 +1445,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
   cerrarPanelesFlotantes()
   const bloqueoCierreMateriales = mostrarEditorMateriales && hayMaterialesPendientes() && !forzarCerrarMateriales
   setMostrarResumenMateriales(false)
+  setMostrarSolicitadoVsCobrado(false)
   if (bloqueoCierreMateriales) {
     mostrarNotificacion('Hay materiales sin guardar. Guarda o cierra el editor antes de tocar el tablero.')
   } else {
@@ -2552,16 +2560,20 @@ async function cargarValesBodegaDia(fecha = fechaValeBodega) {
 async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
   if (!fecha || !puedeVerBodega) return
 
+  const consultaTraspasos = puedeConsultarTraspasosBodega
+    ? cargarTraspasosPendientesBodega({
+        supabase,
+        bodegaDestino: bodegaActiva,
+      })
+    : Promise.resolve({ traspasos: [], error: null })
+
   const [{ vales, error }, { traspasos, error: errorTraspasos }] = await Promise.all([
     cargarValesBodegaDiaSupabase({
       supabase,
       fecha,
       bodega: bodegaActiva,
     }),
-    cargarTraspasosPendientesBodega({
-      supabase,
-      bodegaDestino: bodegaActiva,
-    }),
+    consultaTraspasos,
   ])
 
   if (error) {
@@ -3111,6 +3123,7 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
 
   const { despacho, error, etapa } = await guardarDespachoBodegaSupabase({
     supabase,
+    inventarioId: inventarioActual.id,
     fecha,
     documento,
     bodega,
@@ -3121,27 +3134,13 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
 
   if (error) {
     setGuardandoDespachoBodega(false)
+    const funcionNoInstalada = error?.code === 'PGRST202'
     mostrarNotificacion(
-      `No se pudo guardar el despacho${etapa ? ` (${etapa})` : ''}. Revisa si existen las tablas bodega_despachos y bodega_despacho_items. Detalle: ${error.message}`
+      funcionNoInstalada
+        ? 'Falta habilitar el despacho seguro hacia obras en Supabase. Ejecuta el archivo supabase_despachos_obra_seguro.sql.'
+        : `No se pudo guardar el despacho${etapa ? ` (${etapa})` : ''}. No se aplicaron cambios. Detalle: ${error.message}`
     )
     return false
-  }
-
-  for (const actualizacion of actualizaciones) {
-    const { error: errorInventario } = await supabase
-      .from('bodega_inventario_items')
-      .update({
-        salidas: actualizacion.nuevasSalidas,
-        saldo_final: actualizacion.nuevoSaldoFinal,
-      })
-      .eq('id', actualizacion.itemInventario.id)
-
-    if (errorInventario) {
-      setGuardandoDespachoBodega(false)
-      mostrarNotificacion('El despacho se guardó, pero no se pudo actualizar inventario: ' + errorInventario.message)
-      await cargarInventariosBodega()
-      return false
-    }
   }
 
   setGuardandoDespachoBodega(false)
@@ -5355,6 +5354,7 @@ function limpiarEstadosModal() {
   cerrarPanelesFlotantes()
   setMostrarResumenMateriales(false)
   setMostrarEditorMateriales(false)
+  setMostrarSolicitadoVsCobrado(false)
   setProtocoloSoloLecturaBusqueda(false)
   setProtocoloDesdeHistorial(false)
   setProtocoloManualMensual(false)
@@ -5754,6 +5754,58 @@ async function abrirEditorMateriales() {
   await cargarMaterialesModulo(moduloSeleccionado.id)
   setMostrarMenuModulo(false)
   setMostrarEditorMateriales(true)
+}
+
+async function abrirSolicitadoVsCobrado() {
+  const modulo = moduloSeleccionado
+  const serie = String(modulo?.serie || '').trim()
+  if (!modulo?.id || !serie) return
+
+  cerrarVentanasEmergentes({ conservarModulo: true })
+  setMostrarMenuModulo(false)
+  setMostrarSolicitadoVsCobrado(true)
+  setCargandoSolicitadoVsCobrado(true)
+  setErrorSolicitadoVsCobrado('')
+  setFilasSolicitadoVsCobrado([])
+
+  const [respuestaMateriales, respuestaVales, equivalenciasActuales] = await Promise.all([
+    cargarMaterialesModuloSupabase({ supabase, moduloId: modulo.id }),
+    cargarItemsRetiradosBodegaPorSerie({ supabase, serie }),
+    cargarEquivalenciasMateriales(),
+  ])
+
+  if (respuestaMateriales.error || respuestaVales.error) {
+    const detalle = respuestaMateriales.error?.message || respuestaVales.error?.message || 'Error desconocido'
+    setErrorSolicitadoVsCobrado(`No se pudo preparar la comparación: ${detalle}`)
+    setCargandoSolicitadoVsCobrado(false)
+    return
+  }
+
+  const materiales = respuestaMateriales.data?.materiales
+    || modulo.materiales
+    || formulariosElectricos[modulo.id]
+    || {}
+  const registro = prepararRegistroProtocoloMensual({ ...modulo, materiales }, 'actual')
+  const balance = compilarBalanceMateriales([registro], respuestaVales.items || [], {
+    configMateriales: configBalanceMateriales,
+    catalogoPreciosProtocolo: catalogoPreciosParaBalance,
+    equivalenciasPrecioProtocolo,
+    equivalenciasValeBodega,
+    equivalenciasMateriales: equivalenciasActuales,
+    normalizarTextoComparacion,
+  })
+
+  setFormulariosElectricos((actuales) => ({ ...actuales, [modulo.id]: materiales }))
+  setFilasSolicitadoVsCobrado(balance
+    .map((fila) => ({
+      clave: fila.clave,
+      material: fila.material,
+      retirado: Number(fila.retirado || 0),
+      cobrado: Number(fila.totalCantidad || 0),
+    }))
+    .filter((fila) => fila.retirado > 0 || fila.cobrado > 0)
+    .sort((a, b) => a.material.localeCompare(b.material, 'es', { sensitivity: 'base' })))
+  setCargandoSolicitadoVsCobrado(false)
 }
 
 function actualizarMaterialFormulario(item, tipo, valor) {
@@ -8043,6 +8095,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         eliminarModuloSinRegistro()
       }}
       onAbrirEditorMateriales={abrirEditorMateriales}
+      onAbrirSolicitadoVsCobrado={abrirSolicitadoVsCobrado}
       onSolicitarPrueba={() => {
         setMostrarMenuModulo(false)
         solicitarPruebaElectrica()
@@ -8115,6 +8168,17 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     resumenMateriales={resumenMateriales}
     onCerrar={() => setMostrarResumenMateriales(false)}
     onClickFondo={cerrarPanelesFlotantes}
+  />
+)}
+
+{mostrarSolicitadoVsCobrado && moduloSeleccionado && protocolosHabilitadosPlanta && (
+  <SolicitadoVsCobradoModal
+    serie={moduloSeleccionado.serie}
+    filas={filasSolicitadoVsCobrado}
+    cargando={cargandoSolicitadoVsCobrado}
+    error={errorSolicitadoVsCobrado}
+    onCerrar={() => setMostrarSolicitadoVsCobrado(false)}
+    onClickFondo={() => setMostrarSolicitadoVsCobrado(false)}
   />
 )}
 
