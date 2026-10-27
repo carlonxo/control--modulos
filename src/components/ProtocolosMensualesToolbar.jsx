@@ -18,7 +18,7 @@ function ProtocolosMensualesToolbar({
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-        <h2 style={{ margin: 0 }}>Protocolos mensuales</h2>
+        <h2 style={{ margin: 0 }}>Protocolos</h2>
         <div style={{ display: 'grid', gap: '8px', minWidth: '150px' }}>
           <button
             type="button"
@@ -83,12 +83,17 @@ function ProtocolosMensualesToolbar({
             <option value="dia">Dia</option>
             <option value="semana">Semana</option>
             <option value="mes">Mes</option>
+            <option value="anio">Año</option>
           </select>
           <input
-            type={rango === 'dia' ? 'date' : rango === 'semana' ? 'week' : 'month'}
+            type={rango === 'dia' ? 'date' : rango === 'semana' ? 'week' : rango === 'anio' ? 'number' : 'month'}
             value={fecha}
             onChange={(e) => onCambiarFecha(e.target.value)}
-            style={{ padding: '8px' }}
+            min={rango === 'anio' ? '2000' : undefined}
+            max={rango === 'anio' ? '2100' : undefined}
+            step={rango === 'anio' ? '1' : undefined}
+            placeholder={rango === 'anio' ? 'Año' : undefined}
+            style={{ padding: '8px', width: rango === 'anio' ? '110px' : undefined }}
           />
         </label>
         <button

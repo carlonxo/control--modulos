@@ -49,11 +49,30 @@ export async function cargarRegistrosProtocolosPorRango({
       .filter((columna) => columna !== 'estado')
       .join(', ')
 
-    const traerPorRango = async (columnas) => supabase
-      .from(tabla)
-      .select(columnas)
-      .gte('fecha_prueba_electrica', inicio)
-      .lt('fecha_prueba_electrica', fin)
+    const traerPorRango = async (columnas) => {
+      const datos = []
+      const tamanoPagina = 1000
+
+      for (let desde = 0; ; desde += tamanoPagina) {
+        const respuesta = await supabase
+          .from(tabla)
+          .select(columnas)
+          .gte('fecha_prueba_electrica', inicio)
+          .lt('fecha_prueba_electrica', fin)
+          .order('fecha_prueba_electrica', { ascending: true })
+          .order('id', { ascending: true })
+          .range(desde, desde + tamanoPagina - 1)
+
+        if (respuesta.error) return { data: [], error: respuesta.error }
+
+        const filas = respuesta.data || []
+        datos.push(...filas)
+
+        if (filas.length < tamanoPagina) {
+          return { data: datos, error: null }
+        }
+      }
+    }
 
     const traerRecientes = async (columnas) => supabase
       .from(tabla)
