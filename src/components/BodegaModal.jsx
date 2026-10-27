@@ -88,6 +88,7 @@ function BodegaModal({
   onGuardarRecepcion,
   onActualizarProximoNumeroRecepcion,
   onCorregirInventario,
+  onEliminarItemInventario,
   onActualizarMermasInventario,
   onRegistrarMermaInventario,
   onActualizarProximoNumeroMerma,
@@ -1236,9 +1237,11 @@ function BodegaModal({
                     {mostrarCorreccionInventario && puedeAdministrar && (
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         {mostrarCorreccionInventario && puedeAdministrar && (
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '7px', flexWrap: 'wrap' }}>
                           <button
                             type="button"
                             onClick={() => setItemCorreccionInventario(item)}
+                            disabled={guardandoCorreccionInventario}
                             style={{
                               padding: '7px 12px',
                               border: '1px solid #ffb74d',
@@ -1251,6 +1254,32 @@ function BodegaModal({
                           >
                             Corregir
                           </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const eliminado = await onEliminarItemInventario?.(item)
+                              if (eliminado && itemCorreccionInventario?.id === item.id) {
+                                setItemCorreccionInventario(null)
+                              }
+                            }}
+                            disabled={guardandoCorreccionInventario}
+                            title={Number(item.saldoFinal || 0) === 0
+                              ? 'Eliminar material descontinuado'
+                              : 'Para eliminarlo, primero debe quedar con saldo 0'}
+                            style={{
+                              padding: '7px 12px',
+                              border: '1px solid #ef5350',
+                              borderRadius: '7px',
+                              background: '#7f1d1d',
+                              color: '#ffebee',
+                              fontWeight: 800,
+                              cursor: guardandoCorreccionInventario ? 'wait' : 'pointer',
+                              opacity: guardandoCorreccionInventario ? 0.65 : 1,
+                            }}
+                          >
+                            Eliminar
+                          </button>
+                          </div>
                         )}
                       </td>
                     )}

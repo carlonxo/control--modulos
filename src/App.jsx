@@ -63,6 +63,7 @@ import {
   cargarProximoNumeroMermaBodega as cargarProximoNumeroMermaBodegaSupabase,
   cargarInventariosBodega as cargarInventariosBodegaSupabase,
   corregirInventarioBodega as corregirInventarioBodegaSupabase,
+  eliminarItemInventarioBodega as eliminarItemInventarioBodegaSupabase,
   guardarInventariosBodega as guardarInventariosBodegaSupabase,
   registrarMermasInventarioBodega as registrarMermasInventarioBodegaSupabase,
 } from './services/bodegaInventarioService'
@@ -3642,6 +3643,45 @@ async function corregirInventarioBodega({ item, nuevoSaldo, motivo }) {
   mostrarNotificacion(
     `Inventario corregido: ${item.codigo} quedó con saldo ${saldoCorregido.toLocaleString('es-CL')}`
   )
+  return true
+}
+
+async function eliminarItemInventarioBodega(item) {
+  if (perfil?.rol !== 'admin' || !item?.id) return false
+
+  const saldoActual = Number(item.saldoFinal || 0)
+  if (saldoActual !== 0) {
+    mostrarNotificacion(
+      `No se puede eliminar ${item.codigo}: primero debes dejar su saldo en 0 mediante una corrección, merma o despacho`
+    )
+    return false
+  }
+
+  const confirmado = window.confirm(
+    `¿Eliminar este material del inventario?\n\n` +
+    `${item.codigo} · ${item.descripcion}\n\n` +
+    `Dejará de aparecer en el inventario y en la selección de materiales. Su historial anterior no será eliminado.`
+  )
+  if (!confirmado) return false
+
+  setGuardandoCorreccionInventario(true)
+  const { data, error } = await eliminarItemInventarioBodegaSupabase({
+    supabase,
+    itemId: item.id,
+  })
+  setGuardandoCorreccionInventario(false)
+
+  if (error) {
+    mostrarNotificacion('No se pudo eliminar el material del inventario: ' + error.message)
+    return false
+  }
+  if (!data) {
+    mostrarNotificacion('El material no se encontró o no tienes permiso para eliminarlo')
+    return false
+  }
+
+  await cargarInventariosBodega()
+  mostrarNotificacion(`Material eliminado del inventario: ${item.codigo} · ${item.descripcion}`)
   return true
 }
 
@@ -8432,6 +8472,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarRecepcion={guardarRecepcionBodega}
     onActualizarProximoNumeroRecepcion={cargarProximoNumeroRecepcionBodega}
     onCorregirInventario={corregirInventarioBodega}
+    onEliminarItemInventario={eliminarItemInventarioBodega}
     onActualizarMermasInventario={cargarMermasInventarioBodega}
     onRegistrarMermaInventario={registrarMermaInventarioBodega}
     onActualizarProximoNumeroMerma={cargarProximoNumeroMermaBodega}

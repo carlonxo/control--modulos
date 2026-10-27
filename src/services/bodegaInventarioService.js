@@ -91,6 +91,17 @@ export async function corregirInventarioBodega({
   return { data, error }
 }
 
+export async function eliminarItemInventarioBodega({ supabase, itemId }) {
+  const { data, error } = await supabase
+    .from('bodega_inventario_items')
+    .delete()
+    .eq('id', itemId)
+    .select('id, codigo_bodega, descripcion')
+    .maybeSingle()
+
+  return { data, error }
+}
+
 export async function registrarMermaInventarioBodega({
   supabase,
   itemId,
