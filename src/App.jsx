@@ -2177,11 +2177,12 @@ function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMat
 function abrirDetalleCobro(registro, tipo) {
   const detalleMantencion = registro.detalleCobro?.mantencion || []
   const detalleModificacion = registro.detalleCobro?.modificacion || []
+  const detalleAjustePago = registro.detalleCobro?.ajustePago || []
   const lineas = tipo === 'mantencion'
     ? detalleMantencion
     : tipo === 'modificacion'
       ? detalleModificacion
-      : [...detalleMantencion, ...detalleModificacion]
+      : [...detalleMantencion, ...detalleModificacion, ...detalleAjustePago]
   const total = lineas.reduce((suma, item) => suma + Number(item.subtotal || 0), 0)
 
   setDetalleCobroSeleccionado({
@@ -2253,7 +2254,11 @@ async function guardarAjusteValorizacionProtocolo() {
       ? actualizado.detalleCobro.mantencion
       : actual.tipo === 'modificacion'
         ? actualizado.detalleCobro.modificacion
-        : [...actualizado.detalleCobro.mantencion, ...actualizado.detalleCobro.modificacion],
+        : [
+          ...actualizado.detalleCobro.mantencion,
+          ...actualizado.detalleCobro.modificacion,
+          ...actualizado.detalleCobro.ajustePago,
+        ],
     total: actual.tipo === 'mantencion'
       ? actualizado.valorMantencion
       : actual.tipo === 'modificacion'

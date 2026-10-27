@@ -48,6 +48,7 @@ export function prepararRegistroProtocoloMensual({
   const tieneAjusteModificacion = !tieneAjustesItems && ajusteValorizacion.modificacion !== undefined && ajusteValorizacion.modificacion !== null && ajusteValorizacion.modificacion !== ''
   const valorMantencion = tieneAjusteMantencion ? normalizarPrecioMaterial(ajusteValorizacion.mantencion) : valores.mantencion
   const valorModificacion = tieneAjusteModificacion ? normalizarPrecioMaterial(ajusteValorizacion.modificacion) : valores.modificacion
+  const valorAjustePago = valores.ajustePago
 
   return {
     ...registro,
@@ -61,13 +62,15 @@ export function prepararRegistroProtocoloMensual({
     esActual: origen === 'actual',
     valorMantencion,
     valorModificacion,
-    valorTotal: valorMantencion + valorModificacion,
+    valorAjustePago,
+    valorTotal: valorMantencion + valorModificacion + valorAjustePago,
     ajusteValorizacion,
     ajustesValorizacionItems: ajustesItems,
     tieneAjusteValorizacion: Boolean(ajusteValorizacion.motivo) || tieneAjustesItems,
     detalleCobro: {
       mantencion: valores.detalleMantencion,
       modificacion: valores.detalleModificacion,
+      ajustePago: valores.detalleAjustePago,
     },
     idOt: registro?.id_ot || datosProtocolo.id_ot || datosProtocolo.idOt || '',
     notaAlertaMensual: datosProtocolo.nota_alerta_mensual || '',
@@ -195,12 +198,21 @@ function aplicarAjustesItemsCobro(valores, ajustesItems = {}, normalizarPrecioMa
 
   const detalleMantencion = aplicar('mantencion', valores.detalleMantencion)
   const detalleModificacion = aplicar('modificacion', valores.detalleModificacion)
+  const detalleAjustePago = aplicar('ajuste_pago', [{
+    material: 'Ajuste pago',
+    cantidad: 1,
+    precioUnitario: 0,
+    subtotal: 0,
+    tipoCantidad: 'Corrección de diferencia de pago',
+  }])
 
   return {
     mantencion: detalleMantencion.reduce((total, item) => total + Number(item.subtotal || 0), 0),
     modificacion: detalleModificacion.reduce((total, item) => total + Number(item.subtotal || 0), 0),
+    ajustePago: detalleAjustePago.reduce((total, item) => total + Number(item.subtotal || 0), 0),
     detalleMantencion,
     detalleModificacion,
+    detalleAjustePago,
   }
 }
 
