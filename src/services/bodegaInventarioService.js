@@ -91,6 +91,25 @@ export async function corregirInventarioBodega({
   return { data, error }
 }
 
+export async function actualizarDatosItemInventarioBodega({
+  supabase,
+  itemId,
+  codigo,
+  descripcion,
+}) {
+  const { data, error } = await supabase
+    .from('bodega_inventario_items')
+    .update({
+      codigo_bodega: String(codigo || '').trim(),
+      descripcion: String(descripcion || '').trim(),
+    })
+    .eq('id', itemId)
+    .select('id, codigo_bodega, descripcion')
+    .maybeSingle()
+
+  return { data, error }
+}
+
 export async function eliminarItemInventarioBodega({ supabase, itemId }) {
   const { data, error } = await supabase
     .from('bodega_inventario_items')

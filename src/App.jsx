@@ -59,6 +59,7 @@ import {
 import { leerFilasValeBodegaDesdeArchivo } from './services/valesBodegaArchivoService'
 import { leerInventariosBodegaDesdeExcel } from './services/bodegaInventarioArchivoService'
 import {
+  actualizarDatosItemInventarioBodega as actualizarDatosItemInventarioBodegaSupabase,
   cargarMermasInventarioBodega as cargarMermasInventarioBodegaSupabase,
   cargarProximoNumeroMermaBodega as cargarProximoNumeroMermaBodegaSupabase,
   cargarInventariosBodega as cargarInventariosBodegaSupabase,
@@ -3594,19 +3595,34 @@ function exportarInventarioBodegaActual() {
   exportarInventarioBodegaExcel(inventarioActual)
 }
 
-async function corregirInventarioBodega({ item, nuevoSaldo, motivo }) {
+async function corregirInventarioBodega({ item, nuevoSaldo, nuevoCodigo, nuevaDescripcion, motivo }) {
   if (perfil?.rol !== 'admin' || !item?.id) return false
 
   const saldoActual = Number(item.saldoFinal || 0)
   const saldoCorregido = Number(nuevoSaldo)
+  const codigoActual = String(item.codigo || '').trim()
+  const codigoCorregido = String(nuevoCodigo || '').trim()
+  const descripcionActual = String(item.descripcion || '').trim()
+  const descripcionCorregida = String(nuevaDescripcion || '').trim()
   const motivoLimpio = String(motivo || '').trim()
+  const cambiaSaldo = saldoCorregido !== saldoActual
+  const cambiaCodigo = codigoCorregido !== codigoActual
+  const cambiaDescripcion = descripcionCorregida !== descripcionActual
 
   if (!Number.isFinite(saldoCorregido) || saldoCorregido < 0) {
     mostrarNotificacion('El saldo corregido debe ser un número igual o mayor que cero')
     return false
   }
-  if (saldoCorregido === saldoActual) {
-    mostrarNotificacion('El nuevo saldo es igual al saldo actual')
+  if (descripcionCorregida.length < 3) {
+    mostrarNotificacion('La descripción debe tener al menos 3 caracteres')
+    return false
+  }
+  if (codigoCorregido.length < 2) {
+    mostrarNotificacion('El código bodega debe tener al menos 2 caracteres')
+    return false
+  }
+  if (!cambiaSaldo && !cambiaCodigo && !cambiaDescripcion) {
+    mostrarNotificacion('No se detectaron cambios en el código, la descripción ni el saldo')
     return false
   }
   if (motivoLimpio.length < 5) {
@@ -3615,34 +3631,76 @@ async function corregirInventarioBodega({ item, nuevoSaldo, motivo }) {
   }
 
   const diferencia = saldoCorregido - saldoActual
+  const detalleSaldo = cambiaSaldo
+    ? `Saldo actual: ${saldoActual.toLocaleString('es-CL')}\n` +
+      `Saldo corregido: ${saldoCorregido.toLocaleString('es-CL')}\n` +
+      `Diferencia: ${diferencia > 0 ? '+' : ''}${diferencia.toLocaleString('es-CL')}\n`
+    : ''
+  const detalleDescripcion = cambiaDescripcion
+    ? `Descripción actual: ${descripcionActual}\n` +
+      `Descripción nueva: ${descripcionCorregida}\n`
+    : ''
+  const detalleCodigo = cambiaCodigo
+    ? `Código actual: ${codigoActual}\n` +
+      `Código nuevo: ${codigoCorregido}\n`
+    : ''
   const confirmado = window.confirm(
     `¿Confirmar corrección de inventario?\n\n` +
-    `${item.codigo} · ${item.descripcion}\n` +
-    `Saldo actual: ${saldoActual.toLocaleString('es-CL')}\n` +
-    `Saldo corregido: ${saldoCorregido.toLocaleString('es-CL')}\n` +
-    `Diferencia: ${diferencia > 0 ? '+' : ''}${diferencia.toLocaleString('es-CL')}\n\n` +
+    detalleCodigo +
+    detalleDescripcion +
+    detalleSaldo +
+    `\n` +
     `Motivo: ${motivoLimpio}`
   )
   if (!confirmado) return false
 
   setGuardandoCorreccionInventario(true)
-  const { error } = await corregirInventarioBodegaSupabase({
-    supabase,
-    itemId: item.id,
-    nuevoSaldo: saldoCorregido,
-    motivo: motivoLimpio,
-  })
-  setGuardandoCorreccionInventario(false)
+  if (cambiaSaldo) {
+    const { error } = await corregirInventarioBodegaSupabase({
+      supabase,
+      itemId: item.id,
+      nuevoSaldo: saldoCorregido,
+      motivo: motivoLimpio,
+    })
 
-  if (error) {
-    mostrarNotificacion('No se pudo corregir el inventario: ' + error.message)
-    return false
+    if (error) {
+      setGuardandoCorreccionInventario(false)
+      mostrarNotificacion('No se pudo corregir el saldo del inventario: ' + error.message)
+      return false
+    }
   }
 
+  if (cambiaCodigo || cambiaDescripcion) {
+    const { data, error } = await actualizarDatosItemInventarioBodegaSupabase({
+      supabase,
+      itemId: item.id,
+      codigo: codigoCorregido,
+      descripcion: descripcionCorregida,
+    })
+
+    if (error || !data) {
+      setGuardandoCorreccionInventario(false)
+      await cargarInventariosBodega()
+      const detalleError = error?.code === '23505'
+        ? `el código “${codigoCorregido}” ya existe en este inventario`
+        : (error?.message || 'sin permiso para modificar el material')
+      mostrarNotificacion(
+        cambiaSaldo
+          ? `El saldo fue corregido, pero no se pudieron actualizar los datos del material: ${detalleError}`
+          : `No se pudieron actualizar los datos del material: ${detalleError}`
+      )
+      return false
+    }
+  }
+  setGuardandoCorreccionInventario(false)
+
   await cargarInventariosBodega()
-  mostrarNotificacion(
-    `Inventario corregido: ${item.codigo} quedó con saldo ${saldoCorregido.toLocaleString('es-CL')}`
-  )
+  const cambiosGuardados = [
+    cambiaCodigo ? `código actualizado a “${codigoCorregido}”` : '',
+    cambiaDescripcion ? `descripción actualizada a “${descripcionCorregida}”` : '',
+    cambiaSaldo ? `saldo actualizado a ${saldoCorregido.toLocaleString('es-CL')}` : '',
+  ].filter(Boolean).join(' y ')
+  mostrarNotificacion(`Inventario corregido: ${item.codigo}, ${cambiosGuardados}`)
   return true
 }
 

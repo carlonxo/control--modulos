@@ -1308,11 +1308,13 @@ function PanelCorreccionInventario({
   onCerrar,
 }) {
   const [nuevoSaldo, setNuevoSaldo] = useState(String(item?.saldoFinal ?? ''))
+  const [nuevoCodigo, setNuevoCodigo] = useState(String(item?.codigo || ''))
+  const [nuevaDescripcion, setNuevaDescripcion] = useState(String(item?.descripcion || ''))
   const [motivo, setMotivo] = useState('')
 
   async function guardar(evento) {
     evento.preventDefault()
-    await onGuardar?.({ item, nuevoSaldo, motivo })
+    await onGuardar?.({ item, nuevoSaldo, nuevoCodigo, nuevaDescripcion, motivo })
   }
 
   return (
@@ -1337,6 +1339,28 @@ function PanelCorreccionInventario({
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
+        <label style={labelStyle}>
+          Código del material
+          <input
+            value={nuevoCodigo}
+            minLength={2}
+            required
+            placeholder="Código bodega"
+            onChange={(evento) => setNuevoCodigo(evento.target.value)}
+            style={inputStyle}
+          />
+        </label>
+        <label style={{ ...labelStyle, gridColumn: 'span 2' }}>
+          Descripción
+          <input
+            value={nuevaDescripcion}
+            minLength={3}
+            required
+            placeholder="Descripción del material"
+            onChange={(evento) => setNuevaDescripcion(evento.target.value)}
+            style={inputStyle}
+          />
+        </label>
         <label style={labelStyle}>
           Saldo actual
           <input value={formatearNumero(item?.saldoFinal)} readOnly style={{ ...inputStyle, opacity: 0.78 }} />
