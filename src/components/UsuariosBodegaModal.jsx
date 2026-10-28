@@ -158,10 +158,23 @@ function UsuariosBodegaModal({
         )}
 
         {usuarioPassword && (
-          <form onSubmit={guardarPassword} style={formularioPasswordStyle}>
+          <div
+            style={passwordOverlayStyle}
+            onClick={() => {
+              if (!guardando) setUsuarioPassword(null)
+            }}
+          >
+          <form
+            onSubmit={guardarPassword}
+            style={passwordPanelStyle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cambiar-password-titulo"
+            onClick={(evento) => evento.stopPropagation()}
+          >
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <div>
-                <h3 style={{ margin: 0 }}>Cambiar contraseña</h3>
+                <h3 id="cambiar-password-titulo" style={{ margin: 0 }}>Cambiar contraseña</h3>
                 <div style={{ color: '#a9bbc4', marginTop: '4px' }}>
                   {usuarioPassword.nombre || 'Sin nombre'} · {usuarioPassword.email || 'Sin correo'}
                 </div>
@@ -207,6 +220,7 @@ function UsuariosBodegaModal({
               </button>
             </div>
           </form>
+          </div>
         )}
 
         {cargando ? (
@@ -215,7 +229,7 @@ function UsuariosBodegaModal({
           <p style={{ color: '#ccc' }}>No hay usuarios registrados.</p>
         ) : (
           <div style={{ overflowX: 'auto', border: '1px solid #35505f', borderRadius: '10px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1260px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1080px' }}>
               <thead><tr style={{ background: '#132c39' }}>
                 <th style={thStyle}>Usuario</th><th style={thStyle}>Estado</th><th style={thStyle}>Rol</th><th style={thStyle}>Bodega</th><th style={thStyle}>Planta</th><th style={thStyle}>Último ingreso</th><th style={{ ...thStyle, textAlign: 'center' }}>Acciones</th>
               </tr></thead>
@@ -233,26 +247,31 @@ function UsuariosBodegaModal({
                       <td style={tdStyle}><Selector opciones={plantasDisponibles} value={edicion.planta_asignada || ''} disabled={guardando} onChange={(valor) => editarUsuario(usuario.id, 'planta_asignada', valor, setEdiciones)} /></td>
                       <td style={tdStyle}>{formatearFecha(usuario.ultimo_ingreso)}</td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                          <button type="button" disabled={guardando || esUsuarioActual} onClick={() => onCambiarEstado?.(usuario, !usuario.bloqueado)} title={esUsuarioActual ? 'No puedes bloquear tu propia cuenta' : ''} style={usuario.bloqueado ? botonReactivar : botonBloquear}>
-                            {usuario.bloqueado ? 'Reactivar' : 'Bloquear'}
-                          </button>
-                          <button type="button" disabled={guardando} onClick={() => abrirCambioPassword(usuario)} style={botonPassword}>
-                            Contraseña
-                          </button>
-                          <button
-                            type="button"
-                            disabled={guardando || esUsuarioActual}
-                            onClick={async () => {
+                        <select
+                          value=""
+                          disabled={guardando}
+                          aria-label={`Acciones para ${usuario.nombre || usuario.email || 'usuario'}`}
+                          onChange={async (evento) => {
+                            const accion = evento.target.value
+                            evento.target.value = ''
+                            if (accion === 'estado') {
+                              await onCambiarEstado?.(usuario, !usuario.bloqueado)
+                            }
+                            if (accion === 'password') abrirCambioPassword(usuario)
+                            if (accion === 'eliminar') {
                               const eliminado = await onEliminarUsuario?.(usuario)
                               if (eliminado && usuarioPassword?.id === usuario.id) setUsuarioPassword(null)
-                            }}
-                            title={esUsuarioActual ? 'No puedes eliminar tu propia cuenta' : 'Eliminar usuario permanentemente'}
-                            style={botonEliminar(esUsuarioActual || guardando)}
-                          >
-                            Eliminar
-                          </button>
-                        </div>
+                            }
+                          }}
+                          style={selectorAccionesStyle(guardando)}
+                        >
+                          <option value="">Administrar…</option>
+                          <option value="estado" disabled={esUsuarioActual}>
+                            {usuario.bloqueado ? 'Reactivar acceso' : 'Bloquear acceso'}
+                          </option>
+                          <option value="password">Cambiar contraseña</option>
+                          <option value="eliminar" disabled={esUsuarioActual}>Eliminar usuario</option>
+                        </select>
                       </td>
                     </tr>
                   )
@@ -320,7 +339,8 @@ const toolbarStyle = { display: 'flex', flexWrap: 'wrap', gap: '10px', marginBot
 const inputStyle = { minWidth: 0, width: '100%', padding: '10px', borderRadius: '7px', border: '1px solid #506b78', background: '#0e171c', color: 'white', boxSizing: 'border-box' }
 const buscadorStyle = { ...inputStyle, flex: '1 1 260px', width: 'auto' }
 const formularioStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', padding: '16px', marginBottom: '16px', background: '#172a34', border: '1px solid #3a5a69', borderRadius: '10px' }
-const formularioPasswordStyle = { ...formularioStyle, background: '#13252f', borderColor: '#34758a' }
+const passwordOverlayStyle = { position: 'fixed', inset: 0, zIndex: 2750, display: 'grid', placeItems: 'center', padding: '16px', boxSizing: 'border-box', background: 'rgba(0, 0, 0, 0.72)' }
+const passwordPanelStyle = { width: 'min(560px, 100%)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', padding: '20px', boxSizing: 'border-box', border: '1px solid #34758a', borderRadius: '12px', background: '#13252f', color: 'white', boxShadow: '0 22px 65px rgba(0, 0, 0, 0.58)' }
 const selectStyle = (disabled) => ({ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #506b78', background: '#17262e', color: 'white', opacity: disabled ? 0.6 : 1 })
 const thStyle = { padding: '10px', borderBottom: '1px solid #46606c', textAlign: 'left', whiteSpace: 'nowrap' }
 const tdStyle = { padding: '10px', borderBottom: '1px solid #2c414b', verticalAlign: 'middle' }
@@ -328,11 +348,8 @@ const baseBoton = { padding: '9px 14px', borderRadius: '8px', color: 'white', fo
 const botonCerrar = { ...baseBoton, border: '1px solid #a84a4a', background: '#8b2929' }
 const botonPrimario = { ...baseBoton, border: '1px solid #168f88', background: '#087d77' }
 const botonAccion = (disabled) => ({ ...baseBoton, border: '1px solid #32954b', background: '#16722a', opacity: disabled ? 0.5 : 1, cursor: disabled ? 'default' : 'pointer' })
-const botonBloquear = { ...baseBoton, padding: '7px 11px', border: '1px solid #b65252', background: '#7f2929' }
-const botonReactivar = { ...baseBoton, padding: '7px 11px', border: '1px solid #32954b', background: '#176b2a' }
-const botonPassword = { ...baseBoton, padding: '7px 11px', border: '1px solid #3d83a5', background: '#15506d' }
 const botonSecundario = { ...baseBoton, padding: '7px 11px', border: '1px solid #657883', background: '#3d4b52' }
-const botonEliminar = (disabled) => ({ ...baseBoton, padding: '7px 11px', border: '1px solid #ef5350', background: '#8b2020', opacity: disabled ? 0.5 : 1, cursor: disabled ? 'default' : 'pointer' })
+const selectorAccionesStyle = (disabled) => ({ width: '155px', padding: '8px 9px', borderRadius: '7px', border: '1px solid #43819b', background: '#123f52', color: 'white', fontWeight: 800, opacity: disabled ? 0.55 : 1, cursor: disabled ? 'wait' : 'pointer' })
 const errorPasswordStyle = { gridColumn: '1 / -1', padding: '9px 11px', border: '1px solid #b54c4c', borderRadius: '7px', background: '#472126', color: '#ffb6b6' }
 
 export default UsuariosBodegaModal

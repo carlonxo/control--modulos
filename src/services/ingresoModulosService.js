@@ -187,3 +187,11 @@ export async function crearModuloActivo({
     .select('*')
     .single()
 }
+
+export async function buscarModuloActivoPorSerie({ supabase, serie }) {
+  return supabase
+    .from('modulos')
+    .select('id, serie, linea, planta')
+    .eq('serie', String(serie || '').trim())
+    .maybeSingle()
+}

@@ -145,6 +145,7 @@ import {
   guardarHistorialModuloFinalizado,
 } from './services/finalizacionModulosService'
 import {
+  buscarModuloActivoPorSerie,
   buscarProtocoloAnteriorGarantia,
   buscarPruebaRecienteGarantiaPorSerie,
   crearModuloActivo,
@@ -1776,7 +1777,7 @@ async function crearModulo() {
     !tipoNuevo.trim() ||
     !proyectoNuevo.trim()
   ) {
-    alert('Debe completar serie, tipo y proyecto')
+    mostrarNotificacion('Debe completar serie, tipo y proyecto')
     return
   }
 
@@ -1786,6 +1787,31 @@ async function crearModulo() {
   const tipoIngreso = tipoNuevo.trim()
   const proyectoIngreso = proyectoNuevo.trim()
   const responsableIngreso = responsableNuevo.trim()
+  const {
+    data: moduloExistente,
+    error: errorModuloExistente,
+  } = await buscarModuloActivoPorSerie({
+    supabase,
+    serie: serieIngreso,
+  })
+
+  if (errorModuloExistente) {
+    mostrarNotificacion('No se pudo comprobar si el módulo ya existe: ' + errorModuloExistente.message)
+    setCreandoModulo(false)
+    return
+  }
+
+  if (moduloExistente) {
+    const plantaExistente = moduloExistente.planta
+      ? ` de ${obtenerNombrePlanta(moduloExistente.planta)}`
+      : ''
+    mostrarNotificacion(
+      `Este módulo ya existe en la línea ${etiquetaLinea(moduloExistente.linea)}${plantaExistente}`
+    )
+    setCreandoModulo(false)
+    return
+  }
+
   const {
     data: pruebaAnteriorGarantia,
     error: errorValidacionGarantia,
@@ -1851,7 +1877,25 @@ async function crearModulo() {
   })
 
   if (error) {
-    alert(error.message)
+    const serieDuplicada = error.code === '23505'
+      || String(error.message || '').includes('modulos_serie_unica')
+
+    if (serieDuplicada) {
+      const { data: existente } = await buscarModuloActivoPorSerie({
+        supabase,
+        serie: serieIngreso,
+      })
+      const plantaExistente = existente?.planta
+        ? ` de ${obtenerNombrePlanta(existente.planta)}`
+        : ''
+      mostrarNotificacion(
+        existente
+          ? `Este módulo ya existe en la línea ${etiquetaLinea(existente.linea)}${plantaExistente}`
+          : 'Este módulo ya existe en una línea de la planta'
+      )
+    } else {
+      mostrarNotificacion('No se pudo crear el módulo: ' + error.message)
+    }
     setCreandoModulo(false)
     return
   }
