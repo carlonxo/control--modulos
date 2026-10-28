@@ -148,6 +148,38 @@ export default {
         return responder({ ok: true, bloqueado: bloquear })
       }
 
+      if (cuerpo.accion === 'cambiar_password') {
+      const usuarioId = String(cuerpo.usuarioId || '')
+      const password = String(cuerpo.password || '')
+      if (!usuarioId) return responder({ error: 'Falta identificar al usuario' }, 400)
+      if (password.length < 8) {
+        return responder({ error: 'La nueva contraseña debe tener al menos 8 caracteres' }, 400)
+      }
+
+      const { error } = await admin.auth.admin.updateUserById(usuarioId, { password })
+      if (error) throw error
+        return responder({ ok: true })
+      }
+
+      if (cuerpo.accion === 'eliminar') {
+      const usuarioId = String(cuerpo.usuarioId || '')
+      if (!usuarioId) return responder({ error: 'Falta identificar al usuario' }, 400)
+      if (usuarioId === administradorId) {
+        return responder({ error: 'No puedes eliminar tu propia cuenta' }, 400)
+      }
+
+      const { error: errorEliminarAuth } = await admin.auth.admin.deleteUser(usuarioId)
+      if (errorEliminarAuth) throw errorEliminarAuth
+
+      const { error: errorEliminarPerfil } = await admin
+        .from('perfiles')
+        .delete()
+        .eq('id', usuarioId)
+      if (errorEliminarPerfil) throw errorEliminarPerfil
+
+        return responder({ ok: true })
+      }
+
       return responder({ error: 'Acción desconocida' }, 400)
     } catch (error) {
       console.error('administrar-usuarios', error)

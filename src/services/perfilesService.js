@@ -110,6 +110,22 @@ export async function cambiarEstadoUsuarioAdministrado({ supabase, usuarioId, bl
   })
 }
 
+export async function cambiarPasswordUsuarioAdministrado({ supabase, usuarioId, password }) {
+  return invocarAdministracionUsuarios({
+    supabase,
+    accion: 'cambiar_password',
+    payload: { usuarioId, password },
+  })
+}
+
+export async function eliminarUsuarioAdministrado({ supabase, usuarioId }) {
+  return invocarAdministracionUsuarios({
+    supabase,
+    accion: 'eliminar',
+    payload: { usuarioId },
+  })
+}
+
 async function invocarAdministracionUsuarios({ supabase, accion, payload = {} }) {
   const { data, error } = await supabase.functions.invoke('administrar-usuarios', {
     body: { accion, ...payload },

@@ -19,5 +19,7 @@ La verificación JWT debe permanecer habilitada. Supabase proporciona automátic
 3. Crea una cuenta de prueba con una contraseña temporal de al menos ocho caracteres.
 4. Cierra la sesión e inicia con la cuenta nueva.
 5. Bloquea la cuenta desde un administrador y comprueba que el acceso sea rechazado.
+6. Cambia la contraseña de una cuenta de prueba y confirma que puede ingresar con la nueva clave.
+7. Elimina la cuenta de prueba y confirma que ya no aparece ni puede iniciar sesión.
 
 Mientras la función aún no esté publicada, la lista conserva el modo anterior de solo lectura de `perfiles`, pero crear y bloquear cuentas no estarán disponibles.

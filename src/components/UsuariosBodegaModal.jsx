@@ -35,15 +35,23 @@ function UsuariosBodegaModal({
   usuarioActualId,
   cargando,
   guardando,
+  guardandoId,
   onGuardarCambios,
   onCrearUsuario,
   onCambiarEstado,
+  onCambiarPassword,
+  onEliminarUsuario,
   onCerrar,
 }) {
   const [ediciones, setEdiciones] = useState({})
   const [busqueda, setBusqueda] = useState('')
   const [mostrarCreacion, setMostrarCreacion] = useState(false)
   const [nuevoUsuario, setNuevoUsuario] = useState(usuarioInicial)
+  const [usuarioPassword, setUsuarioPassword] = useState(null)
+  const [nuevoPassword, setNuevoPassword] = useState('')
+  const [confirmarPassword, setConfirmarPassword] = useState('')
+  const [mostrarPassword, setMostrarPassword] = useState(false)
+  const [errorPassword, setErrorPassword] = useState('')
 
   const usuariosModificados = useMemo(() => usuarios
     .filter((usuario) => {
@@ -70,6 +78,34 @@ function UsuariosBodegaModal({
     if (creado) {
       setNuevoUsuario(usuarioInicial)
       setMostrarCreacion(false)
+    }
+  }
+
+  function abrirCambioPassword(usuario) {
+    setUsuarioPassword(usuario)
+    setNuevoPassword('')
+    setConfirmarPassword('')
+    setMostrarPassword(false)
+    setErrorPassword('')
+  }
+
+  async function guardarPassword(evento) {
+    evento.preventDefault()
+    if (nuevoPassword.length < 8) {
+      setErrorPassword('La contraseña debe tener al menos 8 caracteres.')
+      return
+    }
+    if (nuevoPassword !== confirmarPassword) {
+      setErrorPassword('Las contraseñas no coinciden.')
+      return
+    }
+
+    const guardado = await onCambiarPassword?.(usuarioPassword, nuevoPassword)
+    if (guardado) {
+      setUsuarioPassword(null)
+      setNuevoPassword('')
+      setConfirmarPassword('')
+      setErrorPassword('')
     }
   }
 
@@ -121,15 +157,67 @@ function UsuariosBodegaModal({
           </form>
         )}
 
+        {usuarioPassword && (
+          <form onSubmit={guardarPassword} style={formularioPasswordStyle}>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>Cambiar contraseña</h3>
+                <div style={{ color: '#a9bbc4', marginTop: '4px' }}>
+                  {usuarioPassword.nombre || 'Sin nombre'} · {usuarioPassword.email || 'Sin correo'}
+                </div>
+              </div>
+              <button type="button" onClick={() => setUsuarioPassword(null)} disabled={guardando} style={botonSecundario}>Cancelar</button>
+            </div>
+            <Campo etiqueta="Nueva contraseña">
+              <input
+                required
+                minLength={8}
+                type={mostrarPassword ? 'text' : 'password'}
+                value={nuevoPassword}
+                onChange={(evento) => {
+                  setNuevoPassword(evento.target.value)
+                  setErrorPassword('')
+                }}
+                autoComplete="new-password"
+                style={inputStyle}
+              />
+            </Campo>
+            <Campo etiqueta="Confirmar contraseña">
+              <input
+                required
+                minLength={8}
+                type={mostrarPassword ? 'text' : 'password'}
+                value={confirmarPassword}
+                onChange={(evento) => {
+                  setConfirmarPassword(evento.target.value)
+                  setErrorPassword('')
+                }}
+                autoComplete="new-password"
+                style={inputStyle}
+              />
+            </Campo>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', alignSelf: 'end', minHeight: '42px', color: '#c7d5dc', cursor: 'pointer' }}>
+              <input type="checkbox" checked={mostrarPassword} onChange={(evento) => setMostrarPassword(evento.target.checked)} />
+              Mostrar contraseña
+            </label>
+            {errorPassword && <div role="alert" style={errorPasswordStyle}>{errorPassword}</div>}
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="submit" disabled={guardando} style={botonAccion(guardando)}>
+                {guardando && guardandoId === usuarioPassword.id ? 'Actualizando contraseña...' : 'Guardar contraseña'}
+              </button>
+            </div>
+          </form>
+        )}
+
         {cargando ? (
           <p style={{ color: '#ccc' }}>Cargando usuarios...</p>
         ) : usuarios.length === 0 ? (
           <p style={{ color: '#ccc' }}>No hay usuarios registrados.</p>
         ) : (
           <div style={{ overflowX: 'auto', border: '1px solid #35505f', borderRadius: '10px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1050px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1260px' }}>
               <thead><tr style={{ background: '#132c39' }}>
-                <th style={thStyle}>Usuario</th><th style={thStyle}>Estado</th><th style={thStyle}>Rol</th><th style={thStyle}>Bodega</th><th style={thStyle}>Planta</th><th style={thStyle}>Último ingreso</th><th style={{ ...thStyle, textAlign: 'center' }}>Acceso</th>
+                <th style={thStyle}>Usuario</th><th style={thStyle}>Estado</th><th style={thStyle}>Rol</th><th style={thStyle}>Bodega</th><th style={thStyle}>Planta</th><th style={thStyle}>Último ingreso</th><th style={{ ...thStyle, textAlign: 'center' }}>Acciones</th>
               </tr></thead>
               <tbody>
                 {usuariosVisibles.map((usuario) => {
@@ -145,9 +233,26 @@ function UsuariosBodegaModal({
                       <td style={tdStyle}><Selector opciones={plantasDisponibles} value={edicion.planta_asignada || ''} disabled={guardando} onChange={(valor) => editarUsuario(usuario.id, 'planta_asignada', valor, setEdiciones)} /></td>
                       <td style={tdStyle}>{formatearFecha(usuario.ultimo_ingreso)}</td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <button type="button" disabled={guardando || esUsuarioActual} onClick={() => onCambiarEstado?.(usuario, !usuario.bloqueado)} title={esUsuarioActual ? 'No puedes bloquear tu propia cuenta' : ''} style={usuario.bloqueado ? botonReactivar : botonBloquear}>
-                          {usuario.bloqueado ? 'Reactivar' : 'Bloquear'}
-                        </button>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <button type="button" disabled={guardando || esUsuarioActual} onClick={() => onCambiarEstado?.(usuario, !usuario.bloqueado)} title={esUsuarioActual ? 'No puedes bloquear tu propia cuenta' : ''} style={usuario.bloqueado ? botonReactivar : botonBloquear}>
+                            {usuario.bloqueado ? 'Reactivar' : 'Bloquear'}
+                          </button>
+                          <button type="button" disabled={guardando} onClick={() => abrirCambioPassword(usuario)} style={botonPassword}>
+                            Contraseña
+                          </button>
+                          <button
+                            type="button"
+                            disabled={guardando || esUsuarioActual}
+                            onClick={async () => {
+                              const eliminado = await onEliminarUsuario?.(usuario)
+                              if (eliminado && usuarioPassword?.id === usuario.id) setUsuarioPassword(null)
+                            }}
+                            title={esUsuarioActual ? 'No puedes eliminar tu propia cuenta' : 'Eliminar usuario permanentemente'}
+                            style={botonEliminar(esUsuarioActual || guardando)}
+                          >
+                            Eliminar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -215,6 +320,7 @@ const toolbarStyle = { display: 'flex', flexWrap: 'wrap', gap: '10px', marginBot
 const inputStyle = { minWidth: 0, width: '100%', padding: '10px', borderRadius: '7px', border: '1px solid #506b78', background: '#0e171c', color: 'white', boxSizing: 'border-box' }
 const buscadorStyle = { ...inputStyle, flex: '1 1 260px', width: 'auto' }
 const formularioStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', padding: '16px', marginBottom: '16px', background: '#172a34', border: '1px solid #3a5a69', borderRadius: '10px' }
+const formularioPasswordStyle = { ...formularioStyle, background: '#13252f', borderColor: '#34758a' }
 const selectStyle = (disabled) => ({ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #506b78', background: '#17262e', color: 'white', opacity: disabled ? 0.6 : 1 })
 const thStyle = { padding: '10px', borderBottom: '1px solid #46606c', textAlign: 'left', whiteSpace: 'nowrap' }
 const tdStyle = { padding: '10px', borderBottom: '1px solid #2c414b', verticalAlign: 'middle' }
@@ -224,5 +330,9 @@ const botonPrimario = { ...baseBoton, border: '1px solid #168f88', background: '
 const botonAccion = (disabled) => ({ ...baseBoton, border: '1px solid #32954b', background: '#16722a', opacity: disabled ? 0.5 : 1, cursor: disabled ? 'default' : 'pointer' })
 const botonBloquear = { ...baseBoton, padding: '7px 11px', border: '1px solid #b65252', background: '#7f2929' }
 const botonReactivar = { ...baseBoton, padding: '7px 11px', border: '1px solid #32954b', background: '#176b2a' }
+const botonPassword = { ...baseBoton, padding: '7px 11px', border: '1px solid #3d83a5', background: '#15506d' }
+const botonSecundario = { ...baseBoton, padding: '7px 11px', border: '1px solid #657883', background: '#3d4b52' }
+const botonEliminar = (disabled) => ({ ...baseBoton, padding: '7px 11px', border: '1px solid #ef5350', background: '#8b2020', opacity: disabled ? 0.5 : 1, cursor: disabled ? 'default' : 'pointer' })
+const errorPasswordStyle = { gridColumn: '1 / -1', padding: '9px 11px', border: '1px solid #b54c4c', borderRadius: '7px', background: '#472126', color: '#ffb6b6' }
 
 export default UsuariosBodegaModal

@@ -189,7 +189,9 @@ import {
   cargarUsuariosBodega as cargarUsuariosBodegaSupabase,
   actualizarUsuarioAdministrado,
   cambiarEstadoUsuarioAdministrado,
+  cambiarPasswordUsuarioAdministrado,
   crearUsuarioAdministrado,
+  eliminarUsuarioAdministrado,
   obtenerNombrePerfilPorId,
 } from './services/perfilesService'
 import { cargarEventosAuditoria } from './services/auditoriaService'
@@ -2158,6 +2160,65 @@ async function cambiarEstadoUsuarioDesdePanel(usuario, bloquear) {
 
   await cargarUsuariosBodega()
   mostrarNotificacion(bloquear ? 'Acceso bloqueado correctamente' : 'Acceso reactivado correctamente')
+}
+
+async function cambiarPasswordUsuarioDesdePanel(usuario, password) {
+  if (!puedeAdministrarUsuariosBodega || !usuario?.id) return false
+  if (String(password || '').length < 8) {
+    mostrarNotificacion('La nueva contraseña debe tener al menos 8 caracteres')
+    return false
+  }
+
+  setGuardandoUsuariosBodega(true)
+  setGuardandoUsuarioBodegaId(usuario.id)
+  const { error } = await cambiarPasswordUsuarioAdministrado({
+    supabase,
+    usuarioId: usuario.id,
+    password,
+  })
+  setGuardandoUsuarioBodegaId(null)
+  setGuardandoUsuariosBodega(false)
+
+  if (error) {
+    mostrarNotificacion(`No se pudo cambiar la contraseña: ${error.message}`)
+    return false
+  }
+
+  mostrarNotificacion(`Contraseña actualizada para ${usuario.nombre || usuario.email || 'el usuario'}`)
+  return true
+}
+
+async function eliminarUsuarioDesdePanel(usuario) {
+  if (!puedeAdministrarUsuariosBodega || !usuario?.id) return false
+  if (usuario.id === session?.user?.id) {
+    mostrarNotificacion('No puedes eliminar tu propia cuenta')
+    return false
+  }
+
+  const nombreUsuario = usuario.nombre || usuario.email || 'este usuario'
+  const confirmado = window.confirm(
+    `¿Eliminar permanentemente a ${nombreUsuario}?\n\n` +
+    `La cuenta perderá el acceso inmediatamente. Esta acción no se puede deshacer.`
+  )
+  if (!confirmado) return false
+
+  setGuardandoUsuariosBodega(true)
+  setGuardandoUsuarioBodegaId(usuario.id)
+  const { error } = await eliminarUsuarioAdministrado({
+    supabase,
+    usuarioId: usuario.id,
+  })
+  setGuardandoUsuarioBodegaId(null)
+  setGuardandoUsuariosBodega(false)
+
+  if (error) {
+    mostrarNotificacion(`No se pudo eliminar el usuario: ${error.message}`)
+    return false
+  }
+
+  await cargarUsuariosBodega()
+  mostrarNotificacion(`Usuario eliminado: ${nombreUsuario}`)
+  return true
 }
 
 function prepararRegistroProtocoloMensual(registro, origen, precios = preciosMateriales) {
@@ -8706,6 +8767,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarCambios={guardarAsignacionesUsuarios}
     onCrearUsuario={crearUsuarioDesdePanel}
     onCambiarEstado={cambiarEstadoUsuarioDesdePanel}
+    onCambiarPassword={cambiarPasswordUsuarioDesdePanel}
+    onEliminarUsuario={eliminarUsuarioDesdePanel}
     onCerrar={() => setMostrarUsuariosBodega(false)}
   />
 )}
