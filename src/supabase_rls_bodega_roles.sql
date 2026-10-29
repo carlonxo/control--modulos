@@ -94,7 +94,7 @@ create policy bodega_inventarios_select_roles
 on public.bodega_inventarios
 for select
 to authenticated
-using (public.usuario_tiene_rol(array['admin', 'operador', 'analista', 'bodega', 'electrico']));
+using (public.usuario_tiene_rol(array['admin', 'operador', 'analista', 'bodega', 'electrico', 'visor']));
 
 create policy bodega_inventarios_insert_admin
 on public.bodega_inventarios
@@ -121,7 +121,7 @@ create policy bodega_inventario_items_select_roles
 on public.bodega_inventario_items
 for select
 to authenticated
-using (public.usuario_tiene_rol(array['admin', 'operador', 'analista', 'bodega', 'electrico']));
+using (public.usuario_tiene_rol(array['admin', 'operador', 'analista', 'bodega', 'electrico', 'visor']));
 
 create policy bodega_inventario_items_insert_roles
 on public.bodega_inventario_items

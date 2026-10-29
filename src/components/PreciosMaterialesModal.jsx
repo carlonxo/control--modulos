@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 function PreciosMaterialesModal({
   puedeEditar,
+  puedeVerCompra = puedeEditar,
   cargando,
   guardando,
   secciones,
@@ -23,12 +24,13 @@ function PreciosMaterialesModal({
 }) {
   const [materialEnEdicion, setMaterialEnEdicion] = useState(null)
   const [nombreMaterialEditado, setNombreMaterialEditado] = useState('')
-  const puedeVerCompra = puedeEditar
   const claveEdicion = (material, tipo) => `${tipo}::${material}`
   const estaEditando = (material, tipo) => precioEnEdicion === claveEdicion(material, tipo)
   const columnasPrecio = puedeEditar
     ? (puedeVerCompra ? '56px 92px minmax(180px, 320px) 96px 96px 30px' : '56px 92px minmax(180px, 320px) 96px 30px')
-    : '56px 92px minmax(180px, 320px) 112px'
+    : (puedeVerCompra
+        ? '56px 92px minmax(180px, 320px) 104px 104px'
+        : '56px 92px minmax(180px, 320px) 112px')
   const precioWrapStyle = {
     display: 'grid',
     gridTemplateColumns: '16px max-content',
@@ -321,7 +323,7 @@ function PreciosMaterialesModal({
                         <div>
                           <div style={precioWrapStyle}>
                             <span style={{ color: '#ff1744', fontSize: '20px', lineHeight: 1, fontWeight: 900 }}>▼</span>
-                            {estaEditando(item.material, 'compra') ? (
+                            {puedeEditar && estaEditando(item.material, 'compra') ? (
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -338,9 +340,9 @@ function PreciosMaterialesModal({
                               />
                             ) : (
                               <span
-                                onDoubleClick={() => onCambiarEdicion(claveEdicion(item.material, 'compra'))}
-                                style={valorPrecioStyle(true)}
-                                title="Doble click para editar precio compra"
+                                onDoubleClick={() => puedeEditar && onCambiarEdicion(claveEdicion(item.material, 'compra'))}
+                                style={valorPrecioStyle(puedeEditar)}
+                                title={puedeEditar ? 'Doble click para editar precio compra' : 'Precio compra'}
                               >
                                 {formatearPrecio(preciosCompra[item.material]) || '$ 0'}
                               </span>

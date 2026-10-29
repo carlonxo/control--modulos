@@ -39,7 +39,7 @@ begin
   from public.perfiles perfil
   where perfil.id = v_usuario_id;
 
-  if coalesce(v_rol, '') not in ('admin', 'operador', 'analista', 'bodega', 'electrico') then
+  if coalesce(v_rol, '') not in ('admin', 'operador', 'analista', 'bodega', 'electrico', 'visor') then
     raise exception using errcode = '42501', message = 'Tu rol no tiene permiso para consultar inventarios de bodega.';
   end if;
 

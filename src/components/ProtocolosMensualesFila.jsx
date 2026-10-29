@@ -3,6 +3,7 @@ function ProtocolosMensualesFila({
   claveRegistro,
   estaDuplicado,
   puedeEliminarProtocolosMensuales,
+  puedeEditarMetadatos = true,
   BotonValorCobro,
   formatearFecha,
   formatearPrecio,
@@ -107,7 +108,7 @@ function ProtocolosMensualesFila({
       </td>
       <td style={{ padding: '8px', border: '1px solid #444' }}>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          {idOtEnEdicion === claveRegistro ? (
+          {puedeEditarMetadatos && idOtEnEdicion === claveRegistro ? (
             <div style={{ display: 'grid', gap: '4px' }}>
               {idsOtEnEdicion.map((valorOt, indiceOt) => (
                 <input
@@ -160,49 +161,55 @@ function ProtocolosMensualesFila({
               )}
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              if (idOtEnEdicion === claveRegistro) {
-                onGuardarIdOt(registro, unirIdsOt(idsOtEnEdicion))
-              } else {
-                setIdsOtEnEdicion(separarIdsOt(registro.idOt))
-                setIdOtEnEdicion(claveRegistro)
-              }
-            }}
-            title={idOtEnEdicion === claveRegistro ? 'Guardar ID OT' : 'Editar ID OT'}
-            style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '50%',
-              border: idOtEnEdicion === claveRegistro ? '1px solid #66bb6a' : '1px solid #555',
-              background: idOtEnEdicion === claveRegistro ? '#2e7d32' : 'transparent',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-          >
-            {idOtEnEdicion === claveRegistro ? '\u2713' : '\u270F\uFE0F'}
-          </button>
-          <button
-            type="button"
-            onClick={() => onGuardarNotaAlerta(registro)}
-            title={tieneNotaAlerta ? registro.notaAlertaMensual : 'Agregar alerta'}
-            style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '50%',
-              border: tieneNotaAlerta ? '1px solid #ffb74d' : '1px solid #555',
-              background: tieneNotaAlerta ? '#4e342e' : 'transparent',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '16px',
-              opacity: tieneNotaAlerta ? 1 : 0.35,
-              filter: tieneNotaAlerta ? 'none' : 'grayscale(1)',
-            }}
-          >
-            {'\u{1F6A8}'}
-          </button>
+          {puedeEditarMetadatos && (
+            <button
+              type="button"
+              onClick={() => {
+                if (idOtEnEdicion === claveRegistro) {
+                  onGuardarIdOt(registro, unirIdsOt(idsOtEnEdicion))
+                } else {
+                  setIdsOtEnEdicion(separarIdsOt(registro.idOt))
+                  setIdOtEnEdicion(claveRegistro)
+                }
+              }}
+              title={idOtEnEdicion === claveRegistro ? 'Guardar ID OT' : 'Editar ID OT'}
+              style={{
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                border: idOtEnEdicion === claveRegistro ? '1px solid #66bb6a' : '1px solid #555',
+                background: idOtEnEdicion === claveRegistro ? '#2e7d32' : 'transparent',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              {idOtEnEdicion === claveRegistro ? '\u2713' : '\u270F\uFE0F'}
+            </button>
+          )}
+          {puedeEditarMetadatos ? (
+            <button
+              type="button"
+              onClick={() => onGuardarNotaAlerta(registro)}
+              title={tieneNotaAlerta ? registro.notaAlertaMensual : 'Agregar alerta'}
+              style={{
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                border: tieneNotaAlerta ? '1px solid #ffb74d' : '1px solid #555',
+                background: tieneNotaAlerta ? '#4e342e' : 'transparent',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '16px',
+                opacity: tieneNotaAlerta ? 1 : 0.35,
+                filter: tieneNotaAlerta ? 'none' : 'grayscale(1)',
+              }}
+            >
+              {'\u{1F6A8}'}
+            </button>
+          ) : tieneNotaAlerta ? (
+            <span title={registro.notaAlertaMensual} style={{ fontSize: '16px' }}>{'\u{1F6A8}'}</span>
+          ) : null}
         </div>
       </td>
     </tr>

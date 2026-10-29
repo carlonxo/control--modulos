@@ -24,6 +24,8 @@ function BalanceMaterialesModal({
   onCambiarFecha,
   onActualizar,
   onActualizarConfigMaterial,
+  puedeVerPorGrupo = true,
+  puedeEditarConfiguracion = true,
   onCerrar,
   onClickFondo,
 }) {
@@ -313,25 +315,27 @@ function BalanceMaterialesModal({
         >
           Por material ({alertasCriticas} alertas)
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMostrarPorGrupo((actual) => !actual)
-            setMostrarReutilizados(false)
-            setMostrarPorSolicitante(false)
-          }}
-          style={{
-            padding: '10px 14px',
-            borderRadius: '10px',
-            background: mostrarPorGrupo ? '#4a148c' : '#263238',
-            border: '1px solid #ce93d8',
-            color: 'white',
-            fontWeight: 800,
-            cursor: 'pointer',
-          }}
-        >
-          Por grupo ({alertasGrupo} alertas)
-        </button>
+        {puedeVerPorGrupo && (
+          <button
+            type="button"
+            onClick={() => {
+              setMostrarPorGrupo((actual) => !actual)
+              setMostrarReutilizados(false)
+              setMostrarPorSolicitante(false)
+            }}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              background: mostrarPorGrupo ? '#4a148c' : '#263238',
+              border: '1px solid #ce93d8',
+              color: 'white',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            Por grupo ({alertasGrupo} alertas)
+          </button>
+        )}
         <div style={{ padding: '10px 14px', borderRadius: '10px', background: '#1b5e20', border: '1px solid #66bb6a', fontWeight: 800, color: mostrarReutilizados ? 'white' : colorBalanceTotal }}>
           Balance: {formatearPrecio(indicadorBalance)}
         </div>
@@ -353,7 +357,7 @@ function BalanceMaterialesModal({
             onCambiarSolicitantes={setSolicitantesGrupo}
             onCambiarLineas={setLineasGrupo}
             configMateriales={configMateriales}
-            onActualizarConfigMaterial={onActualizarConfigMaterial}
+            onActualizarConfigMaterial={puedeEditarConfiguracion ? onActualizarConfigMaterial : undefined}
             formatearPrecio={formatearPrecio}
           />
         ) : mostrarPorSolicitante ? (
@@ -363,7 +367,7 @@ function BalanceMaterialesModal({
             materialSeleccionado={materialSolicitanteFiltro}
             onCambiarMaterial={setMaterialSolicitanteFiltro}
             configMateriales={configMateriales}
-            onActualizarConfigMaterial={onActualizarConfigMaterial}
+            onActualizarConfigMaterial={puedeEditarConfiguracion ? onActualizarConfigMaterial : undefined}
             formatearPrecio={formatearPrecio}
           />
         ) : mostrarReutilizados ? (
@@ -379,9 +383,9 @@ function BalanceMaterialesModal({
             catalogoPrecios={catalogoPrecios}
             tituloVacio="No hay materiales cobrados en el rango seleccionado."
             formatearPrecio={formatearPrecio}
-            onCambiarNombreMaterial={(clave, valor) => {
-              onActualizarConfigMaterial(clave, { nombreVisible: valor })
-            }}
+            onCambiarNombreMaterial={puedeEditarConfiguracion
+              ? (clave, valor) => onActualizarConfigMaterial(clave, { nombreVisible: valor })
+              : undefined}
           />
         )
       )}
@@ -613,21 +617,23 @@ function TablaTrazabilidadMateriales({
                 <td style={{ ...tdStyle, color, fontWeight: 900 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     <span>{etiqueta}</span>
-                    <button
-                      type="button"
-                      onClick={() => onActualizarConfigMaterial?.(
-                        claveConfigAlertaMaterial(fila),
-                        { alertaDesactivada: !alertaDesactivada }
-                      )}
-                      title={alertaDesactivada ? 'Activar alerta para este material' : 'Desactivar alerta para este material'}
-                      style={{
-                        ...botonIconoAlerta,
-                        borderColor: alertaDesactivada ? '#777' : '#ff8a80',
-                        color: alertaDesactivada ? '#ccc' : '#ffccbc',
-                      }}
-                    >
-                      {alertaDesactivada ? 'ON' : 'OFF'}
-                    </button>
+                    {onActualizarConfigMaterial && (
+                      <button
+                        type="button"
+                        onClick={() => onActualizarConfigMaterial(
+                          claveConfigAlertaMaterial(fila),
+                          { alertaDesactivada: !alertaDesactivada }
+                        )}
+                        title={alertaDesactivada ? 'Activar alerta para este material' : 'Desactivar alerta para este material'}
+                        style={{
+                          ...botonIconoAlerta,
+                          borderColor: alertaDesactivada ? '#777' : '#ff8a80',
+                          color: alertaDesactivada ? '#ccc' : '#ffccbc',
+                        }}
+                      >
+                        {alertaDesactivada ? 'ON' : 'OFF'}
+                      </button>
+                    )}
                   </div>
                 </td>
                 <td style={tdStyle}>{fila.material}</td>
@@ -996,6 +1002,10 @@ function SelectorMaterialBalance({
   opcionesCatalogo,
   onCambiarNombreMaterial,
 }) {
+  if (!onCambiarNombreMaterial) {
+    return <span>{fila.materialVisible || fila.material || '-'}</span>
+  }
+
   const materialCatalogo = opcionesCatalogo.find((opcion) => (
     normalizarTextoBalance(opcion) === normalizarTextoBalance(fila.materialVisible) ||
     normalizarTextoBalanceFlexible(opcion) === normalizarTextoBalanceFlexible(fila.materialVisible)

@@ -7,6 +7,7 @@ function ProtocolosMensualesTabla({
   encabezados,
   conteoClaves,
   puedeEliminarProtocolosMensuales,
+  puedeEditarMetadatos = true,
   mostrarSoloIdOtPendiente,
   onAlternarIdOtPendiente,
   mostrarSoloConAlertaMensual,
@@ -131,6 +132,7 @@ function ProtocolosMensualesTabla({
                 claveRegistro={claveRegistro}
                 estaDuplicado={estaDuplicado}
                 puedeEliminarProtocolosMensuales={puedeEliminarProtocolosMensuales}
+                puedeEditarMetadatos={puedeEditarMetadatos}
                 BotonValorCobro={BotonValorCobro}
                 formatearFecha={formatearFecha}
                 formatearPrecio={formatearPrecio}

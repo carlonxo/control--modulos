@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 let contadorFilasEdicionPedido = 0
 
@@ -35,6 +36,7 @@ function BodegaModal({
   solicitantes = [],
   inventarioSeleccionadoId,
   cargandoInventarios,
+  errorInventarios = '',
   leyendo,
   guardandoPedido,
   guardandoDevolucion,
@@ -608,7 +610,7 @@ function BodegaModal({
         />
       )}
 
-      {alertaBodegaSeleccionada?.tipo_ingreso === 'traspaso_bodega' && (
+      {alertaBodegaSeleccionada?.tipo_ingreso === 'traspaso_bodega' && createPortal(
         <DetalleTraspasoBodega
           traspaso={alertaBodegaSeleccionada}
           recepcionando={recepcionandoTraspasoBodega}
@@ -619,10 +621,11 @@ function BodegaModal({
             onActualizarAlertasBodega?.()
           }}
           onCerrar={() => setAlertaBodegaSeleccionada(null)}
-        />
+        />,
+        document.body
       )}
 
-      {alertaBodegaSeleccionada && alertaBodegaSeleccionada.tipo_ingreso !== 'traspaso_bodega' && (
+      {alertaBodegaSeleccionada && alertaBodegaSeleccionada.tipo_ingreso !== 'traspaso_bodega' && createPortal(
         <DetalleSolicitudBodega
           alerta={alertaBodegaSeleccionada}
           entregando={entregandoSolicitudBodega}
@@ -679,21 +682,24 @@ function BodegaModal({
             onActualizarAlertasBodega?.()
           }}
           onCerrar={() => setAlertaBodegaSeleccionada(null)}
-        />
+        />,
+        document.body
       )}
 
-      {recepcionSeleccionada && (
+      {recepcionSeleccionada && createPortal(
         <DetalleRecepcionBodega
           recepcion={recepcionSeleccionada}
           onCerrar={() => setRecepcionSeleccionada(null)}
-        />
+        />,
+        document.body
       )}
 
-      {despachoSeleccionado && (
+      {despachoSeleccionado && createPortal(
         <DetalleDespachoBodega
           despacho={despachoSeleccionado}
           onCerrar={() => setDespachoSeleccionado(null)}
-        />
+        />,
+        document.body
       )}
 
       {puedeVerHistorialVales ? (
@@ -759,6 +765,11 @@ function BodegaModal({
 
       {cargandoInventarios ? (
         <p style={{ color: '#ccc' }}>Cargando inventarios guardados...</p>
+      ) : errorInventarios ? (
+        <div style={{ padding: '14px 16px', borderRadius: '9px', border: '1px solid #ef5350', background: '#3b1517', color: '#ffcdd2' }}>
+          <strong>No fue posible consultar el inventario.</strong>
+          <div style={{ marginTop: '5px' }}>{errorInventarios}</div>
+        </div>
       ) : inventarios.length === 0 ? (
         <p style={{ color: '#ccc' }}>
           Aún no hay inventarios guardados. Un admin debe adjuntar el Excel de bodega para cargarlo.
@@ -4621,9 +4632,10 @@ const modalDetalleBodegaOverlayStyle = {
 
 const modalDetalleBodegaStyle = {
   width: 'min(980px, 100%)',
-  maxHeight: '86vh',
+  maxHeight: 'calc(100dvh - 36px)',
   overflowY: 'auto',
   padding: '18px',
+  boxSizing: 'border-box',
   border: '1px solid #888',
   borderRadius: '12px',
   background: '#202020',

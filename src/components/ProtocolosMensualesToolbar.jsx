@@ -9,6 +9,7 @@ function ProtocolosMensualesToolbar({
   cargando,
   onCerrar,
   onIngresoManual,
+  puedeIngresarManual = true,
   onCambiarRango,
   onCambiarFecha,
   onActualizar,
@@ -35,21 +36,23 @@ function ProtocolosMensualesToolbar({
           >
             Cerrar
           </button>
-          <button
-            type="button"
-            onClick={onIngresoManual}
-            style={{
-              padding: '9px 14px',
-              borderRadius: '8px',
-              border: '1px solid #66bb6a',
-              background: '#1b5e20',
-              color: 'white',
-              cursor: 'pointer',
-              fontWeight: 700,
-            }}
-          >
-            Ingreso manual
-          </button>
+          {puedeIngresarManual && (
+            <button
+              type="button"
+              onClick={onIngresoManual}
+              style={{
+                padding: '9px 14px',
+                borderRadius: '8px',
+                border: '1px solid #66bb6a',
+                background: '#1b5e20',
+                color: 'white',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              Ingreso manual
+            </button>
+          )}
         </div>
       </div>
 

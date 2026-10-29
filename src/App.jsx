@@ -895,6 +895,7 @@ const [archivoInventarioBodega, setArchivoInventarioBodega] = useState(null)
 const [inventariosBodega, setInventariosBodega] = useState([])
 const [inventarioBodegaSeleccionadoId, setInventarioBodegaSeleccionadoId] = useState('')
 const [cargandoInventariosBodega, setCargandoInventariosBodega] = useState(false)
+const [errorInventariosBodega, setErrorInventariosBodega] = useState('')
 const [leyendoInventarioBodega, setLeyendoInventarioBodega] = useState(false)
 const [solicitudMaterialBodegaInicial, setSolicitudMaterialBodegaInicial] = useState(null)
 const [seccionBodegaInicial, setSeccionBodegaInicial] = useState(null)
@@ -966,13 +967,16 @@ const puedeEditarDatosModulo = puedeEditarDatosProtocolo
 const recibeAvisosPrueba = tienePermiso(perfil?.rol, 'recibirAvisosPrueba')
 const puedeDescargarProtocolosDiarios = tienePermiso(perfil?.rol, 'descargarProtocolosDiarios')
 const puedeVerPreciosMateriales = tienePermiso(perfil?.rol, 'verPreciosMateriales')
+const puedeVerPreciosCompraMateriales = tienePermiso(perfil?.rol, 'verPreciosCompraMateriales')
 const puedeEditarPreciosMateriales = tienePermiso(perfil?.rol, 'editarPreciosMateriales')
 const puedeVerProtocolosMensuales = tienePermiso(perfil?.rol, 'verProtocolosMensuales')
+const puedeEditarProtocolosMensuales = tienePermiso(perfil?.rol, 'editarProtocolosMensuales')
 const puedeVerBalanceMateriales = tienePermiso(perfil?.rol, 'verBalanceMateriales')
+const puedeEditarConfigBalanceMateriales = tienePermiso(perfil?.rol, 'editarConfigBalanceMateriales')
 const puedeVerBalanceMantencion = tienePermiso(perfil?.rol, 'verBalanceMantencion')
 const puedeVerValesBodega = tienePermiso(perfil?.rol, 'verValesBodega')
 const puedeVerBodega = tienePermiso(perfil?.rol, 'verBodega')
-const puedeVerProyeccionMateriales = puedeVerBodega && perfil?.rol !== 'electrico'
+const puedeVerProyeccionMateriales = tienePermiso(perfil?.rol, 'verProyeccionMateriales')
 const puedeExportarInventarioBodega = tienePermiso(perfil?.rol, 'exportarInventarioBodega')
 const puedeAdministrarBodega = tienePermiso(perfil?.rol, 'administrarBodega')
 const puedeVerPedidosBodegaHoy = tienePermiso(perfil?.rol, 'verPedidosBodegaHoy')
@@ -3489,8 +3493,9 @@ function cargarInventariosBodegaLocalesRespaldo() {
 }
 
 async function cargarInventariosBodega(preferido = null) {
-  if (!puedeVerBodega) return []
+  if (!puedeVerBodega && !puedeVerProyeccionMateriales) return []
 
+  setErrorInventariosBodega('')
   setCargandoInventariosBodega(true)
   const { inventarios, error } = await cargarInventariosBodegaSupabase({
     supabase,
@@ -3499,7 +3504,9 @@ async function cargarInventariosBodega(preferido = null) {
   setCargandoInventariosBodega(false)
 
   if (error) {
-    mostrarNotificacion('No se pudieron cargar los inventarios de bodega: ' + error.message)
+    const mensajeError = 'No se pudieron cargar los inventarios de bodega: ' + error.message
+    setErrorInventariosBodega(mensajeError)
+    mostrarNotificacion(mensajeError)
     cargarInventariosBodegaLocalesRespaldo()
     return []
   }
@@ -4877,7 +4884,7 @@ function fechaInicialProtocoloManual() {
 }
 
 function abrirIngresoManualProtocolo() {
-  if (!puedeVerProtocolosMensualesPlanta) return
+  if (!puedeVerProtocolosMensualesPlanta || !puedeEditarProtocolosMensuales) return
 
   const fecha = fechaInicialProtocoloManual()
   const moduloManual = crearModuloManualProtocolo({
@@ -4899,7 +4906,7 @@ function abrirIngresoManualProtocolo() {
 }
 
 async function guardarIdOtProtocoloMensual(registro, valor) {
-  if (!puedeVerProtocolosMensualesPlanta || !registro?.id) return
+  if (!puedeVerProtocolosMensualesPlanta || !puedeEditarProtocolosMensuales || !registro?.id) return
 
   const valorIdOt = String(valor ?? '').trim()
 
@@ -4954,7 +4961,7 @@ async function guardarIdOtProtocoloMensual(registro, valor) {
 }
 
 async function guardarNotaAlertaProtocoloMensual(registro) {
-  if (!puedeVerProtocolosMensualesPlanta || !registro?.id) return
+  if (!puedeVerProtocolosMensualesPlanta || !puedeEditarProtocolosMensuales || !registro?.id) return
 
   const textoActual = registro.notaAlertaMensual || registro.protocolo_entrega?.nota_alerta_mensual || ''
   const nota = window.prompt('Ingrese la nota de alerta del protocolo:', textoActual)
@@ -6291,7 +6298,7 @@ async function guardarProtocoloEntrega(protocolo) {
   if (!moduloSeleccionado?.id) return
 
   if (protocoloManualMensual) {
-    if (!puedeVerProtocolosMensualesPlanta) return
+    if (!puedeVerProtocolosMensualesPlanta || !puedeEditarProtocolosMensuales) return
 
     const fechaProtocolo = protocolo.fecha || new Date().toISOString().slice(0, 10)
     const protocoloNormalizado = {
@@ -8419,6 +8426,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       cargando={cargandoProtocolosMensuales}
       onCerrar={() => setMostrarProtocolosMensuales(false)}
       onIngresoManual={abrirIngresoManualProtocolo}
+      puedeIngresarManual={puedeEditarProtocolosMensuales}
       onCambiarRango={(nuevoRango) => {
         setRangoProtocolosMensuales(nuevoRango)
         setFechaProtocolosMensuales(obtenerValorInicialRangoProtocolo(nuevoRango))
@@ -8436,6 +8444,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       encabezados={encabezadosProtocolosMensuales}
       conteoClaves={conteoClavesProtocolos}
       puedeEliminarProtocolosMensuales={puedeEliminarProtocolosMensuales}
+      puedeEditarMetadatos={puedeEditarProtocolosMensuales}
       mostrarSoloIdOtPendiente={mostrarSoloIdOtPendiente}
       onAlternarIdOtPendiente={() => setMostrarSoloIdOtPendiente((actual) => !actual)}
       mostrarSoloConAlertaMensual={mostrarSoloConAlertaMensual}
@@ -8489,6 +8498,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onCambiarFecha={setFechaBalanceMateriales}
     onActualizar={() => cargarBalanceMateriales(fechaBalanceMateriales, rangoBalanceMateriales)}
     onActualizarConfigMaterial={actualizarConfigBalanceMaterial}
+    puedeVerPorGrupo={perfil?.rol !== 'visor'}
+    puedeEditarConfiguracion={puedeEditarConfigBalanceMateriales}
     onCerrar={() => setMostrarBalanceMateriales(false)}
     onClickFondo={cerrarPanelesFlotantes}
   />
@@ -8582,6 +8593,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     solicitantes={solicitantesValeBodega}
     inventarioSeleccionadoId={inventarioBodegaSeleccionadoId}
     cargandoInventarios={cargandoInventariosBodega}
+    errorInventarios={errorInventariosBodega}
     leyendo={leyendoInventarioBodega}
     guardandoPedido={guardandoPedidoBodega}
     guardandoDevolucion={guardandoDevolucionBodega}
@@ -8697,6 +8709,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 {mostrarPreciosMateriales && puedeVerPreciosMaterialesPlanta && (
   <PreciosMaterialesModal
     puedeEditar={puedeEditarPreciosMateriales}
+    puedeVerCompra={puedeVerPreciosCompraMateriales}
     cargando={cargandoPreciosMateriales}
     guardando={guardandoPreciosMateriales}
     secciones={seccionesCatalogoPreciosCompleto}

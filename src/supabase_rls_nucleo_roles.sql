@@ -102,7 +102,7 @@ using (public.usuario_tiene_rol(array['admin', 'operador', 'analista']));
 -- CATÁLOGO DE PRECIOS
 create policy material_precios_select_roles
 on public.material_precios for select to authenticated
-using (public.usuario_tiene_rol(array['admin', 'operador', 'analista']));
+using (public.usuario_tiene_rol(array['admin', 'operador', 'analista', 'visor']));
 
 create policy material_precios_insert_roles
 on public.material_precios for insert to authenticated
