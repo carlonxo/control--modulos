@@ -291,18 +291,36 @@ function BodegaModal({
       .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'))
   ), [solicitantes])
 
+  const codigosBarraPorMaterial = useMemo(() => {
+    const mapa = new Map()
+
+    codigosBarraBodega.forEach((asociacion) => {
+      const codigoBodega = normalizarBusqueda(asociacion.codigoBodega)
+      const codigoBarra = normalizarBusqueda(asociacion.codigoBarra)
+      if (!codigoBodega || !codigoBarra) return
+      const codigosActuales = mapa.get(codigoBodega) || []
+      codigosActuales.push(codigoBarra)
+      mapa.set(codigoBodega, codigosActuales)
+    })
+
+    return mapa
+  }, [codigosBarraBodega])
+
   const itemsFiltrados = useMemo(() => {
     const texto = normalizarBusqueda(busqueda)
     return materialesInventario.filter((item) => {
       if (ocultarSinStock && Number(item.saldoFinal || 0) <= 0) return false
       if (!texto) return true
+      const codigoBodega = normalizarBusqueda(item.codigo)
+      const codigosBarraAsociados = codigosBarraPorMaterial.get(codigoBodega) || []
       return (
-        normalizarBusqueda(item.codigo).includes(texto) ||
+        codigoBodega.includes(texto) ||
+        codigosBarraAsociados.some((codigoBarra) => codigoBarra.includes(texto)) ||
         normalizarBusqueda(item.descripcion).includes(texto) ||
         normalizarBusqueda(item.unidad).includes(texto)
       )
     })
-  }, [busqueda, materialesInventario, ocultarSinStock])
+  }, [busqueda, codigosBarraPorMaterial, materialesInventario, ocultarSinStock])
 
   function cerrarPanelesResumenBodega() {
     if (mostrarPedidosBodegaHoy) onTogglePedidosBodegaHoy?.()
@@ -783,7 +801,7 @@ function BodegaModal({
                 type="text"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar por código, descripción o unidad"
+                placeholder="Buscar por código, código de barra, descripción o unidad"
                 style={inputStyle}
               />
             </label>
