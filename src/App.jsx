@@ -823,6 +823,7 @@ const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(fal
 const [mostrarResumenGerencial, setMostrarResumenGerencial] = useState(false)
 const [anioResumenGerencial, setAnioResumenGerencial] = useState(String(new Date().getFullYear()))
 const [registrosResumenGerencial, setRegistrosResumenGerencial] = useState([])
+const [materialesResumenGerencial, setMaterialesResumenGerencial] = useState([])
 const [cargandoResumenGerencial, setCargandoResumenGerencial] = useState(false)
 const [errorResumenGerencial, setErrorResumenGerencial] = useState('')
 const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
@@ -2456,13 +2457,28 @@ async function cargarResumenGerencial(anio = anioResumenGerencial) {
   if (!puedeVerResumenGerencial || !anio) return
   setCargandoResumenGerencial(true)
   setErrorResumenGerencial('')
-  const { registros, error } = await obtenerRegistrosProtocolosPorRango(String(anio), 'anio')
+  const [resultadoProtocolos, vales, equivalenciasActuales] = await Promise.all([
+    obtenerRegistrosProtocolosPorRango(String(anio), 'anio'),
+    cargarValesBodegaPorRango(String(anio), 'anio'),
+    cargarEquivalenciasMateriales(),
+  ])
+  const { registros, error } = resultadoProtocolos
   setCargandoResumenGerencial(false)
   if (error) {
     setErrorResumenGerencial('No se pudo preparar el consolidado: ' + error.message)
+    setRegistrosResumenGerencial([])
+    setMaterialesResumenGerencial([])
     return
   }
   setRegistrosResumenGerencial(registros)
+  setMaterialesResumenGerencial(compilarBalanceMateriales(registros, vales, {
+    configMateriales: configBalanceMateriales,
+    catalogoPreciosProtocolo: catalogoPreciosParaBalance,
+    equivalenciasPrecioProtocolo,
+    equivalenciasValeBodega,
+    equivalenciasMateriales: equivalenciasActuales,
+    normalizarTextoComparacion,
+  }))
 }
 
 async function abrirResumenGerencial() {
@@ -8473,6 +8489,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 {mostrarResumenGerencial && puedeVerResumenGerencial && (
   <ResumenGerencialModal
     registros={registrosResumenGerencial}
+    materiales={materialesResumenGerencial}
+    usuarioId={session?.user?.id || perfil?.email || ''}
     anio={anioResumenGerencial}
     cargando={cargandoResumenGerencial}
     error={errorResumenGerencial}
