@@ -1,23 +1,34 @@
 import { prepararLineaParaIngresoModulo } from './ingresoModulosService'
+import {
+  filtrarConsultaPorSerieEquivalente,
+  filtrarRegistrosPorSerieEquivalente,
+} from '../utils/series'
 
 export async function buscarUltimoModuloFinalizadoPorSerie({ supabase, serie, planta = 'planta bayona' }) {
-  return supabase
+  const consulta = supabase
     .from('historial_modulos')
     .select('*')
-    .eq('serie', serie)
     .eq('planta', planta)
     .order('fecha_salida', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+    .limit(25)
+  const { data, error } = await filtrarConsultaPorSerieEquivalente(consulta, serie)
+  return {
+    data: filtrarRegistrosPorSerieEquivalente(data, serie)[0] || null,
+    error,
+  }
 }
 
 export async function buscarModuloActivoPorSerie({ supabase, serie, planta = 'planta bayona' }) {
-  return supabase
+  const consulta = supabase
     .from('modulos')
-    .select('id')
-    .eq('serie', serie)
+    .select('id, serie')
     .eq('planta', planta)
-    .maybeSingle()
+    .limit(25)
+  const { data, error } = await filtrarConsultaPorSerieEquivalente(consulta, serie)
+  return {
+    data: filtrarRegistrosPorSerieEquivalente(data, serie)[0] || null,
+    error,
+  }
 }
 
 export async function reintegrarModuloDesdeHistorial({

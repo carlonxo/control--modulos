@@ -80,15 +80,35 @@ export async function corregirInventarioBodega({
   supabase,
   itemId,
   nuevoSaldo,
+  nuevoCodigo,
+  nuevaDescripcion,
   motivo,
 }) {
-  const { data, error } = await supabase.rpc('corregir_inventario_bodega', {
+  const { data, error } = await supabase.rpc('corregir_item_inventario_bodega', {
     p_item_id: itemId,
     p_nuevo_saldo: Number(nuevoSaldo),
+    p_nuevo_codigo: String(nuevoCodigo || '').trim(),
+    p_nueva_descripcion: String(nuevaDescripcion || '').trim(),
     p_motivo: String(motivo || '').trim(),
   })
 
   return { data, error }
+}
+
+export async function cargarHistorialCorreccionesInventarioBodega({
+  supabase,
+  bodega,
+  limite = 200,
+}) {
+  let consulta = supabase
+    .from('bodega_correcciones_inventario')
+    .select('*')
+    .order('creado_en', { ascending: false })
+    .limit(limite)
+
+  if (bodega) consulta = consulta.eq('bodega', normalizarBodegaInventario(bodega) || 'bayona')
+  const { data, error } = await consulta
+  return { correcciones: data || [], error }
 }
 
 export async function actualizarDatosItemInventarioBodega({

@@ -44,6 +44,8 @@ function BodegaModal({
   proximoNumeroRecepcion = '',
   cargandoProximoNumeroRecepcion = false,
   guardandoCorreccionInventario = false,
+  historialCorreccionesInventario = [],
+  cargandoHistorialCorreccionesInventario = false,
   mermasInventario = [],
   cargandoMermasInventario = false,
   guardandoMermaInventario = false,
@@ -90,6 +92,7 @@ function BodegaModal({
   onGuardarRecepcion,
   onActualizarProximoNumeroRecepcion,
   onCorregirInventario,
+  onActualizarHistorialCorreccionesInventario,
   onEliminarItemInventario,
   onActualizarMermasInventario,
   onRegistrarMermaInventario,
@@ -121,6 +124,7 @@ function BodegaModal({
   onCambiarFechaDespachosBodega,
   onActualizarDespachosBodega,
   onActualizarCodigosBarraBodega,
+  onCerrarCodigosBarraBodega,
   onGuardarCodigoBarraBodega,
   onEliminarCodigoBarraBodega,
   onActualizarAlertasBodega,
@@ -139,6 +143,7 @@ function BodegaModal({
   const [mostrarCrearDevolucion, setMostrarCrearDevolucion] = useState(false)
   const [mostrarRecepcionarMaterial, setMostrarRecepcionarMaterial] = useState(false)
   const [mostrarCorreccionInventario, setMostrarCorreccionInventario] = useState(false)
+  const [mostrarHistorialCorrecciones, setMostrarHistorialCorrecciones] = useState(false)
   const [itemCorreccionInventario, setItemCorreccionInventario] = useState(null)
   const [mostrarMermaInventario, setMostrarMermaInventario] = useState(false)
   const [mermaInventario, setMermaInventario] = useState({
@@ -186,6 +191,19 @@ function BodegaModal({
     const seccion = seccionInicial.nombre
     setMostrarCargaExcel(seccion === 'cargar-inventario')
     setMostrarCodigosBarra(seccion === 'codigos-barra')
+    const abrirHistorialCorrecciones = seccion === 'historial-correcciones'
+    setMostrarHistorialCorrecciones(abrirHistorialCorrecciones)
+    if (abrirHistorialCorrecciones) {
+      setMostrarCorreccionInventario(false)
+      setItemCorreccionInventario(null)
+      setMostrarMermaInventario(false)
+      setMostrarCrearPedido(false)
+      setMostrarCrearDevolucion(false)
+      setMostrarIngresoProveedor(false)
+      setMostrarSalidaMaterial(false)
+      setMostrarRecepcionarMaterial(false)
+      onActualizarHistorialCorreccionesInventario?.()
+    }
 
     const abrirHistorial = seccion === 'historial-vales'
     if (Boolean(mostrarHistorialValesBodega) !== abrirHistorial) {
@@ -776,6 +794,7 @@ function BodegaModal({
               onGuardar={onGuardarCodigoBarraBodega}
               onEliminar={onEliminarCodigoBarraBodega}
               onActualizar={onActualizarCodigosBarraBodega}
+              onCerrar={onCerrarCodigosBarraBodega}
             />
           )}
         </>
@@ -966,6 +985,7 @@ function BodegaModal({
                       if (actual) setItemCorreccionInventario(null)
                       return !actual
                     })
+                    setMostrarHistorialCorrecciones(false)
                     setMostrarMermaInventario(false)
                     setMostrarCrearPedido(false)
                     setMostrarCrearDevolucion(false)
@@ -1213,6 +1233,14 @@ function BodegaModal({
             </div>
           )}
 
+          {mostrarHistorialCorrecciones && puedeAdministrar && (
+            <PanelHistorialCorreccionesInventario
+              correcciones={historialCorreccionesInventario}
+              cargando={cargandoHistorialCorreccionesInventario}
+              onActualizar={onActualizarHistorialCorreccionesInventario}
+            />
+          )}
+
           {mostrarMermaInventario && (puedeAdministrar || puedeOperarBodega) && (
             <PanelMermaInventario
               merma={mermaInventario}
@@ -1430,6 +1458,84 @@ function PanelCorreccionInventario({
       </div>
     </form>
   )
+}
+
+function PanelHistorialCorreccionesInventario({ correcciones = [], cargando, onActualizar }) {
+  return (
+    <div style={{ ...panelMovimientoStyle, borderColor: '#78909c', background: '#172229' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ margin: 0, color: '#cfd8dc' }}>Historial de correcciones</h3>
+          <p style={{ margin: '4px 0 0', color: '#b0bec5', fontSize: '13px' }}>
+            Últimas correcciones administrativas de la bodega activa.
+          </p>
+        </div>
+        <button type="button" onClick={onActualizar} disabled={cargando} style={botonMiniGris}>
+          {cargando ? 'Actualizando...' : 'Actualizar historial'}
+        </button>
+      </div>
+
+      {cargando ? (
+        <p style={{ color: '#ccc' }}>Cargando correcciones...</p>
+      ) : correcciones.length === 0 ? (
+        <p style={{ color: '#bbb', marginBottom: 0 }}>Aún no existen correcciones registradas para esta bodega.</p>
+      ) : (
+        <div style={{ overflowX: 'auto', maxHeight: '380px', overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1180px' }}>
+            <thead>
+              <tr style={{ background: '#263238' }}>
+                <th style={thStyle}>Fecha y hora</th>
+                <th style={thStyle}>Código</th>
+                <th style={thStyle}>Descripción</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Saldo</th>
+                <th style={thStyle}>Motivo</th>
+                <th style={thStyle}>Realizado por</th>
+              </tr>
+            </thead>
+            <tbody>
+              {correcciones.map((correccion) => (
+                <tr key={correccion.id}>
+                  <td style={tdStyle}>{formatearFechaHoraCorreccion(correccion.creado_en)}</td>
+                  <td style={tdStyle}>{formatearCambioCorreccion(correccion.codigo_anterior, correccion.codigo_nuevo)}</td>
+                  <td style={tdStyle}>{formatearCambioCorreccion(correccion.descripcion_anterior, correccion.descripcion_nueva)}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 900 }}>
+                    {formatearCambioCorreccion(
+                      formatearNumero(correccion.saldo_anterior),
+                      formatearNumero(correccion.saldo_nuevo),
+                    )}
+                  </td>
+                  <td style={tdStyle}>{correccion.motivo || '-'}</td>
+                  <td style={tdStyle}>
+                    <strong>{correccion.usuario_nombre || '-'}</strong>
+                    {correccion.usuario_rol ? <small style={{ display: 'block', color: '#b0bec5' }}>{correccion.usuario_rol}</small> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function formatearCambioCorreccion(anterior, nuevo) {
+  const valorAnterior = String(anterior ?? '').trim() || '-'
+  const valorNuevo = String(nuevo ?? '').trim() || '-'
+  return valorAnterior === valorNuevo ? valorNuevo : `${valorAnterior} → ${valorNuevo}`
+}
+
+function formatearFechaHoraCorreccion(valor) {
+  if (!valor) return '-'
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return String(valor)
+  return fecha.toLocaleString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function PanelMermaInventario({
@@ -2399,6 +2505,7 @@ function PanelCodigosBarraBodega({
   onGuardar,
   onEliminar,
   onActualizar,
+  onCerrar,
 }) {
   const [formulario, setFormulario] = useState({
     id: '',
@@ -2592,9 +2699,14 @@ function PanelCodigosBarraBodega({
             {formulario.id ? 'Actualiza la equivalencia seleccionada.' : 'Asocia códigos externos de proveedor al código interno de bodega.'}
           </p>
         </div>
-        <button type="button" onClick={onActualizar} style={botonMiniGris}>
-          {cargando ? 'Cargando...' : 'Actualizar'}
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button type="button" onClick={onActualizar} style={botonMiniGris}>
+            {cargando ? 'Cargando...' : 'Actualizar'}
+          </button>
+          <button type="button" onClick={onCerrar} style={botonMiniGris}>
+            Cerrar
+          </button>
+        </div>
       </div>
 
       <div ref={formularioCodigoRef} style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr) minmax(150px, 1fr) minmax(240px, 2fr) minmax(120px, 0.7fr) auto', gap: '10px', alignItems: 'end', marginBottom: '12px', scrollMarginTop: '14px' }}>

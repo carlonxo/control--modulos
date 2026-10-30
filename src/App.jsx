@@ -26,6 +26,7 @@ import BalanceMantencionModal from './components/BalanceMantencionModal'
 import ValesBodegaModal from './components/ValesBodegaModal'
 import BodegaModal from './components/BodegaModal'
 import ProyeccionMaterialesModal from './components/ProyeccionMaterialesModal'
+import ResumenGerencialModal from './components/ResumenGerencialModal'
 import UsuariosBodegaModal from './components/UsuariosBodegaModal'
 import AuditoriaModal from './components/AuditoriaModal'
 import IndicadoresHorasHombre from './components/IndicadoresHorasHombre'
@@ -59,7 +60,7 @@ import {
 import { leerFilasValeBodegaDesdeArchivo } from './services/valesBodegaArchivoService'
 import { leerInventariosBodegaDesdeExcel } from './services/bodegaInventarioArchivoService'
 import {
-  actualizarDatosItemInventarioBodega as actualizarDatosItemInventarioBodegaSupabase,
+  cargarHistorialCorreccionesInventarioBodega as cargarHistorialCorreccionesInventarioBodegaSupabase,
   cargarMermasInventarioBodega as cargarMermasInventarioBodegaSupabase,
   cargarProximoNumeroMermaBodega as cargarProximoNumeroMermaBodegaSupabase,
   cargarInventariosBodega as cargarInventariosBodegaSupabase,
@@ -819,6 +820,11 @@ const [errorAuditoria, setErrorAuditoria] = useState('')
 const [limiteAuditoria, setLimiteAuditoria] = useState(1000)
 const [mostrarEquivalenciasMateriales, setMostrarEquivalenciasMateriales] = useState(false)
 const [mostrarProtocolosMensuales, setMostrarProtocolosMensuales] = useState(false)
+const [mostrarResumenGerencial, setMostrarResumenGerencial] = useState(false)
+const [anioResumenGerencial, setAnioResumenGerencial] = useState(String(new Date().getFullYear()))
+const [registrosResumenGerencial, setRegistrosResumenGerencial] = useState([])
+const [cargandoResumenGerencial, setCargandoResumenGerencial] = useState(false)
+const [errorResumenGerencial, setErrorResumenGerencial] = useState('')
 const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
 const [mostrarBalanceMantencion, setMostrarBalanceMantencion] = useState(false)
 const [mostrarValesBodega, setMostrarValesBodega] = useState(false)
@@ -905,6 +911,8 @@ const [guardandoRecepcionBodega, setGuardandoRecepcionBodega] = useState(false)
 const [proximoNumeroRecepcionBodega, setProximoNumeroRecepcionBodega] = useState('')
 const [cargandoProximoNumeroRecepcion, setCargandoProximoNumeroRecepcion] = useState(false)
 const [guardandoCorreccionInventario, setGuardandoCorreccionInventario] = useState(false)
+const [historialCorreccionesInventario, setHistorialCorreccionesInventario] = useState([])
+const [cargandoHistorialCorreccionesInventario, setCargandoHistorialCorreccionesInventario] = useState(false)
 const [mermasInventarioBodega, setMermasInventarioBodega] = useState([])
 const [cargandoMermasInventario, setCargandoMermasInventario] = useState(false)
 const [guardandoMermaInventario, setGuardandoMermaInventario] = useState(false)
@@ -1009,6 +1017,7 @@ const extremosIngresoPlantaActiva = configuracionPlantaActiva.extremosIngreso
 const protocolosHabilitadosPlanta = plantaActiva === PLANTA_BAYONA
 const puedeUsarProtocoloPlanta = puedeUsarProtocolo && protocolosHabilitadosPlanta
 const puedeVerProtocolosMensualesPlanta = puedeVerProtocolosMensuales && protocolosHabilitadosPlanta
+const puedeVerResumenGerencial = puedeVerProtocolosMensualesPlanta && ['admin', 'visor'].includes(perfil?.rol)
 const puedeDescargarProtocolosPlanta = puedeDescargarProtocolosDiarios && protocolosHabilitadosPlanta
 const puedeVerBalanceMaterialesPlanta = puedeVerBalanceMateriales && protocolosHabilitadosPlanta
 const puedeVerBalanceMantencionPlanta = puedeVerBalanceMantencion && protocolosHabilitadosPlanta
@@ -1038,6 +1047,7 @@ function cambiarBodegaActivaAdmin(nuevaBodega) {
   setRecepcionesBodega([])
   setDespachosBodega([])
   setMermasInventarioBodega([])
+  setHistorialCorreccionesInventario([])
   setCodigosBarraBodega([])
   setSolicitudMaterialBodegaInicial(null)
   setSeccionBodegaInicial(null)
@@ -1478,6 +1488,7 @@ function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateria
     setMostrarValesBodega,
     setMostrarBodega,
     setMostrarProyeccionMateriales,
+    setMostrarResumenGerencial,
     setMostrarHorasHombre,
   ])
   setPrecioMaterialEnEdicion(null)
@@ -2439,6 +2450,27 @@ async function abrirProtocolosMensuales() {
   setMostrarMenuAcciones(false)
   setMostrarProtocolosMensuales(true)
   await cargarProtocolosMensuales()
+}
+
+async function cargarResumenGerencial(anio = anioResumenGerencial) {
+  if (!puedeVerResumenGerencial || !anio) return
+  setCargandoResumenGerencial(true)
+  setErrorResumenGerencial('')
+  const { registros, error } = await obtenerRegistrosProtocolosPorRango(String(anio), 'anio')
+  setCargandoResumenGerencial(false)
+  if (error) {
+    setErrorResumenGerencial('No se pudo preparar el consolidado: ' + error.message)
+    return
+  }
+  setRegistrosResumenGerencial(registros)
+}
+
+async function abrirResumenGerencial() {
+  if (!puedeVerResumenGerencial) return
+  const abrir = !mostrarResumenGerencial
+  cerrarVentanasEmergentes()
+  setMostrarResumenGerencial(abrir)
+  if (abrir) await cargarResumenGerencial(anioResumenGerencial)
 }
 
 async function cargarConfigBalanceMateriales() {
@@ -3532,7 +3564,7 @@ async function cargarInventariosBodega(preferido = null) {
 
 async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null, seccion = null } = {}) {
   if (!puedeVerBodega) return
-  const esSeccionAlternable = ['historial-vales', 'codigos-barra'].includes(seccion)
+  const esSeccionAlternable = ['historial-vales', 'historial-correcciones', 'codigos-barra'].includes(seccion)
   const seccionSiguiente = esSeccionAlternable && seccionBodegaInicial?.nombre === seccion
     ? ''
     : seccion
@@ -3767,46 +3799,30 @@ async function corregirInventarioBodega({ item, nuevoSaldo, nuevoCodigo, nuevaDe
   if (!confirmado) return false
 
   setGuardandoCorreccionInventario(true)
-  if (cambiaSaldo) {
-    const { error } = await corregirInventarioBodegaSupabase({
-      supabase,
-      itemId: item.id,
-      nuevoSaldo: saldoCorregido,
-      motivo: motivoLimpio,
-    })
-
-    if (error) {
-      setGuardandoCorreccionInventario(false)
-      mostrarNotificacion('No se pudo corregir el saldo del inventario: ' + error.message)
-      return false
-    }
-  }
-
-  if (cambiaCodigo || cambiaDescripcion) {
-    const { data, error } = await actualizarDatosItemInventarioBodegaSupabase({
-      supabase,
-      itemId: item.id,
-      codigo: codigoCorregido,
-      descripcion: descripcionCorregida,
-    })
-
-    if (error || !data) {
-      setGuardandoCorreccionInventario(false)
-      await cargarInventariosBodega()
-      const detalleError = error?.code === '23505'
-        ? `el código “${codigoCorregido}” ya existe en este inventario`
-        : (error?.message || 'sin permiso para modificar el material')
-      mostrarNotificacion(
-        cambiaSaldo
-          ? `El saldo fue corregido, pero no se pudieron actualizar los datos del material: ${detalleError}`
-          : `No se pudieron actualizar los datos del material: ${detalleError}`
-      )
-      return false
-    }
-  }
+  const { data, error } = await corregirInventarioBodegaSupabase({
+    supabase,
+    itemId: item.id,
+    nuevoSaldo: saldoCorregido,
+    nuevoCodigo: codigoCorregido,
+    nuevaDescripcion: descripcionCorregida,
+    motivo: motivoLimpio,
+  })
   setGuardandoCorreccionInventario(false)
 
-  await cargarInventariosBodega()
+  if (error || !data) {
+    const detalleError = error?.code === '23505'
+      ? `el código “${codigoCorregido}” ya existe en este inventario`
+      : error?.code === 'PGRST202'
+        ? 'falta instalar el historial de correcciones en Supabase'
+        : (error?.message || 'sin permiso para modificar el material')
+    mostrarNotificacion(`No se pudo corregir el inventario: ${detalleError}`)
+    return false
+  }
+
+  await Promise.all([
+    cargarInventariosBodega(),
+    cargarHistorialCorreccionesInventarioBodega(),
+  ])
   const cambiosGuardados = [
     cambiaCodigo ? `código actualizado a “${codigoCorregido}”` : '',
     cambiaDescripcion ? `descripción actualizada a “${descripcionCorregida}”` : '',
@@ -3814,6 +3830,30 @@ async function corregirInventarioBodega({ item, nuevoSaldo, nuevoCodigo, nuevaDe
   ].filter(Boolean).join(' y ')
   mostrarNotificacion(`Inventario corregido: ${item.codigo}, ${cambiosGuardados}`)
   return true
+}
+
+async function cargarHistorialCorreccionesInventarioBodega() {
+  if (perfil?.rol !== 'admin') return []
+  setCargandoHistorialCorreccionesInventario(true)
+  const { correcciones, error } = await cargarHistorialCorreccionesInventarioBodegaSupabase({
+    supabase,
+    bodega: bodegaActiva,
+    limite: 200,
+  })
+  setCargandoHistorialCorreccionesInventario(false)
+
+  if (error) {
+    setHistorialCorreccionesInventario([])
+    mostrarNotificacion(
+      error.code === '42P01'
+        ? 'Falta instalar el historial de correcciones en Supabase'
+        : `No se pudo cargar el historial de correcciones: ${error.message}`
+    )
+    return []
+  }
+
+  setHistorialCorreccionesInventario(correcciones)
+  return correcciones
 }
 
 async function eliminarItemInventarioBodega(item) {
@@ -6690,6 +6730,14 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       },
     },
     {
+      id: 'resumen-gerencial',
+      etiqueta: 'Resumen gerencial',
+      icono: '\u25F4',
+      visible: puedeVerResumenGerencial,
+      activo: mostrarResumenGerencial,
+      onClick: abrirResumenGerencial,
+    },
+    {
       id: 'protocolos',
       etiqueta: 'Protocolos',
       icono: '\u25A4',
@@ -6747,6 +6795,15 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       visible: (mostrarBodega || esRolBodega) && Boolean(puedeAdministrarBodega || esRolBodega || puedeVerPedidosBodegaHoy),
       activo: seccionBodegaInicial?.nombre === 'historial-vales',
       onClick: () => abrirBodega({ seccion: 'historial-vales' }),
+    },
+    {
+      id: 'bodega-historial-correcciones',
+      etiqueta: 'Historial correcciones',
+      icono: '\u270E',
+      nivel: 1,
+      visible: (mostrarBodega || esRolBodega) && puedeAdministrarBodega,
+      activo: seccionBodegaInicial?.nombre === 'historial-correcciones',
+      onClick: () => abrirBodega({ seccion: 'historial-correcciones' }),
     },
     {
       id: 'bodega-codigos-barra',
@@ -8413,6 +8470,21 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
   </EditorMaterialesModal>
 )}
 
+{mostrarResumenGerencial && puedeVerResumenGerencial && (
+  <ResumenGerencialModal
+    registros={registrosResumenGerencial}
+    anio={anioResumenGerencial}
+    cargando={cargandoResumenGerencial}
+    error={errorResumenGerencial}
+    onCambiarAnio={(nuevoAnio) => {
+      setAnioResumenGerencial(nuevoAnio)
+      cargarResumenGerencial(nuevoAnio)
+    }}
+    onActualizar={() => cargarResumenGerencial(anioResumenGerencial)}
+    onCerrar={() => setMostrarResumenGerencial(false)}
+  />
+)}
+
 {mostrarProtocolosMensuales && puedeVerProtocolosMensualesPlanta && (
   <ProtocolosMensualesModal onClickFondo={cerrarPanelesFlotantes}>
     <ProtocolosMensualesToolbar
@@ -8601,6 +8673,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     proximoNumeroRecepcion={proximoNumeroRecepcionBodega}
     cargandoProximoNumeroRecepcion={cargandoProximoNumeroRecepcion}
     guardandoCorreccionInventario={guardandoCorreccionInventario}
+    historialCorreccionesInventario={historialCorreccionesInventario}
+    cargandoHistorialCorreccionesInventario={cargandoHistorialCorreccionesInventario}
     mermasInventario={mermasInventarioBodega}
     cargandoMermasInventario={cargandoMermasInventario}
     guardandoMermaInventario={guardandoMermaInventario}
@@ -8647,6 +8721,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarRecepcion={guardarRecepcionBodega}
     onActualizarProximoNumeroRecepcion={cargarProximoNumeroRecepcionBodega}
     onCorregirInventario={corregirInventarioBodega}
+    onActualizarHistorialCorreccionesInventario={cargarHistorialCorreccionesInventarioBodega}
     onEliminarItemInventario={eliminarItemInventarioBodega}
     onActualizarMermasInventario={cargarMermasInventarioBodega}
     onRegistrarMermaInventario={registrarMermaInventarioBodega}
@@ -8685,6 +8760,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onCambiarFechaDespachosBodega={cambiarFechaDespachosBodega}
     onActualizarDespachosBodega={() => cargarDespachosBodega()}
     onActualizarCodigosBarraBodega={cargarCodigosBarraBodega}
+    onCerrarCodigosBarraBodega={() => setSeccionBodegaInicial({ nombre: '', id: Date.now() })}
     onGuardarCodigoBarraBodega={guardarCodigoBarraBodega}
     onEliminarCodigoBarraBodega={eliminarCodigoBarraBodega}
     onActualizarAlertasBodega={cargarAlertasBodega}

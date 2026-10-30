@@ -4,6 +4,10 @@ import {
   fechaDocumentoProtocolo,
   fechaParaInput,
 } from '../utils/modulos'
+import {
+  filtrarConsultaPorSerieEquivalente,
+  filtrarRegistrosPorSerieEquivalente,
+} from '../utils/series'
 
 async function actualizarPosicionModulo({ supabase, id, posicion }) {
   const { error } = await supabase
@@ -23,12 +27,14 @@ export async function buscarPruebaRecienteGarantiaPorSerie({
   const serieLimpia = String(serie || '').trim()
   if (!serieLimpia) return { data: null, error: null }
 
-  const seleccionarRegistros = (tabla) => supabase
-    .from(tabla)
-    .select('id, serie, estado, fecha_ingreso, fecha_prueba_electrica, protocolo_entrega')
-    .ilike('serie', serieLimpia)
-    .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
-    .limit(5)
+  const seleccionarRegistros = (tabla) => filtrarConsultaPorSerieEquivalente(
+    supabase
+      .from(tabla)
+      .select('id, serie, estado, fecha_ingreso, fecha_prueba_electrica, protocolo_entrega')
+      .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
+      .limit(25),
+    serieLimpia,
+  )
 
   const [respuestaHistorial, respuestaManuales] = await Promise.all([
     seleccionarRegistros('historial_modulos'),
@@ -40,8 +46,10 @@ export async function buscarPruebaRecienteGarantiaPorSerie({
   if (error) return { data: null, error }
 
   const candidatos = [
-    ...(respuestaHistorial.data || []).map((registro) => ({ ...registro, origen: 'historial' })),
-    ...(tablaManualNoExiste ? [] : respuestaManuales.data || []).map((registro) => ({ ...registro, origen: 'manual' })),
+    ...filtrarRegistrosPorSerieEquivalente(respuestaHistorial.data, serieLimpia)
+      .map((registro) => ({ ...registro, origen: 'historial' })),
+    ...filtrarRegistrosPorSerieEquivalente(tablaManualNoExiste ? [] : respuestaManuales.data, serieLimpia)
+      .map((registro) => ({ ...registro, origen: 'manual' })),
   ]
     .filter((registro) => !esEstadoGarantia(registro.estado || registro.protocolo_entrega?.estado))
     .map((registro) => ({
@@ -65,12 +73,14 @@ export async function buscarProtocoloAnteriorGarantia({
   const serieLimpia = String(serie || '').trim()
   if (!serieLimpia) return { data: null, error: null }
 
-  const seleccionarRegistros = (tabla) => supabase
-    .from(tabla)
-    .select('*')
-    .ilike('serie', serieLimpia)
-    .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
-    .limit(100)
+  const seleccionarRegistros = (tabla) => filtrarConsultaPorSerieEquivalente(
+    supabase
+      .from(tabla)
+      .select('*')
+      .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
+      .limit(100),
+    serieLimpia,
+  )
 
   const [respuestaHistorial, respuestaManuales] = await Promise.all([
     seleccionarRegistros('historial_modulos'),
@@ -83,8 +93,10 @@ export async function buscarProtocoloAnteriorGarantia({
 
   const fechaBuscada = fechaParaInput(fechaReferencia)
   const candidatos = [
-    ...(respuestaHistorial.data || []).map((registro) => ({ ...registro, origen: 'historial' })),
-    ...(tablaManualNoExiste ? [] : respuestaManuales.data || []).map((registro) => ({ ...registro, origen: 'manual' })),
+    ...filtrarRegistrosPorSerieEquivalente(respuestaHistorial.data, serieLimpia)
+      .map((registro) => ({ ...registro, origen: 'historial' })),
+    ...filtrarRegistrosPorSerieEquivalente(tablaManualNoExiste ? [] : respuestaManuales.data, serieLimpia)
+      .map((registro) => ({ ...registro, origen: 'manual' })),
   ]
     .filter((registro) => !esEstadoGarantia(registro.estado || registro.protocolo_entrega?.estado))
     .map((registro) => ({
@@ -189,9 +201,13 @@ export async function crearModuloActivo({
 }
 
 export async function buscarModuloActivoPorSerie({ supabase, serie }) {
-  return supabase
+  const consulta = supabase
     .from('modulos')
     .select('id, serie, linea, planta')
-    .eq('serie', String(serie || '').trim())
-    .maybeSingle()
+    .limit(25)
+  const { data, error } = await filtrarConsultaPorSerieEquivalente(consulta, serie)
+  return {
+    data: filtrarRegistrosPorSerieEquivalente(data, serie)[0] || null,
+    error,
+  }
 }

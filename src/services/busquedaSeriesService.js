@@ -1,3 +1,9 @@
+import {
+  filtrarConsultaPorSerieEquivalente,
+  filtrarRegistrosPorSerieEquivalente,
+  normalizarSerieParaComparar,
+} from '../utils/series'
+
 export async function buscarRegistrosPorSerie({ supabase, serie }) {
   const serieLimpia = String(serie || '').trim()
 
@@ -5,24 +11,26 @@ export async function buscarRegistrosPorSerie({ supabase, serie }) {
     return { data: [], error: null }
   }
 
-  const [respuestaHistorial, respuestaActivos, respuestaManuales] = await Promise.all([
-    supabase
+  const consultaHistorial = supabase
       .from('historial_modulos')
       .select('*')
-      .eq('serie', serieLimpia)
       .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
       .order('fecha_salida', { ascending: false })
-      .limit(5),
-    supabase
+      .limit(25)
+  const consultaActivos = supabase
       .from('modulos')
       .select('*')
-      .eq('serie', serieLimpia),
-    supabase
+      .limit(25)
+  const consultaManuales = supabase
       .from('protocolos_manuales')
       .select('*')
-      .eq('serie', serieLimpia)
       .order('fecha_prueba_electrica', { ascending: false, nullsFirst: false })
-      .limit(5),
+      .limit(25)
+
+  const [respuestaHistorial, respuestaActivos, respuestaManuales] = await Promise.all([
+    filtrarConsultaPorSerieEquivalente(consultaHistorial, serieLimpia),
+    filtrarConsultaPorSerieEquivalente(consultaActivos, serieLimpia),
+    filtrarConsultaPorSerieEquivalente(consultaManuales, serieLimpia),
   ])
 
   const error = respuestaHistorial.error || respuestaActivos.error || (
@@ -33,18 +41,27 @@ export async function buscarRegistrosPorSerie({ supabase, serie }) {
     return { data: [], error }
   }
 
-  const activos = (respuestaActivos.data || []).map((modulo) => ({
+  const activos = filtrarRegistrosPorSerieEquivalente(respuestaActivos.data, serieLimpia).map((modulo) => ({
     ...modulo,
     esActual: true,
   }))
 
-  const manuales = (respuestaManuales.error?.message?.includes('protocolos_manuales') ? [] : respuestaManuales.data || []).map((protocolo) => ({
+  const manuales = filtrarRegistrosPorSerieEquivalente(
+    respuestaManuales.error?.message?.includes('protocolos_manuales') ? [] : respuestaManuales.data,
+    serieLimpia,
+  ).slice(0, 5).map((protocolo) => ({
     ...protocolo,
     origen: 'manual',
   }))
 
   return {
-    data: [...activos, ...(respuestaHistorial.data || []), ...manuales],
+    data: [
+      ...activos,
+      ...filtrarRegistrosPorSerieEquivalente(respuestaHistorial.data, serieLimpia).slice(0, 5),
+      ...manuales,
+    ],
     error: null,
   }
 }
+
+export { normalizarSerieParaComparar }
