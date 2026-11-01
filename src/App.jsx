@@ -2453,6 +2453,39 @@ async function abrirProtocolosMensuales() {
   await cargarProtocolosMensuales()
 }
 
+function agregarCostoMaterialesResumen(registros = [], preciosCompraActuales = {}, catalogoActual = []) {
+  const costosPorClave = {}
+  catalogoActual.forEach((material) => {
+    const costo = normalizarPrecioMaterial(
+      preciosCompraActuales[material.material]
+      ?? preciosCompraActuales[material.materialOriginal]
+      ?? material.precioCompra
+      ?? 0
+    )
+    ;[material.material, material.materialOriginal, material.codigoBodega, material.idArt]
+      .filter(Boolean)
+      .forEach((clave) => { costosPorClave[normalizarTextoComparacion(clave)] = costo })
+  })
+
+  return registros.map((registro) => {
+    const items = [
+      ...(registro.detalleCobro?.mantencion || []),
+      ...(registro.detalleCobro?.modificacion || []),
+    ]
+    let itemsMaterialesSinCosto = 0
+    const costoMateriales = items.reduce((total, item) => {
+      if (normalizarTextoComparacion(`${item.tipoCantidad || ''} ${item.material || ''}`).includes('reutilizado')) return total
+      const claves = [item.materialPrecio, item.material, item.idArt].filter(Boolean)
+      const costoUnitario = claves
+        .map((clave) => costosPorClave[normalizarTextoComparacion(clave)])
+        .find((valor) => Number.isFinite(Number(valor)) && Number(valor) > 0) || 0
+      if (Number(item.cantidad || 0) > 0 && !costoUnitario) itemsMaterialesSinCosto += 1
+      return total + (Number(item.cantidad || 0) * Number(costoUnitario))
+    }, 0)
+    return { ...registro, costoMateriales, itemsMaterialesSinCosto }
+  })
+}
+
 async function cargarResumenGerencial(anio = anioResumenGerencial) {
   if (!puedeVerResumenGerencial || !anio) return
   setCargandoResumenGerencial(true)
@@ -2463,14 +2496,21 @@ async function cargarResumenGerencial(anio = anioResumenGerencial) {
     cargarEquivalenciasMateriales(),
   ])
   const { registros, error } = resultadoProtocolos
-  setCargandoResumenGerencial(false)
   if (error) {
+    setCargandoResumenGerencial(false)
     setErrorResumenGerencial('No se pudo preparar el consolidado: ' + error.message)
     setRegistrosResumenGerencial([])
     setMaterialesResumenGerencial([])
     return
   }
-  setRegistrosResumenGerencial(registros)
+  const preciosCargados = await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
+  const registrosConCostos = agregarCostoMaterialesResumen(
+    registros,
+    preciosCargados?.preciosCompra || preciosCompraMateriales,
+    preciosCargados?.catalogo || catalogoPreciosMaterialesCompleto
+  )
+  setCargandoResumenGerencial(false)
+  setRegistrosResumenGerencial(registrosConCostos)
   setMaterialesResumenGerencial(compilarBalanceMateriales(registros, vales, {
     configMateriales: configBalanceMateriales,
     catalogoPreciosProtocolo: catalogoPreciosParaBalance,

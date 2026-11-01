@@ -33,10 +33,12 @@ function formatearEntero(valor) {
 }
 
 function formatearDinero(valor) {
-  return Math.round(numero(valor)).toLocaleString('es-CL', {
+  const monto = numero(valor)
+  return monto.toLocaleString('es-CL', {
     style: 'currency',
     currency: 'CLP',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Number.isInteger(monto) ? 0 : 1,
   })
 }
 
@@ -79,33 +81,42 @@ function tieneOtPendiente(registro) {
   return ids.length === 0
 }
 
-function registrosUnicos(registros) {
-  const unicos = new Map()
-  for (const registro of registros || []) {
-    const fecha = String(registro.fecha_prueba_electrica || registro.fecha || '').slice(0, 10)
-    const serie = String(registro.serie || '').trim().replace(/^0+(?=\d)/, '')
-    const clave = serie && fecha
-      ? `${serie}|${fecha}`
-      : `${registro.origen || 'registro'}|${registro.id || Math.random()}`
-    const existente = unicos.get(clave)
-    if (!existente || numero(registro.valorTotal) > numero(existente.valorTotal)) unicos.set(clave, registro)
-  }
-  return [...unicos.values()]
-}
-
 function construirResumen(registros, anio) {
-  const filas = MESES.map((mes, indice) => ({ indice, mes, modulos: 0, valor: 0, garantias: 0 }))
+  const hoy = new Date()
+  const anioSeleccionado = Number(anio)
+  const filas = MESES.map((mes, indice) => ({
+    indice,
+    mes,
+    modulos: 0,
+    valor: 0,
+    costoMateriales: 0,
+    valorMenosMateriales: 0,
+    garantias: 0,
+    esFuturo: anioSeleccionado > hoy.getFullYear() || (anioSeleccionado === hoy.getFullYear() && indice > hoy.getMonth()),
+    esParcial: anioSeleccionado === hoy.getFullYear() && indice === hoy.getMonth(),
+  }))
   const porTipo = new Map()
   const porProyecto = new Map()
-  const produccion = MESES.map((mes, indice) => ({ indice, mes, mantencion: 0, proyectos: 0, garantia: 0 }))
-  const registrosAnio = registrosUnicos(registros).filter((registro) => fechaRegistro(registro)?.anio === Number(anio))
+  const produccion = MESES.map((mes, indice) => ({
+    indice,
+    mes,
+    mantencion: 0,
+    proyectos: 0,
+    garantia: 0,
+    esFuturo: anioSeleccionado > hoy.getFullYear() || (anioSeleccionado === hoy.getFullYear() && indice > hoy.getMonth()),
+    esParcial: anioSeleccionado === hoy.getFullYear() && indice === hoy.getMonth(),
+  }))
+  const registrosAnio = (registros || []).filter((registro) => fechaRegistro(registro)?.anio === anioSeleccionado)
 
   for (const registro of registrosAnio) {
     const fecha = fechaRegistro(registro)
     if (!fecha || fecha.mes < 0 || fecha.mes > 11) continue
     const valor = numero(registro.valorTotal)
+    const costoMateriales = numero(registro.costoMateriales)
     filas[fecha.mes].modulos += 1
     filas[fecha.mes].valor += valor
+    filas[fecha.mes].costoMateriales += costoMateriales
+    filas[fecha.mes].valorMenosMateriales += valor - costoMateriales
     if (registro.esGarantia) filas[fecha.mes].garantias += 1
 
     const proyecto = String(registro.proyecto || 'Sin proyecto').trim() || 'Sin proyecto'
@@ -124,17 +135,18 @@ function construirResumen(registros, anio) {
     else produccion[fecha.mes].proyectos += 1
 
     const tipo = String(registro.tipo || 'Sin tipo').trim() || 'Sin tipo'
-    const acumulado = porTipo.get(tipo) || { tipo, modulos: 0, valor: 0 }
+    const claveTipo = textoNormalizado(tipo) || 'sin tipo'
+    const acumulado = porTipo.get(claveTipo) || { tipo: nombreProyectoVisible(tipo, claveTipo), modulos: 0, valor: 0 }
     acumulado.modulos += 1
     acumulado.valor += valor
-    porTipo.set(tipo, acumulado)
+    porTipo.set(claveTipo, acumulado)
   }
 
   const totalModulos = filas.reduce((total, fila) => total + fila.modulos, 0)
   const totalValor = filas.reduce((total, fila) => total + fila.valor, 0)
   const totalGarantias = filas.reduce((total, fila) => total + fila.garantias, 0)
+  const itemsMaterialesSinCosto = registrosAnio.reduce((total, registro) => total + numero(registro.itemsMaterialesSinCosto), 0)
   const pendientes = registrosAnio.filter((registro) => !registro.esGarantia && tieneOtPendiente(registro))
-  const hoy = new Date()
   const antiguedadPendientes = [
     { etiqueta: '0–7 días', cantidad: 0 },
     { etiqueta: '8–30 días', cantidad: 0 },
@@ -152,6 +164,7 @@ function construirResumen(registros, anio) {
     totalModulos,
     totalValor,
     totalGarantias,
+    itemsMaterialesSinCosto,
     promedio: totalModulos > 0 ? totalValor / totalModulos : 0,
     produccion,
     proyectos: [...porProyecto.values()]
@@ -174,17 +187,18 @@ function GraficoAnual({ filas }) {
   const margen = { izquierda: 64, derecha: 78, arriba: 34, abajo: 52 }
   const anchoGrafico = ancho - margen.izquierda - margen.derecha
   const altoGrafico = alto - margen.arriba - margen.abajo
-  const maxModulos = Math.max(1, ...filas.map((fila) => fila.modulos))
-  const maxValor = Math.max(1, ...filas.map((fila) => fila.valor))
+  const filasVisibles = filas.filter((fila) => !fila.esFuturo)
+  const maxModulos = Math.max(1, ...filasVisibles.map((fila) => fila.modulos))
+  const maxValor = Math.max(1, ...filasVisibles.map((fila) => fila.valorMenosMateriales))
   const x = (indice) => margen.izquierda + (indice * anchoGrafico) / 11
   const yModulos = (valor) => margen.arriba + altoGrafico - (valor / maxModulos) * altoGrafico
   const yValor = (valor) => margen.arriba + altoGrafico - (valor / maxValor) * altoGrafico
-  const puntosModulos = filas.map((fila) => `${x(fila.indice)},${yModulos(fila.modulos)}`).join(' ')
-  const puntosValor = filas.map((fila) => `${x(fila.indice)},${yValor(fila.valor)}`).join(' ')
+  const puntosModulos = filasVisibles.map((fila) => `${x(fila.indice)},${yModulos(fila.modulos)}`).join(' ')
+  const puntosValor = filasVisibles.map((fila) => `${x(fila.indice)},${yValor(fila.valorMenosMateriales)}`).join(' ')
 
   return (
     <div style={{ overflowX: 'auto', paddingBottom: '4px' }}>
-      <svg viewBox={`0 0 ${ancho} ${alto}`} role="img" aria-label="Módulos y servicios valorizados por mes" style={{ display: 'block', width: '100%', minWidth: '780px', height: 'auto' }}>
+      <svg viewBox={`0 0 ${ancho} ${alto}`} role="img" aria-label="Módulos y valor de protocolos menos costo de materiales por mes" style={{ display: 'block', width: '100%', minWidth: '780px', height: 'auto' }}>
         {[0, 0.25, 0.5, 0.75, 1].map((proporcion) => {
           const y = margen.arriba + altoGrafico - proporcion * altoGrafico
           return (
@@ -197,20 +211,23 @@ function GraficoAnual({ filas }) {
         })}
 
         <text x={margen.izquierda} y="18" fill="#ff7b72" fontSize="13" fontWeight="700">Módulos</text>
-        <text x={ancho - margen.derecha} y="18" textAnchor="end" fill="#49d17d" fontSize="13" fontWeight="700">Servicios valorizados</text>
+        <text x={ancho - margen.derecha} y="18" textAnchor="end" fill="#49d17d" fontSize="13" fontWeight="700">Valor menos costo de materiales</text>
         <line x1={margen.izquierda} x2={ancho - margen.derecha} y1={margen.arriba + altoGrafico} y2={margen.arriba + altoGrafico} stroke="#61727b" />
+        {filas.filter((fila) => fila.esParcial).map((fila) => (
+          <rect key={`parcial-${fila.mes}`} x={x(fila.indice) - 28} y={margen.arriba} width="56" height={altoGrafico} fill="#ffcc80" opacity="0.09" rx="6" />
+        ))}
         <polyline points={puntosModulos} fill="none" stroke="#ff6b6b" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
         <polyline points={puntosValor} fill="none" stroke="#42d27a" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
 
         {filas.map((fila) => (
-          <g key={fila.mes}>
-            <text x={x(fila.indice)} y={alto - 18} textAnchor="middle" fill="#e6edf3" fontSize="13">{fila.mes}</text>
-            <circle cx={x(fila.indice)} cy={yModulos(fila.modulos)} r="5" fill="#ff6b6b">
+          <g key={fila.mes} opacity={fila.esFuturo ? 0.35 : 1}>
+            <text x={x(fila.indice)} y={alto - 18} textAnchor="middle" fill={fila.esParcial ? '#ffcc80' : '#e6edf3'} fontSize="13" fontWeight={fila.esParcial ? '800' : '400'}>{fila.mes}{fila.esParcial ? '*' : ''}</text>
+            {!fila.esFuturo && <circle cx={x(fila.indice)} cy={yModulos(fila.modulos)} r="5" fill="#ff6b6b">
               <title>{`${fila.mes}: ${formatearEntero(fila.modulos)} módulos`}</title>
-            </circle>
-            <rect x={x(fila.indice) - 5} y={yValor(fila.valor) - 5} width="10" height="10" rx="2" transform={`rotate(45 ${x(fila.indice)} ${yValor(fila.valor)})`} fill="#42d27a">
-              <title>{`${fila.mes}: ${formatearDinero(fila.valor)}`}</title>
-            </rect>
+            </circle>}
+            {!fila.esFuturo && <rect x={x(fila.indice) - 5} y={yValor(fila.valorMenosMateriales) - 5} width="10" height="10" rx="2" transform={`rotate(45 ${x(fila.indice)} ${yValor(fila.valorMenosMateriales)})`} fill="#42d27a">
+              <title>{`${fila.mes}: ${formatearDinero(fila.valorMenosMateriales)} (protocolos ${formatearDinero(fila.valor)} − materiales ${formatearDinero(fila.costoMateriales)})`}</title>
+            </rect>}
           </g>
         ))}
       </svg>
@@ -321,10 +338,10 @@ export default function ResumenGerencialModal({
             <tbody>
               {resumen.filas.map((fila) => (
                 <tr key={fila.mes}>
-                  <td style={tdStyle}>{fila.mes}</td>
-                  <td style={tdRightStyle}>{formatearEntero(fila.modulos)}</td>
-                  <td style={tdRightStyle}>{formatearEntero(fila.garantias)}</td>
-                  <td style={{ ...tdRightStyle, color: '#8be9ad', fontWeight: 800 }}>{formatearDinero(fila.valor)}</td>
+                  <td style={{ ...tdStyle, color: fila.esParcial ? '#ffcc80' : undefined }}>{fila.mes}{fila.esParcial ? ' (parcial)' : ''}</td>
+                  <td style={tdRightStyle}>{fila.esFuturo ? '—' : formatearEntero(fila.modulos)}</td>
+                  <td style={tdRightStyle}>{fila.esFuturo ? '—' : formatearEntero(fila.garantias)}</td>
+                  <td style={{ ...tdRightStyle, color: fila.esFuturo ? '#607d8b' : '#8be9ad', fontWeight: 800 }}>{fila.esFuturo ? '—' : formatearDinero(fila.valor)}</td>
                 </tr>
               ))}
             </tbody>
@@ -419,14 +436,24 @@ export default function ResumenGerencialModal({
         <div style={panelStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
             <div>
-              <h3 style={{ margin: 0 }}>Módulos y valor mensual</h3>
-              <small style={{ color: '#90a4ae' }}>Cantidad de módulos en el eje izquierdo · montos en el eje derecho</small>
+              <h3 style={{ margin: 0 }}>Módulos y valor mensual antes de mano de obra</h3>
+              <small style={{ color: '#90a4ae' }}>Módulos en el eje izquierdo · valor del protocolo menos costo de materiales en el eje derecho</small>
             </div>
             <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: '#d6e2e8' }}>
               <span><b style={{ color: '#ff6b6b' }}>●</b> Módulos</span>
-              <span><b style={{ color: '#42d27a' }}>◆</b> Servicios valorizados</span>
+              <span><b style={{ color: '#42d27a' }}>◆</b> Protocolo − materiales</span>
             </div>
           </div>
+          {resumen.filas.some((fila) => fila.esParcial) && (
+            <p style={{ margin: '8px 0 0', color: '#ffcc80', fontSize: '13px' }}>
+              * Mes actual parcial al {new Date().toLocaleDateString('es-CL')}. Se muestran valores reales acumulados; los meses futuros se omiten y no representan cero.
+            </p>
+          )}
+          {resumen.itemsMaterialesSinCosto > 0 && (
+            <p style={{ margin: '6px 0 0', color: '#ffab91', fontSize: '13px' }}>
+              Advertencia: {formatearEntero(resumen.itemsMaterialesSinCosto)} ítems de protocolo no tienen costo de compra asociado; el valor antes de mano de obra puede estar sobreestimado.
+            </p>
+          )}
           {cargando && registros.length === 0
             ? <p style={{ color: '#bbb' }}>Preparando consolidado...</p>
             : <GraficoAnual filas={resumen.filas} />}
@@ -514,14 +541,14 @@ function GraficoProduccion({ filas }) {
           const altoGarantia = total ? (fila.garantia / total) * 164 : 0
           const porcentaje = (cantidad) => total ? Math.round((cantidad / total) * 100) : 0
           return (
-            <div key={fila.mes} style={{ display: 'grid', gridTemplateRows: '18px 164px 18px', gap: '4px', minWidth: '34px', textAlign: 'center' }} title={`${fila.mes}: ${total} módulos`}>
+            <div key={fila.mes} style={{ display: 'grid', gridTemplateRows: '18px 164px 18px', gap: '4px', minWidth: '34px', textAlign: 'center', opacity: fila.esFuturo ? 0.35 : 1 }} title={fila.esFuturo ? `${fila.mes}: mes futuro` : `${fila.mes}: ${total} módulos${fila.esParcial ? ' (parcial)' : ''}`}>
               <strong style={{ fontSize: '11px', color: '#dce7ec' }}>{total || ''}</strong>
               <div style={{ alignSelf: 'end', height: total ? '164px' : 0, minHeight: total ? '3px' : 0, display: 'flex', flexDirection: 'column-reverse', borderRadius: '5px 5px 0 0', overflow: 'hidden', background: '#20323b' }}>
                 <SegmentoProduccion alto={altoMantencion} color="#42d27a" porcentaje={porcentaje(fila.mantencion)} titulo={`Mantención: ${fila.mantencion}`} />
                 <SegmentoProduccion alto={altoProyectos} color="#64b5f6" porcentaje={porcentaje(fila.proyectos)} titulo={`Proyectos: ${fila.proyectos}`} />
                 <SegmentoProduccion alto={altoGarantia} color="#ffb74d" porcentaje={porcentaje(fila.garantia)} titulo={`Garantía: ${fila.garantia}`} />
               </div>
-              <span style={{ color: '#aebdc5', fontSize: '11px' }}>{fila.mes}</span>
+              <span style={{ color: fila.esParcial ? '#ffcc80' : '#aebdc5', fontSize: '11px', fontWeight: fila.esParcial ? 900 : 400 }}>{fila.mes}{fila.esParcial ? '*' : ''}</span>
             </div>
           )
         })}
