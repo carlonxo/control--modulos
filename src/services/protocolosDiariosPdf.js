@@ -3,7 +3,7 @@ import { formatearFecha } from '../utils/fechas'
 
 const camposMateriales = [
   ['Conduit 20mm', ['Conduit 20mm'], 375, 546], ['Conduit 25mm', ['Conduit 25mm'], 375, 568], ['Caja PVC 100x100x65', ['Caja PVC 100x100x65'], 375, 590],
-  ['Caja metálica 100x100x65', ['Caja metálica 100x100x65'], 375, 632], ['Caja tabique LH', ['Caja tabique LH'], 375, 653], ['Tapa ciega - Pasac.', ['Tapa ciega - Pasac.'], 375, 675], ['Prensa Estopa 16-21mm', ['Prensa Estopa 16-21mm'], 375, 696],
+  ['Caja Metálica 100x65x65 / Chuqui', ['Caja Metálica 100x65x65 / Chuqui'], 375, 611], ['Caja metálica 100x100x65', ['Caja metálica 100x100x65'], 375, 632], ['Caja tabique LH', ['Caja tabique LH'], 375, 653], ['Tapa ciega - Pasac.', ['Tapa ciega - Pasac.'], 375, 675], ['Prensa Estopa 16-21mm', ['Prensa Estopa 16-21mm'], 375, 696],
   ['Cable RZ1 2,5mm', ['Cable RZ1 2,5mm'], 375, 739], ['Cable RZ1 4mm', ['Cable RZ1 4mm'], 375, 760], ['Cable RZ1 6mm', ['Cable RZ1 6mm'], 375, 781],
   ['Cordon flex 3 x 2.5/4mm', ['Cordon 3x4mm'], 375, 802], ['Cordon flex 3 x 6mm', ['Cordon 3 x 6mm'], 375, 823],
   ['Ampolleta LED', ['Ampolleta LED'], 375, 867], ['Plafón', ['Plafón'], 375, 888], ['Tubo LED', ['Tubo LED'], 375, 909],
@@ -11,15 +11,16 @@ const camposMateriales = [
   ['Conduit 32mm', ['Conduit 32mm'], 375, 1237], ['Cable RZ-1 3x1.5mm2', ['Cordon 3x1.5mm'], 981, 1215], ['Cable RZ-1 5x4mm2', ['Cable RZ-1 5x4mm2'], 981, 1237],
   ['Artefacto simple', ['Artefacto simple'], 981, 546], ['Artefacto doble', ['Artefacto doble'], 981, 568],
   ['Artefacto triple', ['Artefacto triple'], 981, 590], ['Tapa ciega artefacto', ['Tapa ciega artefacto'], 981, 611], ['Ench. Ind. 32A hembra', ['Ench. Ind. 32A hembra'], 981, 632],
-  ['Ench. Ind. 32A macho', ['Ench. Ind. 32A macho'], 981, 653], ['Tab. PVC 24-36cc IP44', ['Tablero emb. IP44', 'Tablero sobr. IP44'], 981, 696],
+  ['Ench. Ind. 32A macho', ['Ench. Ind. 32A macho'], 981, 653], ['Tab. PVC 24-36cc IP44', ['Tablero emb. IP44', 'Tablero sobr. IP44'], 981, 696], ['Tab. PVC 8-12-18cc IP44', ['Tab. PVC 8-12-18cc IP44'], 981, 718],
   ['Tablero IP65', ['Tablero IP65 18p', 'Tablero IP65 24p'], 981, 739], ['Tablero armado', ['Tablero armado'], 981, 760], ['Aut. monof. 10-16-20A', ['Aut. monof. 10-16-20A'], 981, 781],
   ['Aut. bifásico 2x10A', ['Aut. bifásico 2x10A'], 981, 803], ['Aut. bifásico 2x16A', ['Aut. bifásico 2x16A'], 981, 824], ['Aut. bifásico 2x20A', ['Aut. bifásico 2x20A'], 981, 846],
   ['Aut. bifásico 2x25A', ['Aut. bifásico 2x25A'], 981, 867],
-  ['Diferencial 2x25A', ['Diferencial 2x25A'], 981, 888], ['Porta Fusible', ['Porta Fusible'], 981, 931], ['Luz Piloto', ['Luz Piloto'], 981, 952],
-  ['Repartidor 4x80A', ['Barra repartidora'], 981, 994], ['Falso polo', ['Falso polo'], 981, 1016],
-  ['BPC LH 100x45 + acces', ['BPC LH 100x45'], 375, 1126], ['Tapa idrobox IP65', ['Tapa idrobox IP65'], 375, 1148], ['Caja chuqui PVC', ['Caja chuqui'], 375, 1259],
+  ['Diferencial 2x25A', ['Diferencial 2x25A'], 981, 888], ['Diferencial 2x40A', ['Diferencial 2x40A'], 981, 909], ['Porta Fusible', ['Porta Fusible'], 981, 931], ['Luz Piloto', ['Luz Piloto'], 981, 952],
+  ['Barra Monofásica 4cto', ['Barra Monofásica 4cto'], 981, 973], ['Repartidor 4x80A', ['Barra repartidora'], 981, 994], ['Falso polo', ['Falso polo'], 981, 1016],
+  ['Mold Bca C/T 20x10 x 2mt + Acces', ['Mold Bca C/T 20x10 x 2mt + Acces'], 375, 1082], ['BPC LH 100x45 + acces', ['BPC LH 100x45'], 375, 1126], ['Tapa idrobox IP65', ['Tapa idrobox IP65'], 375, 1148],
+  ['Tub Flexible Metálica c/acces', ['Tub Flexible Metálica c/acces'], 375, 1194], ['Tubería EMT c/accesorio', ['Tubería EMT c/accesorio'], 375, 1215], ['Caja chuqui PVC', ['Caja chuqui'], 375, 1259], ['Int. Difer. Legrand 2x10A 10mA', ['Int. Difer. Legrand 2x10A 10mA'], 375, 1280], ['Int. Difer. Legrand 2x16A 10mA', ['Int. Difer. Legrand 2x16A 10mA'], 375, 1301],
   ['Foco sobrep LED 18w', ['Plafo led 18w'], 981, 1082], ['Panel led 600x600 mm', ['Panel led 60x60 + soporte'], 981, 1104],
-  ['Accesorio Montaje Panel Led', ['Panel led 60x60 + soporte'], 981, 1126], ['Foco sobrep led 24w', ['Plafo led 24w', 'Foco Sobrep LED 24W'], 981, 1148],
+  ['Accesorio Montaje Panel Led', ['Panel led 60x60 + soporte'], 981, 1126], ['Foco sobrep led 24w', ['Plafo led 24w', 'Foco Sobrep LED 24W'], 981, 1148], ['Cordón Flex 3x18 AWG', ['Cordón Flex 3x18 AWG'], 981, 1194], ['Barra Coperw 5/8 Inc. Con', ['Barra Coperw 5/8 Inc. Con'], 981, 1280], ['Camarilla Registro PVC', ['Camarilla Registro PVC'], 981, 1301],
 ]
 
 const anchoProtocolo = 1275

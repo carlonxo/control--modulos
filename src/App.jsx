@@ -258,7 +258,7 @@ import {
 const seccionesFormularioElectrico = [
   {
     nombre: 'Canalización',
-    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja metálica 100x100x65', 'Caja tabique LH', 'Tapa ciega - Pasac.', 'Prensa Estopa 16-21mm'],
+    items: ['Conduit 20mm', 'Conduit 25mm', 'Conduit 32mm', 'Caja PVC 100x100x65', 'Caja Metálica 100x65x65 / Chuqui', 'Caja metálica 100x100x65', 'Caja tabique LH', 'Tapa ciega - Pasac.', 'Prensa Estopa 16-21mm', 'Tub Flexible Metálica c/acces', 'Tubería EMT c/accesorio'],
   },
   {
     nombre: 'Cableado',
@@ -274,11 +274,11 @@ const seccionesFormularioElectrico = [
   },
   {
     nombre: 'Tableros',
-    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Aut. bifásico 2x25A', 'Diferencial 2x25A', 'Luz Piloto', 'Porta Fusible', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
+    items: ['Aut. monof. 10-16-20A', 'Aut. bifásico 2x10A', 'Aut. bifásico 2x16A', 'Aut. bifásico 2x20A', 'Aut. bifásico 2x25A', 'Diferencial 2x25A', 'Diferencial 2x40A', 'Luz Piloto', 'Porta Fusible', 'Barra Monofásica 4cto', 'Barra repartidora', 'Falso polo', 'Tablero emb. IP44', 'Tablero sobr. IP44', 'Tab. PVC 8-12-18cc IP44', 'Tablero IP65 18p', 'Tablero IP65 24p', 'Tablero armado'],
   },
   {
     nombre: 'Especiales',
-    items: ['Panel led 60x60 + soporte', 'Plafo led 18w', 'Plafo led 24w', 'Foco Sobrep LED 24W', 'BPC LH 100x45', 'Tapa idrobox IP65', 'Caja chuqui'],
+    items: ['Panel led 60x60 + soporte', 'Plafo led 18w', 'Plafo led 24w', 'Foco Sobrep LED 24W', 'Mold Bca C/T 20x10 x 2mt + Acces', 'BPC LH 100x45', 'Tapa idrobox IP65', 'Caja chuqui', 'Int. Difer. Legrand 2x10A 10mA', 'Int. Difer. Legrand 2x16A 10mA', 'Cordón Flex 3x18 AWG', 'Barra Coperw 5/8 Inc. Con', 'Camarilla Registro PVC'],
   },
 ]
 
