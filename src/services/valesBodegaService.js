@@ -416,7 +416,7 @@ export async function cargarValesBodegaDia({
   }
 }
 
-export async function cargarValeBodegaPorId({ supabase, id }) {
+export async function cargarValeBodegaPorId({ supabase, id, conservarDetalleOriginal = false }) {
   if (!id) return { vale: null, error: new Error('Falta el pedido') }
 
   const { data: vale, error: errorVale } = await supabase
@@ -433,7 +433,13 @@ export async function cargarValeBodegaPorId({ supabase, id }) {
     .eq('vale_id', id)
 
   if (errorItems) return { vale: null, error: errorItems }
-  return { vale: { ...vale, items: deduplicarItemsValeBodega(items || []) }, error: null }
+  return {
+    vale: {
+      ...vale,
+      items: conservarDetalleOriginal ? (items || []) : deduplicarItemsValeBodega(items || []),
+    },
+    error: null,
+  }
 }
 
 export async function guardarValeBodega({

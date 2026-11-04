@@ -61,7 +61,12 @@ begin
     v_bodega_consulta := v_bodega_perfil;
   end if;
 
-  if v_bodega_consulta not in ('bayona', 'rental', 'montaña') then
+  if not exists (
+    select 1
+    from public.bodegas_config bodega
+    where bodega.codigo = v_bodega_consulta
+      and bodega.activa = true
+  ) then
     raise exception 'La bodega asignada no es valida: %.', v_bodega_consulta;
   end if;
 

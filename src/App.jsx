@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { supabase } from './services/supabase'
-import { exportarHistorialExcel, exportarInventarioBodegaExcel, exportarPedidosBodegaExcel } from './services/exportarExcel'
 import Notificacion from './components/Notificacion'
 import Login from './components/Login'
 import RegistroAcciones from './components/RegistroAcciones'
@@ -15,23 +14,9 @@ import EditorMaterialesModal from './components/EditorMaterialesModal'
 import SolicitadoVsCobradoModal from './components/SolicitadoVsCobradoModal'
 import ProtocolosMensualesToolbar from './components/ProtocolosMensualesToolbar'
 import ProtocolosMensualesTabla from './components/ProtocolosMensualesTabla'
-import ProtocolosMensualesModal from './components/ProtocolosMensualesModal'
-import PreciosMaterialesModal from './components/PreciosMaterialesModal'
 import DetalleCobroModal from './components/DetalleCobroModal'
 import BotonValorCobro from './components/BotonValorCobro'
-import ReintegrarModuloModal from './components/ReintegrarModuloModal'
-import DescargaProtocolosDiariosModal from './components/DescargaProtocolosDiariosModal'
-import BalanceMaterialesModal from './components/BalanceMaterialesModal'
-import BalanceMantencionModal from './components/BalanceMantencionModal'
-import ValesBodegaModal from './components/ValesBodegaModal'
-import BodegaModal from './components/BodegaModal'
-import ProyeccionMaterialesModal from './components/ProyeccionMaterialesModal'
-import ResumenGerencialModal from './components/ResumenGerencialModal'
-import UsuariosBodegaModal from './components/UsuariosBodegaModal'
-import AuditoriaModal from './components/AuditoriaModal'
-import IndicadoresHorasHombre from './components/IndicadoresHorasHombre'
 import MenuLateral from './components/MenuLateral'
-import EquivalenciasMaterialesModal from './components/EquivalenciasMaterialesModal'
 import ProtocoloEntrega, { camposMateriales, parsearCantidadProtocolo } from './components/ProtocoloEntrega'
 import { obtenerHistorial } from './services/modulosService'
 import {
@@ -41,29 +26,29 @@ import {
   obtenerRangoFechasProtocolos,
   obtenerValorInicialRangoProtocolo,
 } from './utils/fechas'
-import { descargarProtocolosDiariosPdf } from './services/protocolosDiariosPdf'
 import { tienePermiso } from './utils/permisos'
 import {
   BODEGA_BAYONA,
-  BODEGAS_DISPONIBLES,
+  BODEGAS_DISPONIBLES as BODEGAS_DISPONIBLES_BASE,
   PLANTA_BAYONA,
   obtenerCodigoBodega,
   obtenerCodigoPlanta,
   obtenerNombreBodega,
   obtenerNombrePlanta,
 } from './utils/ubicaciones'
+import { cargarBodegasDisponibles, crearBodegaObra } from './services/bodegasService'
 import {
   cargarRegistroAccionesDia,
   marcarRegistroAccionDeshecha,
   registrarRegistroAccionModulo,
 } from './services/registroAccionesService'
-import { leerFilasValeBodegaDesdeArchivo } from './services/valesBodegaArchivoService'
-import { leerInventariosBodegaDesdeExcel } from './services/bodegaInventarioArchivoService'
 import {
   cargarHistorialCorreccionesInventarioBodega as cargarHistorialCorreccionesInventarioBodegaSupabase,
   cargarMermasInventarioBodega as cargarMermasInventarioBodegaSupabase,
   cargarProximoNumeroMermaBodega as cargarProximoNumeroMermaBodegaSupabase,
+  cargarItemsInventarioBodega as cargarItemsInventarioBodegaSupabase,
   cargarInventariosBodega as cargarInventariosBodegaSupabase,
+  buscarMaterialesInventarioBodega as buscarMaterialesInventarioBodegaSupabase,
   corregirInventarioBodega as corregirInventarioBodegaSupabase,
   eliminarItemInventarioBodega as eliminarItemInventarioBodegaSupabase,
   guardarInventariosBodega as guardarInventariosBodegaSupabase,
@@ -123,7 +108,9 @@ import {
 import {
   cargarProtocolosDiarios,
   cargarRegistrosProtocolosPorRango,
+  cargarRegistrosResumenGerencial,
 } from './services/protocolosConsultaService'
+import { eliminarCacheDatos, guardarCacheDatos, leerCacheDatos } from './utils/cacheDatos'
 import {
   claveItemCobro,
   prepararRegistroProtocoloMensual as prepararRegistroProtocoloMensualBase,
@@ -255,6 +242,51 @@ import {
   obtenerConfiguracionPlanta,
 } from './utils/lineas'
 
+const ProtocolosMensualesModal = lazy(() => import('./components/ProtocolosMensualesModal'))
+const PreciosMaterialesModal = lazy(() => import('./components/PreciosMaterialesModal'))
+const ReintegrarModuloModal = lazy(() => import('./components/ReintegrarModuloModal'))
+const DescargaProtocolosDiariosModal = lazy(() => import('./components/DescargaProtocolosDiariosModal'))
+const BalanceMaterialesModal = lazy(() => import('./components/BalanceMaterialesModal'))
+const BalanceMantencionModal = lazy(() => import('./components/BalanceMantencionModal'))
+const ValesBodegaModal = lazy(() => import('./components/ValesBodegaModal'))
+const BodegaModal = lazy(() => import('./components/BodegaModal'))
+const ProyeccionMaterialesModal = lazy(() => import('./components/ProyeccionMaterialesModal'))
+const ResumenGerencialModal = lazy(() => import('./components/ResumenGerencialModal'))
+const UsuariosBodegaModal = lazy(() => import('./components/UsuariosBodegaModal'))
+const AuditoriaModal = lazy(() => import('./components/AuditoriaModal'))
+const IndicadoresHorasHombre = lazy(() => import('./components/IndicadoresHorasHombre'))
+const EquivalenciasMaterialesModal = lazy(() => import('./components/EquivalenciasMaterialesModal'))
+
+async function exportarHistorialExcel(...args) {
+  const modulo = await import('./services/exportarExcel')
+  return modulo.exportarHistorialExcel(...args)
+}
+
+async function exportarInventarioBodegaExcel(...args) {
+  const modulo = await import('./services/exportarExcel')
+  return modulo.exportarInventarioBodegaExcel(...args)
+}
+
+async function exportarPedidosBodegaExcel(...args) {
+  const modulo = await import('./services/exportarExcel')
+  return modulo.exportarPedidosBodegaExcel(...args)
+}
+
+async function descargarProtocolosDiariosPdf(...args) {
+  const modulo = await import('./services/protocolosDiariosPdf')
+  return modulo.descargarProtocolosDiariosPdf(...args)
+}
+
+async function leerFilasValeBodegaDesdeArchivo(...args) {
+  const modulo = await import('./services/valesBodegaArchivoService')
+  return modulo.leerFilasValeBodegaDesdeArchivo(...args)
+}
+
+async function leerInventariosBodegaDesdeExcel(...args) {
+  const modulo = await import('./services/bodegaInventarioArchivoService')
+  return modulo.leerInventariosBodegaDesdeExcel(...args)
+}
+
 const seccionesFormularioElectrico = [
   {
     nombre: 'Canalización',
@@ -380,15 +412,8 @@ function esCodigoBodegaDescontable(valor) {
 }
 
 function normalizarBodega(valor) {
-  const texto = String(valor || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-
-  if (texto.includes('bayona')) return 'bayona'
-  if (texto.includes('rental')) return 'rental'
-  if (texto.includes('montana')) return 'montaña'
-  return ''
+  if (!String(valor || '').trim()) return ''
+  return obtenerCodigoBodega(valor)
 }
 
 function obtenerBodegaDesdeObservacion(observacion = '') {
@@ -740,6 +765,28 @@ function ContenidoTarjetaModulo({ modulo, compacto = false, onMostrarObservacion
   )
 }
 
+function CargandoVistaDiferida() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 6000,
+        display: 'grid',
+        placeItems: 'center',
+        background: 'rgba(7, 16, 22, 0.72)',
+        backdropFilter: 'blur(2px)',
+      }}
+    >
+      <div style={{ padding: '14px 20px', border: '1px solid #3c7085', borderRadius: '10px', background: '#102631', color: '#b9ecff', fontWeight: 800 }}>
+        Abriendo vista…
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [datos, setDatos] = useState([])
 const [moduloSeleccionado, setModuloSeleccionado] = useState(null)
@@ -769,9 +816,10 @@ const [proyectosFiltrados, setProyectosFiltrados] = useState([])
 const [mostrarFiltroProyectos, setMostrarFiltroProyectos] = useState(false)
 const [session, setSession] = useState(null)
 const [perfil, setPerfil] = useState(null)
+const [bodegasDisponibles, setBodegasDisponibles] = useState(BODEGAS_DISPONIBLES_BASE)
 const [bodegaSeleccionadaAdmin, setBodegaSeleccionadaAdmin] = useState(() => {
   const guardada = obtenerCodigoBodega(window.localStorage.getItem('bodega-admin-activa') || BODEGA_BAYONA)
-  return BODEGAS_DISPONIBLES.some((bodega) => bodega.valor === guardada) ? guardada : BODEGA_BAYONA
+  return guardada || BODEGA_BAYONA
 })
 const [plantaSeleccionadaAdmin, setPlantaSeleccionadaAdmin] = useState(() => {
   const guardada = obtenerCodigoPlanta(window.localStorage.getItem('planta-admin-activa') || PLANTA_BAYONA)
@@ -1027,11 +1075,44 @@ const puedeAdministrarEquivalenciasPlanta = puedeAdministrarEquivalenciasMateria
 const plantaActivaRef = useRef(plantaActiva)
 plantaActivaRef.current = plantaActiva
 
-function cambiarBodegaActivaAdmin(nuevaBodega) {
+async function cargarCatalogoBodegas() {
+  if (!session?.user?.id) return BODEGAS_DISPONIBLES_BASE
+  const { bodegas, error } = await cargarBodegasDisponibles({ supabase })
+  if (error) {
+    console.error('No se pudo cargar el catálogo de bodegas', error)
+    return BODEGAS_DISPONIBLES_BASE
+  }
+  setBodegasDisponibles(bodegas)
+  if (perfil?.rol === 'admin' && !bodegas.some((bodega) => bodega.valor === bodegaSeleccionadaAdmin)) {
+    setBodegaSeleccionadaAdmin(BODEGA_BAYONA)
+    window.localStorage.setItem('bodega-admin-activa', BODEGA_BAYONA)
+  }
+  return bodegas
+}
+
+async function crearNuevaBodegaObra(nombre) {
+  if (perfil?.rol !== 'admin') return false
+  const { bodega, error } = await crearBodegaObra({ supabase, nombre })
+  if (error || !bodega) {
+    const detalle = error?.code === '23505'
+      ? 'Ya existe una bodega con ese nombre.'
+      : error?.code === '42P01' || String(error?.message || '').includes('bodegas_config')
+        ? 'Falta instalar la configuración de bodegas en Supabase.'
+        : error?.message || 'No se pudo crear la bodega.'
+    mostrarNotificacion(detalle)
+    return false
+  }
+  setBodegasDisponibles((actuales) => [...actuales.filter((item) => item.valor !== bodega.valor), bodega])
+  mostrarNotificacion(`${bodega.etiqueta} creada. Ahora puedes cargarle un inventario y asignar usuarios.`)
+  cambiarBodegaActivaAdmin(bodega.valor, true)
+  return true
+}
+
+function cambiarBodegaActivaAdmin(nuevaBodega, permitirNueva = false) {
   if (perfil?.rol !== 'admin') return
 
   const codigoBodega = obtenerCodigoBodega(nuevaBodega)
-  if (!BODEGAS_DISPONIBLES.some((bodega) => bodega.valor === codigoBodega)) return
+  if (!permitirNueva && !bodegasDisponibles.some((bodega) => bodega.valor === codigoBodega)) return
   if (codigoBodega === bodegaActiva) return
 
   window.localStorage.setItem('bodega-admin-activa', codigoBodega)
@@ -1522,6 +1603,11 @@ useEffect(() => {
 }, [session])
 
 useEffect(() => {
+  if (!session?.user?.id || !perfil?.id) return
+  cargarCatalogoBodegas()
+}, [session?.user?.id, perfil?.id])
+
+useEffect(() => {
   if (!session?.user?.id) return
   consultarEstadoNotificacionesPush().then(setEstadoNotificacionesPush)
 }, [session?.user?.id])
@@ -1978,7 +2064,24 @@ function descargarProtocolosDiarios() {
   setMostrarDescargaProtocolos(true)
 }
 
-async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompleto) {
+async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompleto, { forzar = false } = {}) {
+  const claveCache = `materiales-v2:${session?.user?.id || 'sin-usuario'}`
+  const firmaCatalogo = catalogo.map((item) => [
+    item.idArt || item.idArtInterno || '',
+    item.material || '',
+    item.activo === false ? '0' : '1',
+  ].join(':')).join('|')
+  if (!forzar) {
+    const cache = leerCacheDatos(claveCache, 5 * 60 * 1000)
+    if (cache?.catalogo && cache?.precios && cache.firmaCatalogo === firmaCatalogo) {
+      setCatalogoMaterialesGuardado(cache.catalogoGuardado || [])
+      setPreciosMateriales(cache.precios)
+      setPreciosCompraMateriales(cache.preciosCompra || {})
+      setCodigosBodegaMateriales(cache.codigosBodega || {})
+      return cache
+    }
+  }
+
   setCargandoPreciosMateriales(true)
   const { catalogo: catalogoGuardado, error: errorCatalogoGuardado } = await cargarCatalogoMaterialesGuardado({
     supabase,
@@ -2032,7 +2135,16 @@ async function cargarPreciosMateriales(catalogo = catalogoPreciosMaterialesCompl
   setPreciosMateriales(precios)
   setPreciosCompraMateriales(preciosCompra || {})
   setCodigosBodegaMateriales(codigosBodega || {})
-  return { precios, preciosCompra: preciosCompra || {}, codigosBodega: codigosBodega || {}, catalogo: catalogoConGuardado }
+  const resultado = {
+    precios,
+    preciosCompra: preciosCompra || {},
+    codigosBodega: codigosBodega || {},
+    catalogo: catalogoConGuardado,
+    catalogoGuardado: catalogoGuardado || [],
+    firmaCatalogo,
+  }
+  guardarCacheDatos(claveCache, resultado)
+  return resultado
 }
 
 async function abrirPreciosMateriales() {
@@ -2092,6 +2204,13 @@ async function abrirEquivalenciasMateriales() {
 }
 
 async function cargarEquivalenciasMateriales() {
+  const claveCache = `equivalencias-v1:${session?.user?.id || 'sin-usuario'}`
+  const cache = leerCacheDatos(claveCache, 10 * 60 * 1000)
+  if (cache) {
+    setEquivalenciasMateriales(cache)
+    return cache
+  }
+
   setCargandoEquivalenciasMateriales(true)
   const { data, error } = await cargarEquivalenciasMaterialesSupabase({ supabase })
   setCargandoEquivalenciasMateriales(false)
@@ -2102,7 +2221,9 @@ async function cargarEquivalenciasMateriales() {
     mostrarNotificacion('No se pudieron cargar equivalencias desde Supabase. Se usarán las equivalencias base.')
   }
 
-  return data || equivalenciasMaterialesBase
+  const equivalencias = data || equivalenciasMaterialesBase
+  if (!error) guardarCacheDatos(claveCache, equivalencias)
+  return equivalencias
 }
 
 async function guardarEquivalenciasMateriales(filas = []) {
@@ -2120,6 +2241,8 @@ async function guardarEquivalenciasMateriales(filas = []) {
     mostrarNotificacion(`No se pudieron guardar equivalencias: ${error.message || 'error desconocido'}`)
     return
   }
+
+  eliminarCacheDatos(`equivalencias-v1:${session?.user?.id || 'sin-usuario'}`)
 
   setEquivalenciasMateriales(data || equivalenciasLimpias)
   mostrarNotificacion('Equivalencias de materiales guardadas')
@@ -2490,12 +2613,24 @@ async function cargarResumenGerencial(anio = anioResumenGerencial) {
   if (!puedeVerResumenGerencial || !anio) return
   setCargandoResumenGerencial(true)
   setErrorResumenGerencial('')
-  const [resultadoProtocolos, vales, equivalenciasActuales] = await Promise.all([
-    obtenerRegistrosProtocolosPorRango(String(anio), 'anio'),
+  const { inicio, fin } = obtenerRangoFechasProtocolos('anio', String(anio))
+  const [resultadoProtocolosBase, vales, equivalenciasActuales] = await Promise.all([
+    cargarRegistrosResumenGerencial({
+      supabase,
+      inicio,
+      fin,
+      respaldo: () => cargarRegistrosProtocolosPorRango({
+        supabase,
+        inicio,
+        fin,
+        fechaDocumentoProtocolo,
+        fechaDentroDeRangoProtocolo,
+      }),
+    }),
     cargarValesBodegaPorRango(String(anio), 'anio'),
     cargarEquivalenciasMateriales(),
   ])
-  const { registros, error } = resultadoProtocolos
+  const { registrosActivos = [], registrosHistorial = [], registrosManuales = [], error } = resultadoProtocolosBase
   if (error) {
     setCargandoResumenGerencial(false)
     setErrorResumenGerencial('No se pudo preparar el consolidado: ' + error.message)
@@ -2504,6 +2639,12 @@ async function cargarResumenGerencial(anio = anioResumenGerencial) {
     return
   }
   const preciosCargados = await cargarPreciosMateriales(catalogoPreciosMaterialesCompleto)
+  const preciosActuales = preciosCargados?.precios || preciosMateriales
+  const registros = [
+    ...registrosActivos.map((item) => prepararRegistroProtocoloMensual(item, 'actual', preciosActuales)),
+    ...registrosHistorial.map((item) => prepararRegistroProtocoloMensual(item, 'historial', preciosActuales)),
+    ...registrosManuales.map((item) => prepararRegistroProtocoloMensual(item, 'manual', preciosActuales)),
+  ].sort((a, b) => new Date(b.fecha_prueba_electrica || 0) - new Date(a.fecha_prueba_electrica || 0))
   const registrosConCostos = agregarCostoMaterialesResumen(
     registros,
     preciosCargados?.preciosCompra || preciosCompraMateriales,
@@ -3187,7 +3328,10 @@ async function guardarRecepcionBodega(datosRecepcion, materialesRecepcion) {
       ? `Recepción N° ${recepcion?.numero_recepcion || '-'} guardada. Nuevos materiales creados: ${nuevosItemsInventario.length}`
       : `Recepción N° ${recepcion?.numero_recepcion || '-'} guardada y sumada al inventario`
   )
-  await cargarInventariosBodega()
+  await refrescarItemsInventarioBodega({
+    inventarioId: inventarioActual.id,
+    codigos: items.map((item) => item.codigo),
+  })
   await cargarRecepcionesBodega()
   return true
 }
@@ -3276,8 +3420,6 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
     })
   }
 
-  const actualizaciones = Array.from(actualizacionesPorItem.values())
-
   if (noEncontrados.length > 0) {
     mostrarNotificacion('No se encontraron en el inventario: ' + noEncontrados.join(', '))
     return false
@@ -3311,7 +3453,6 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
           ? 'Falta habilitar los traspasos en Supabase. Ejecuta el archivo supabase_traspasos_bodega.sql.'
           : `No se pudo crear el traspaso. No se aplicaron cambios. Detalle: ${error.message}`
       )
-      await cargarInventariosBodega()
       return false
     }
 
@@ -3320,7 +3461,10 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
       void enviarEventoPush({ supabase, tipo: 'traspaso_bodega', recursoId: despachoId })
     }
     mostrarNotificacion(`Traspaso N° ${despacho?.documento || '-'} enviado a ${obtenerNombreBodega(destino)}. Quedará pendiente hasta su recepción.`)
-    await cargarInventariosBodega()
+    await refrescarItemsInventarioBodega({
+      inventarioId: inventarioActual.id,
+      codigos: items.map((item) => item.codigo),
+    })
     await cargarDespachosBodega()
     return true
   }
@@ -3349,7 +3493,10 @@ async function guardarDespachoBodega(datosSalida, materialesSalida) {
 
   setGuardandoDespachoBodega(false)
   mostrarNotificacion(`Despacho N° ${despacho?.documento || '-'} registrado y descontado del inventario`)
-  await cargarInventariosBodega()
+  await refrescarItemsInventarioBodega({
+    inventarioId: inventarioActual.id,
+    codigos: items.map((item) => item.codigo),
+  })
   await cargarDespachosBodega()
   return true
 }
@@ -3385,7 +3532,6 @@ async function recepcionarTraspasoBodega(traspaso) {
         ? 'Falta habilitar la recepción de traspasos en Supabase. Ejecuta el archivo supabase_traspasos_bodega.sql.'
         : `No se pudo recepcionar el traspaso. No se aplicaron cambios. Detalle: ${error.message}`
     )
-    await cargarInventariosBodega()
     await cargarAlertasBodega()
     return false
   }
@@ -3395,7 +3541,10 @@ async function recepcionarTraspasoBodega(traspaso) {
       ? 'Este traspaso ya había sido recepcionado; no se volvió a sumar al inventario.'
       : `Traspaso recepcionado y agregado al inventario de ${nombreBodegaActiva}`
   )
-  await cargarInventariosBodega()
+  await refrescarItemsInventarioBodega({
+    inventarioId: inventarioDestino.id,
+    codigos: (traspaso.items || []).map((item) => item.codigo_bodega || item.codigo),
+  })
   await cargarAlertasBodega()
   await cargarRecepcionesBodega()
   return true
@@ -3616,6 +3765,71 @@ async function cargarInventariosBodega(preferido = null) {
     cargarInventariosBodegaLocalesRespaldo()
   }
   return inventariosFiltrados
+}
+
+function actualizarInventarioBodegaLocal({ inventarioId, items = [], eliminarIds = [] }) {
+  const idsEliminar = new Set(eliminarIds.filter(Boolean))
+  const itemsPorId = new Map(items.filter((item) => item?.id).map((item) => [item.id, item]))
+  const itemsPorCodigo = new Map(items.filter((item) => item?.codigo).map((item) => [normalizarTextoComparacion(item.codigo), item]))
+
+  setInventariosBodega((actuales) => actuales.map((inventario) => {
+    if (inventario.id !== inventarioId) return inventario
+    const idsAplicados = new Set()
+    const codigosAplicados = new Set()
+    const siguientes = (inventario.items || [])
+      .filter((item) => !idsEliminar.has(item.id))
+      .map((item) => {
+        const reemplazo = itemsPorId.get(item.id) || itemsPorCodigo.get(normalizarTextoComparacion(item.codigo))
+        if (!reemplazo) return item
+        if (reemplazo.id) idsAplicados.add(reemplazo.id)
+        if (reemplazo.codigo) codigosAplicados.add(normalizarTextoComparacion(reemplazo.codigo))
+        return reemplazo
+      })
+
+    items.forEach((item) => {
+      const codigo = normalizarTextoComparacion(item.codigo)
+      if ((item.id && idsAplicados.has(item.id)) || (codigo && codigosAplicados.has(codigo))) return
+      siguientes.push(item)
+    })
+    siguientes.sort((a, b) => String(a.descripcion || '').localeCompare(String(b.descripcion || ''), 'es'))
+    const resumen = siguientes.reduce((total, item) => ({
+      entradas: total.entradas + Number(item.entradas || 0),
+      salidas: total.salidas + Number(item.salidas || 0),
+      saldoInicial: total.saldoInicial + Number(item.saldoInicial || 0),
+      saldoFinal: total.saldoFinal + Number(item.saldoFinal || 0),
+    }), { entradas: 0, salidas: 0, saldoInicial: 0, saldoFinal: 0 })
+    return { ...inventario, items: siguientes, totalItems: siguientes.length, resumen }
+  }))
+}
+
+async function refrescarItemsInventarioBodega({ inventarioId, ids = [], codigos = [] }) {
+  const { items, error } = await cargarItemsInventarioBodegaSupabase({
+    supabase,
+    inventarioId,
+    ids,
+    codigos,
+  })
+  if (error) {
+    console.error('No se pudieron refrescar los materiales modificados', error)
+    return false
+  }
+  actualizarInventarioBodegaLocal({ inventarioId, items })
+  return true
+}
+
+async function buscarMaterialesBodega(texto, soloConStock = false) {
+  const inventarioActual = inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+  if (!inventarioActual?.id) return []
+  const { items, error } = await buscarMaterialesInventarioBodegaSupabase({
+    supabase,
+    inventarioId: inventarioActual.id,
+    bodega: bodegaActiva,
+    texto,
+    soloConStock,
+    limite: 100,
+  })
+  if (error) throw error
+  return items
 }
 
 async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null, seccion = null } = {}) {
@@ -3875,8 +4089,9 @@ async function corregirInventarioBodega({ item, nuevoSaldo, nuevoCodigo, nuevaDe
     return false
   }
 
+  const inventarioActual = inventariosBodega.find((inventario) => inventario.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
   await Promise.all([
-    cargarInventariosBodega(),
+    refrescarItemsInventarioBodega({ inventarioId: inventarioActual?.id, ids: [item.id] }),
     cargarHistorialCorreccionesInventarioBodega(),
   ])
   const cambiosGuardados = [
@@ -3946,7 +4161,8 @@ async function eliminarItemInventarioBodega(item) {
     return false
   }
 
-  await cargarInventariosBodega()
+  const inventarioActual = inventariosBodega.find((inventario) => inventario.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
+  actualizarInventarioBodegaLocal({ inventarioId: inventarioActual?.id, eliminarIds: [item.id] })
   mostrarNotificacion(`Material eliminado del inventario: ${item.codigo} · ${item.descripcion}`)
   return true
 }
@@ -4079,7 +4295,10 @@ async function registrarMermaInventarioBodega(merma, filas = []) {
   }
 
   await Promise.all([
-    cargarInventariosBodega(),
+    refrescarItemsInventarioBodega({
+      inventarioId: inventarioActual.id,
+      ids: items.map((item) => item.material.id),
+    }),
     cargarMermasInventarioBodega(),
   ])
   mostrarNotificacion(
@@ -4406,12 +4625,29 @@ async function guardarDevolucionBodegaConMateriales(datosDevolucion, materialesD
 
 async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
   if (!puedeOperarComoBodega || !alerta?.id) return false
-  if (String(alerta.estado_bodega || '').toLowerCase() === 'entregado') {
+
+  // La edición de materiales reemplaza las filas del detalle y, por lo tanto,
+  // también sus identificadores. Volvemos a leer el pedido antes de preparar
+  // la entrega para no intentar confirmar una copia anterior abierta en pantalla.
+  const { vale: pedidoVigente, error: errorPedidoVigente } = await cargarValeBodegaPorIdSupabase({
+    supabase,
+    id: alerta.id,
+    conservarDetalleOriginal: true,
+  })
+  if (errorPedidoVigente || !pedidoVigente) {
+    mostrarNotificacion(
+      'No se pudo verificar la versión actual del pedido. No se descontó inventario. ' +
+      (errorPedidoVigente?.message || 'Vuelve a intentarlo.')
+    )
+    return false
+  }
+
+  if (String(pedidoVigente.estado_bodega || '').toLowerCase() === 'entregado') {
     mostrarNotificacion('Este pedido ya fue marcado como entregado')
     return true
   }
 
-  const bodegaSolicitud = obtenerBodegaDesdeObservacion(alerta.observacion)
+  const bodegaSolicitud = obtenerBodegaDesdeObservacion(pedidoVigente.observacion)
   const inventarioActual = bodegaSolicitud
     ? inventariosBodega.find((item) => obtenerBodegaInventario(item) === bodegaSolicitud)
     : inventariosBodega.find((item) => item.id === inventarioBodegaSeleccionadoId) || inventariosBodega[0]
@@ -4425,7 +4661,7 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
     return false
   }
 
-  const itemsSolicitud = alerta.items || []
+  const itemsSolicitud = pedidoVigente.items || []
   if (itemsSolicitud.length === 0) {
     mostrarNotificacion('La solicitud no tiene materiales para descontar')
     return false
@@ -4497,7 +4733,7 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
 
   const { data: resultadoEntrega, error: errorEntrega } = await entregarPedidoBodegaTransaccional({
     supabase,
-    valeId: alerta.id,
+    valeId: pedidoVigente.id,
     inventarioId: inventarioActual.id,
     actualizaciones,
     itemsEsperados: itemsSolicitud,
@@ -4512,12 +4748,11 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
 
     mostrarNotificacion(
       pedidoModificado
-        ? 'El pedido cambió mientras se procesaba la entrega. Se conservó el inventario sin cambios; revisa el pedido actualizado.'
+        ? `El pedido no coincide con el detalle guardado. Se conservó el inventario sin cambios. Detalle: ${detalle.replace(/^.*PEDIDO_MODIFICADO:\s*/i, '')}`
         : funcionNoInstalada
           ? 'Falta instalar la entrega segura en Supabase. Ejecuta el archivo supabase_vales_bodega_entrega.sql antes de usar esta versión.'
           : `No se pudo entregar el pedido. No se aplicó ningún descuento. Detalle: ${detalle}`
     )
-    await cargarInventariosBodega()
     await cargarAlertasBodega()
     return false
   }
@@ -4536,15 +4771,18 @@ async function entregarSolicitudBodega(alerta, opcionesEntrega = {}) {
         : 'Pedido entregado y descontado del inventario'
   )
   setPedidosBodegaHoy((actuales) => actuales.map((vale) => (
-    vale.id === alerta.id
+    vale.id === pedidoVigente.id
       ? { ...vale, ...datosEntrega }
       : vale
   )))
-  setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== alerta.id))
+  setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== pedidoVigente.id))
   if (datosEntrega.fecha_entrega_bodega) {
     await recalcularResumenOperacionalPorFecha(datosEntrega.fecha_entrega_bodega)
   }
-  await cargarInventariosBodega()
+  await refrescarItemsInventarioBodega({
+    inventarioId: inventarioActual.id,
+    ids: actualizaciones.map((item) => item.itemInventario.id),
+  })
   await cargarAlertasBodega()
   return true
 }
@@ -4638,7 +4876,6 @@ async function recepcionarDevolucionBodega(alerta) {
           ? 'Falta instalar la recepción segura en Supabase. Ejecuta el archivo supabase_devoluciones_bodega_recepcion.sql.'
           : `No se pudo recepcionar la devolución. El inventario no fue modificado. Detalle: ${detalle}`
     )
-    await cargarInventariosBodega()
     await cargarAlertasBodega()
     return false
   }
@@ -4657,7 +4894,10 @@ async function recepcionarDevolucionBodega(alerta) {
     vale.id === alerta.id ? { ...vale, ...datosRecepcion } : vale
   )))
   setAlertasBodega((actuales) => actuales.filter((vale) => vale.id !== alerta.id))
-  await cargarInventariosBodega()
+  await refrescarItemsInventarioBodega({
+    inventarioId: inventarioActual.id,
+    ids: actualizaciones.map((item) => item.itemInventario.id),
+  })
   await cargarAlertasBodega()
   return true
 }
@@ -5542,6 +5782,8 @@ async function guardarPreciosMateriales() {
     mostrarNotificacion('No se pudieron guardar los precios: ' + error.message)
     return
   }
+
+  eliminarCacheDatos(`materiales-v2:${session?.user?.id || 'sin-usuario'}`)
 
   setPrecioMaterialEnEdicion(null)
   if (catalogoConfirmado) {
@@ -6943,6 +7185,34 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     },
   ]
 
+  const actividadGlobalVisible = Boolean(
+    cargandoMateriales ||
+    cargandoSolicitadoVsCobrado ||
+    cargandoAuditoria ||
+    cargandoResumenGerencial ||
+    cargandoProyeccionMateriales ||
+    cargandoPreciosMateriales ||
+    guardandoPreciosMateriales ||
+    cargandoProtocolosMensuales ||
+    cargandoBalanceMateriales ||
+    cargandoBalanceMantencion ||
+    cargandoInventariosBodega ||
+    leyendoInventarioBodega ||
+    guardandoPedidoBodega ||
+    guardandoDevolucionBodega ||
+    guardandoRecepcionBodega ||
+    guardandoCorreccionInventario ||
+    guardandoMermaInventario ||
+    guardandoDespachoBodega ||
+    entregandoSolicitudBodega ||
+    recepcionandoDevolucionBodega ||
+    recepcionandoTraspasoBodega ||
+    cargandoUsuariosBodega ||
+    guardandoUsuariosBodega ||
+    cargandoEquivalenciasMateriales ||
+    guardandoEquivalenciasMateriales
+  )
+
   
 
   return (
@@ -6952,6 +7222,12 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         tipo={notificacion?.tipo}
         onCerrar={() => setNotificacion(null)}
       />
+      {actividadGlobalVisible && (
+        <div className="indicador-actividad-global" role="status" aria-label="Procesando solicitud">
+          <span />
+        </div>
+      )}
+      <Suspense fallback={<CargandoVistaDiferida />}>
       <div
         className="contenido-aplicacion"
         onClick={cerrarPanelesYModulo}
@@ -8717,7 +8993,8 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     bodegaActiva={bodegaActiva}
     nombreBodegaActiva={nombreBodegaActiva}
     puedeSeleccionarBodega={perfil?.rol === 'admin'}
-    bodegasDisponibles={BODEGAS_DISPONIBLES}
+    bodegasDisponibles={bodegasDisponibles}
+    onCrearBodegaObra={crearNuevaBodegaObra}
     archivo={archivoInventarioBodega}
     inventarios={inventariosBodega}
     solicitantes={solicitantesValeBodega}
@@ -8828,6 +9105,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       if (error) console.error('No se pudo actualizar el pedido abierto', error)
       return vale
     }}
+    onBuscarMateriales={buscarMaterialesBodega}
     onSeleccionarInventario={setInventarioBodegaSeleccionadoId}
     onCerrar={() => {
       if (esRolBodega) {
@@ -8951,6 +9229,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 {mostrarUsuariosBodega && puedeAdministrarUsuariosBodega && (
   <UsuariosBodegaModal
     usuarios={usuariosBodega}
+    bodegas={bodegasDisponibles}
     usuarioActualId={session?.user?.id}
     cargando={cargandoUsuariosBodega}
     guardando={guardandoUsuariosBodega}
@@ -9095,6 +9374,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     </div>
   </div>
 )}
+      </Suspense>
     </>
   )
 }

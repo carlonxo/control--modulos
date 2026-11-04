@@ -85,6 +85,7 @@ function BodegaModal({
   seccionInicial = null,
   soloSolicitarMaterial = false,
   onCambiarBodegaActiva,
+  onCrearBodegaObra,
   onCambiarArchivo,
   onLeerArchivo,
   onGuardarPedido,
@@ -130,12 +131,21 @@ function BodegaModal({
   onActualizarAlertasBodega,
   onConsumirAlertaInicial,
   onActualizarPedidoBodega,
+  onBuscarMateriales,
   onSeleccionarInventario,
   onCerrar,
   onClickFondo,
 }) {
   const [busqueda, setBusqueda] = useState('')
   const [ocultarSinStock, setOcultarSinStock] = useState(false)
+  const [paginaInventario, setPaginaInventario] = useState(1)
+  const [mostrarCrearBodegaObra, setMostrarCrearBodegaObra] = useState(false)
+  const [nombreNuevaBodegaObra, setNombreNuevaBodegaObra] = useState('')
+  const [creandoBodegaObra, setCreandoBodegaObra] = useState(false)
+  const [resultadosBusquedaRemota, setResultadosBusquedaRemota] = useState([])
+  const [textoBusquedaRemota, setTextoBusquedaRemota] = useState('')
+  const [cargandoBusquedaRemota, setCargandoBusquedaRemota] = useState(false)
+  const [falloBusquedaRemota, setFalloBusquedaRemota] = useState(false)
   const [mostrarCargaExcel, setMostrarCargaExcel] = useState(false)
   const [mostrarIngresoProveedor, setMostrarIngresoProveedor] = useState(false)
   const [mostrarSalidaMaterial, setMostrarSalidaMaterial] = useState(false)
@@ -154,6 +164,7 @@ function BodegaModal({
   const [mostrarCodigosBarra, setMostrarCodigosBarra] = useState(false)
   const [alertaBodegaSeleccionada, setAlertaBodegaSeleccionada] = useState(null)
   const actualizarPedidoBodegaRef = useRef(onActualizarPedidoBodega)
+  const buscarMaterialesRef = useRef(onBuscarMateriales)
   const [recepcionSeleccionada, setRecepcionSeleccionada] = useState(null)
   const [despachoSeleccionado, setDespachoSeleccionado] = useState(null)
   const [facturaIngreso, setFacturaIngreso] = useState({
@@ -250,6 +261,43 @@ function BodegaModal({
   }, [onActualizarPedidoBodega])
 
   useEffect(() => {
+    buscarMaterialesRef.current = onBuscarMateriales
+  }, [onBuscarMateriales])
+
+  useEffect(() => {
+    const texto = busqueda.trim()
+    if (texto.length < 2 || !buscarMaterialesRef.current) {
+      setResultadosBusquedaRemota([])
+      setTextoBusquedaRemota('')
+      setCargandoBusquedaRemota(false)
+      setFalloBusquedaRemota(false)
+      return undefined
+    }
+
+    let vigente = true
+    setCargandoBusquedaRemota(true)
+    setFalloBusquedaRemota(false)
+    const temporizador = setTimeout(async () => {
+      try {
+        const items = await buscarMaterialesRef.current(texto, ocultarSinStock)
+        if (!vigente) return
+        setResultadosBusquedaRemota(items || [])
+        setTextoBusquedaRemota(texto)
+      } catch (error) {
+        console.error('No se pudo buscar el material en bodega', error)
+        if (vigente) setFalloBusquedaRemota(true)
+      } finally {
+        if (vigente) setCargandoBusquedaRemota(false)
+      }
+    }, 250)
+
+    return () => {
+      vigente = false
+      clearTimeout(temporizador)
+    }
+  }, [busqueda, ocultarSinStock, inventarioSeleccionadoId])
+
+  useEffect(() => {
     if (!alertaInicialId) return
     const alerta = alertasBodega.find((item) => String(item.id) === String(alertaInicialId))
     if (!alerta) return
@@ -326,6 +374,8 @@ function BodegaModal({
 
   const itemsFiltrados = useMemo(() => {
     const texto = normalizarBusqueda(busqueda)
+    const coincideBusquedaRemota = texto.length >= 2 && normalizarBusqueda(textoBusquedaRemota) === texto
+    if (coincideBusquedaRemota && !falloBusquedaRemota) return resultadosBusquedaRemota
     return materialesInventario.filter((item) => {
       if (ocultarSinStock && Number(item.saldoFinal || 0) <= 0) return false
       if (!texto) return true
@@ -338,13 +388,31 @@ function BodegaModal({
         normalizarBusqueda(item.unidad).includes(texto)
       )
     })
-  }, [busqueda, codigosBarraPorMaterial, materialesInventario, ocultarSinStock])
+  }, [busqueda, codigosBarraPorMaterial, falloBusquedaRemota, materialesInventario, ocultarSinStock, resultadosBusquedaRemota, textoBusquedaRemota])
+  const tamanoPaginaInventario = 100
+  const totalPaginasInventario = Math.max(1, Math.ceil(itemsFiltrados.length / tamanoPaginaInventario))
+  const paginaInventarioSegura = Math.min(paginaInventario, totalPaginasInventario)
+  const itemsPaginaInventario = useMemo(() => {
+    const inicio = (paginaInventarioSegura - 1) * tamanoPaginaInventario
+    return itemsFiltrados.slice(inicio, inicio + tamanoPaginaInventario)
+  }, [itemsFiltrados, paginaInventarioSegura])
 
   function cerrarPanelesResumenBodega() {
     if (mostrarPedidosBodegaHoy) onTogglePedidosBodegaHoy?.()
     if (mostrarDevolucionesBodegaHoy) onToggleDevolucionesBodegaHoy?.()
     if (mostrarRecepcionesBodega) onToggleRecepcionesBodega?.()
     if (mostrarDespachosBodega) onToggleDespachosBodega?.()
+  }
+
+  async function crearBodegaObraActual(evento) {
+    evento.preventDefault()
+    if (!nombreNuevaBodegaObra.trim() || creandoBodegaObra) return
+    setCreandoBodegaObra(true)
+    const creada = await onCrearBodegaObra?.(nombreNuevaBodegaObra)
+    setCreandoBodegaObra(false)
+    if (!creada) return
+    setNombreNuevaBodegaObra('')
+    setMostrarCrearBodegaObra(false)
   }
 
   function cambiarFacturaIngreso(campo, valor) {
@@ -615,18 +683,23 @@ function BodegaModal({
       {(puedeSeleccionarBodega || !modoSoloBodega) && (
         <div style={{ display: 'flex', justifyContent: puedeSeleccionarBodega ? 'space-between' : 'flex-end', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end', marginBottom: '18px' }}>
           {puedeSeleccionarBodega && (
-            <label style={{ display: 'grid', gap: '6px', minWidth: '220px', fontWeight: 800, color: '#b8d4df' }}>
-              Bodega activa
-              <select
-                value={bodegaActiva}
-                onChange={(evento) => onCambiarBodegaActiva?.(evento.target.value)}
-                style={{ ...inputStyle, minWidth: '220px', cursor: 'pointer' }}
-              >
-                {bodegasDisponibles.map((bodega) => (
-                  <option key={bodega.valor} value={bodega.valor}>{bodega.etiqueta}</option>
-                ))}
-              </select>
-            </label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <label style={{ display: 'grid', gap: '6px', minWidth: '220px', fontWeight: 800, color: '#b8d4df' }}>
+                Bodega activa
+                <select
+                  value={bodegaActiva}
+                  onChange={(evento) => onCambiarBodegaActiva?.(evento.target.value)}
+                  style={{ ...inputStyle, minWidth: '220px', cursor: 'pointer' }}
+                >
+                  {bodegasDisponibles.map((bodega) => (
+                    <option key={bodega.valor} value={bodega.valor}>{bodega.etiqueta}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={() => setMostrarCrearBodegaObra((actual) => !actual)} style={botonMiniAzul}>
+                + Bodega de obra
+              </button>
+            </div>
           )}
           {!modoSoloBodega && (
           <button type="button" onClick={onCerrar} style={botonGris}>
@@ -634,6 +707,26 @@ function BodegaModal({
           </button>
           )}
         </div>
+      )}
+
+      {puedeSeleccionarBodega && mostrarCrearBodegaObra && (
+        <form onSubmit={crearBodegaObraActual} style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap', margin: '-6px 0 18px', padding: '12px', border: '1px solid #3b7187', borderRadius: '9px', background: '#102630' }}>
+          <label style={{ display: 'grid', gap: '5px', flex: '1 1 280px' }}>
+            <strong>Nombre de la obra</strong>
+            <input
+              value={nombreNuevaBodegaObra}
+              onChange={(evento) => setNombreNuevaBodegaObra(evento.target.value)}
+              placeholder="Ej: Proyecto ENAP Concón"
+              disabled={creandoBodegaObra}
+              autoFocus
+              style={inputStyle}
+            />
+          </label>
+          <button type="submit" disabled={creandoBodegaObra || nombreNuevaBodegaObra.trim().length < 3} style={botonVerde}>
+            {creandoBodegaObra ? 'Creando…' : 'Crear bodega'}
+          </button>
+          <button type="button" disabled={creandoBodegaObra} onClick={() => setMostrarCrearBodegaObra(false)} style={botonGris}>Cancelar</button>
+        </form>
       )}
 
       {(puedeOperarBodega || puedeAprobarPedidos) && (
@@ -819,14 +912,20 @@ function BodegaModal({
               <input
                 type="text"
                 value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
+                onChange={(e) => {
+                  setBusqueda(e.target.value)
+                  setPaginaInventario(1)
+                }}
                 placeholder="Buscar por código, código de barra, descripción o unidad"
                 style={inputStyle}
               />
             </label>
             <button
               type="button"
-              onClick={() => setOcultarSinStock((valor) => !valor)}
+              onClick={() => {
+                setOcultarSinStock((valor) => !valor)
+                setPaginaInventario(1)
+              }}
               style={{
                 ...botonFiltroStock,
                 background: ocultarSinStock ? '#0d47a1' : '#555',
@@ -836,6 +935,15 @@ function BodegaModal({
               {ocultarSinStock ? 'Mostrar material sin stock' : 'Ocultar material sin stock'}
             </button>
           </div>
+          {busqueda.trim().length >= 2 && (
+            <small style={{ display: 'block', margin: '-6px 0 10px', color: falloBusquedaRemota ? '#ffcc80' : '#90caf9' }}>
+              {cargandoBusquedaRemota
+                ? 'Buscando en el inventario…'
+                : falloBusquedaRemota
+                  ? 'Se usó la búsqueda local porque no respondió el servidor.'
+                  : `${itemsFiltrados.length} coincidencia(s)`}
+            </small>
+          )}
 
           <div className="bodega-resumen-acciones" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'stretch', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
             <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
@@ -1283,7 +1391,7 @@ function BodegaModal({
                 </tr>
               </thead>
               <tbody>
-                {itemsFiltrados.slice(0, 400).map((item) => (
+                {itemsPaginaInventario.map((item) => (
                   <tr key={`${item.codigo}-${item.filaExcel}`}>
                     <td style={tdStyle}>{item.codigo}</td>
                     <td style={tdStyle}>{item.descripcion}</td>
@@ -1346,10 +1454,14 @@ function BodegaModal({
             </table>
           </div>
 
-          {itemsFiltrados.length > 400 && (
-            <p style={{ color: '#bbb' }}>
-              Mostrando los primeros 400 resultados de {itemsFiltrados.length}. Usa el buscador para acotar.
-            </p>
+          {itemsFiltrados.length > tamanoPaginaInventario && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
+              <button type="button" onClick={() => setPaginaInventario(1)} disabled={paginaInventarioSegura === 1} style={botonGris}>« Primera</button>
+              <button type="button" onClick={() => setPaginaInventario(Math.max(1, paginaInventarioSegura - 1))} disabled={paginaInventarioSegura === 1} style={botonGris}>‹ Anterior</button>
+              <strong style={{ color: '#b8d4df' }}>Página {paginaInventarioSegura} de {totalPaginasInventario} · {itemsFiltrados.length} materiales</strong>
+              <button type="button" onClick={() => setPaginaInventario(Math.min(totalPaginasInventario, paginaInventarioSegura + 1))} disabled={paginaInventarioSegura === totalPaginasInventario} style={botonGris}>Siguiente ›</button>
+              <button type="button" onClick={() => setPaginaInventario(totalPaginasInventario)} disabled={paginaInventarioSegura === totalPaginasInventario} style={botonGris}>Última »</button>
+            </div>
           )}
         </>
       )}
@@ -2516,6 +2628,7 @@ function PanelCodigosBarraBodega({
   })
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('todos')
+  const [paginaCodigos, setPaginaCodigos] = useState(1)
   const [mensaje, setMensaje] = useState(null)
   const [mostrarSugerenciasCodigo, setMostrarSugerenciasCodigo] = useState(false)
   const formularioCodigoRef = useRef(null)
@@ -2587,6 +2700,13 @@ function PanelCodigosBarraBodega({
         normalizarBusqueda(item.descripcion).includes(texto)
     })
   }, [busqueda, filasCodigos, filtroEstado])
+  const tamanoPaginaCodigos = 75
+  const totalPaginasCodigos = Math.max(1, Math.ceil(codigosFiltrados.length / tamanoPaginaCodigos))
+  const paginaCodigosSegura = Math.min(paginaCodigos, totalPaginasCodigos)
+  const codigosPagina = useMemo(() => {
+    const inicio = (paginaCodigosSegura - 1) * tamanoPaginaCodigos
+    return codigosFiltrados.slice(inicio, inicio + tamanoPaginaCodigos)
+  }, [codigosFiltrados, paginaCodigosSegura])
 
   const codigosInventario = useMemo(
     () => new Set(materialesInventario.map((item) => normalizarBusqueda(item.codigo)).filter(Boolean)),
@@ -2814,14 +2934,20 @@ function PanelCodigosBarraBodega({
           <input
             type="text"
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => {
+              setBusqueda(e.target.value)
+              setPaginaCodigos(1)
+            }}
             placeholder="Buscar por código de barra, código bodega o material"
             style={inputStyle}
           />
         </label>
         <label style={{ display: 'grid', gap: '5px' }}>
           <strong>Mostrar</strong>
-          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} style={inputStyle}>
+          <select value={filtroEstado} onChange={(e) => {
+            setFiltroEstado(e.target.value)
+            setPaginaCodigos(1)
+          }} style={inputStyle}>
             <option value="todos">Todos los materiales</option>
             <option value="externo">Código externo</option>
             <option value="codigo_bodega">Código bodega configurado</option>
@@ -2844,7 +2970,7 @@ function PanelCodigosBarraBodega({
             </tr>
           </thead>
           <tbody>
-            {codigosFiltrados.map((item) => (
+            {codigosPagina.map((item) => (
               <tr key={item.id || `${item.estado}-${item.codigoBarra}-${item.codigoBodega}-${item.indiceInventario}`}>
                 <td style={tdStyle}>{item.codigoBodega}</td>
                 <td style={tdStyle}>{item.descripcion || obtenerDescripcionMaterialPorCodigo(item.codigoBodega, materialesInventario)}</td>
@@ -2868,6 +2994,14 @@ function PanelCodigosBarraBodega({
           </tbody>
         </table>
       </div>
+
+      {codigosFiltrados.length > tamanoPaginaCodigos && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
+          <button type="button" onClick={() => setPaginaCodigos(Math.max(1, paginaCodigosSegura - 1))} disabled={paginaCodigosSegura === 1} style={botonGris}>‹ Anterior</button>
+          <strong style={{ color: '#b8d4df' }}>Página {paginaCodigosSegura} de {totalPaginasCodigos} · {codigosFiltrados.length} materiales</strong>
+          <button type="button" onClick={() => setPaginaCodigos(Math.min(totalPaginasCodigos, paginaCodigosSegura + 1))} disabled={paginaCodigosSegura === totalPaginasCodigos} style={botonGris}>Siguiente ›</button>
+        </div>
+      )}
 
       {!cargando && codigosFiltrados.length === 0 && (
         <p style={{ color: '#bbb', marginBottom: 0 }}>No hay materiales que coincidan con la búsqueda o el filtro.</p>

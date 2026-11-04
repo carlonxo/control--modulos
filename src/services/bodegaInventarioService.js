@@ -76,6 +76,88 @@ export async function cargarInventariosBodega({ supabase, bodega = 'bayona', lim
   }
 }
 
+export async function buscarMaterialesInventarioBodega({
+  supabase,
+  inventarioId,
+  bodega = 'bayona',
+  texto = '',
+  soloConStock = false,
+  limite = 100,
+}) {
+  const busqueda = String(texto || '').trim()
+  if (!inventarioId || busqueda.length < 2) return { items: [], error: null }
+
+  const patron = busqueda.replace(/[,%()]/g, ' ').trim()
+  if (!patron) return { items: [], error: null }
+
+  const consultaCodigos = supabase
+    .from('bodega_codigos_barra')
+    .select('codigo_bodega')
+    .eq('bodega', normalizarBodegaInventario(bodega) || 'bayona')
+    .ilike('codigo_barra', `%${patron}%`)
+    .limit(limite)
+
+  let consultaDirecta = supabase
+    .from('bodega_inventario_items')
+    .select('*')
+    .eq('inventario_id', inventarioId)
+    .or(`codigo_bodega.ilike.%${patron}%,descripcion.ilike.%${patron}%,unidad.ilike.%${patron}%`)
+    .order('descripcion', { ascending: true })
+    .limit(limite)
+  if (soloConStock) consultaDirecta = consultaDirecta.gt('saldo_final', 0)
+
+  const [respuestaDirecta, respuestaCodigos] = await Promise.all([consultaDirecta, consultaCodigos])
+  if (respuestaDirecta.error) return { items: [], error: respuestaDirecta.error }
+
+  const codigos = [...new Set((respuestaCodigos.data || []).map((item) => item.codigo_bodega).filter(Boolean))]
+  let itemsCodigo = []
+  if (codigos.length > 0) {
+    let consultaPorCodigo = supabase
+      .from('bodega_inventario_items')
+      .select('*')
+      .eq('inventario_id', inventarioId)
+      .in('codigo_bodega', codigos)
+      .limit(limite)
+    if (soloConStock) consultaPorCodigo = consultaPorCodigo.gt('saldo_final', 0)
+    const respuestaPorCodigo = await consultaPorCodigo
+    if (!respuestaPorCodigo.error) itemsCodigo = respuestaPorCodigo.data || []
+  }
+
+  const unicos = new Map()
+  ;[...(respuestaDirecta.data || []), ...itemsCodigo].forEach((item) => unicos.set(item.id, item))
+  return {
+    items: [...unicos.values()].slice(0, limite).map(normalizarItemBodegaDesdeSupabase),
+    error: null,
+  }
+}
+
+export async function cargarItemsInventarioBodega({
+  supabase,
+  inventarioId,
+  ids = [],
+  codigos = [],
+}) {
+  if (!inventarioId || (ids.length === 0 && codigos.length === 0)) return { items: [], error: null }
+
+  let consulta = supabase
+    .from('bodega_inventario_items')
+    .select('*')
+    .eq('inventario_id', inventarioId)
+
+  const idsLimpios = [...new Set(ids.filter(Boolean))]
+  const codigosLimpios = [...new Set(codigos.map((codigo) => String(codigo || '').trim()).filter(Boolean))]
+  if (idsLimpios.length > 0 && codigosLimpios.length > 0) {
+    consulta = consulta.or(`id.in.(${idsLimpios.join(',')}),codigo_bodega.in.(${codigosLimpios.join(',')})`)
+  } else if (idsLimpios.length > 0) {
+    consulta = consulta.in('id', idsLimpios)
+  } else {
+    consulta = consulta.in('codigo_bodega', codigosLimpios)
+  }
+
+  const { data, error } = await consulta
+  return { items: (data || []).map(normalizarItemBodegaDesdeSupabase), error }
+}
+
 export async function corregirInventarioBodega({
   supabase,
   itemId,
@@ -568,10 +650,10 @@ function normalizarItemBodegaDesdeSupabase(item) {
 
 function normalizarBodegaInventario(valor) {
   const texto = normalizarTextoSimple(valor)
-  if (texto.includes('bayona')) return 'bayona'
-  if (texto.includes('rental')) return 'rental'
-  if (texto.includes('montana')) return 'montaña'
-  return ''
+    .replace(/^bodega\s+/, '')
+    .trim()
+  if (!texto) return ''
+  return texto === 'montana' ? 'montaña' : texto
 }
 
 function normalizarTextoSimple(valor) {

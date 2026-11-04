@@ -1,12 +1,5 @@
 import { useMemo, useState } from 'react'
 
-const bodegasDisponibles = [
-  { valor: '', etiqueta: 'Sin asignar' },
-  { valor: 'bayona', etiqueta: 'Bodega Bayona' },
-  { valor: 'rental', etiqueta: 'Bodega Rental' },
-  { valor: 'montaña', etiqueta: 'Bodega Montaña' },
-]
-
 const plantasDisponibles = [
   { valor: '', etiqueta: 'Sin asignar' },
   { valor: 'planta bayona', etiqueta: 'Planta Bayona' },
@@ -32,6 +25,7 @@ const usuarioInicial = {
 
 function UsuariosBodegaModal({
   usuarios = [],
+  bodegas = [],
   usuarioActualId,
   cargando,
   guardando,
@@ -43,6 +37,10 @@ function UsuariosBodegaModal({
   onEliminarUsuario,
   onCerrar,
 }) {
+  const bodegasDisponibles = useMemo(() => [
+    { valor: '', etiqueta: 'Sin asignar' },
+    ...bodegas,
+  ], [bodegas])
   const [ediciones, setEdiciones] = useState({})
   const [busqueda, setBusqueda] = useState('')
   const [mostrarCreacion, setMostrarCreacion] = useState(false)

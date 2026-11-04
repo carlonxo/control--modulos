@@ -75,7 +75,10 @@ begin
     raise exception using errcode = '42501', message = 'Tu rol no tiene permiso para crear despachos.';
   end if;
 
-  if v_bodega_origen not in ('bayona', 'rental', 'montaña') then
+  if not exists (
+    select 1 from public.bodegas_config bodega
+    where bodega.codigo = v_bodega_origen and bodega.activa = true
+  ) then
     raise exception 'La bodega de origen no es válida.';
   end if;
 

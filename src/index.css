@@ -1548,3 +1548,36 @@ code {
     grid-column: 1 / -1;
   }
 }
+@keyframes actividad-global-desplazamiento {
+  0% { transform: translateX(-105%); }
+  55% { transform: translateX(45%); }
+  100% { transform: translateX(205%); }
+}
+
+.indicador-actividad-global {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  overflow: hidden;
+  background: rgba(36, 93, 115, 0.45);
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.indicador-actividad-global > span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #50d8ff 25%, #4ade80 75%, transparent);
+  animation: actividad-global-desplazamiento 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indicador-actividad-global > span {
+    width: 100%;
+    animation: none;
+  }
+}

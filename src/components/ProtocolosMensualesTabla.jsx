@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import ProtocolosMensualesFila from './ProtocolosMensualesFila'
 
 function ProtocolosMensualesTabla({
@@ -27,16 +28,21 @@ function ProtocolosMensualesTabla({
   onGuardarIdOt,
   onGuardarNotaAlerta,
 }) {
+  const [pagina, setPagina] = useState(1)
+  const tamanoPagina = 50
+  const totalPaginas = Math.max(1, Math.ceil(protocolosFiltrados.length / tamanoPagina))
+  const paginaSegura = Math.min(pagina, totalPaginas)
+  const protocolosPagina = useMemo(() => {
+    const inicio = (paginaSegura - 1) * tamanoPagina
+    return protocolosFiltrados.slice(inicio, inicio + tamanoPagina)
+  }, [paginaSegura, protocolosFiltrados])
+
   if (protocolos.length === 0 && !cargando) {
     return (
       <p style={{ color: '#ccc' }}>
         No hay protocolos con fecha de prueba electrica en el rango seleccionado.
       </p>
     )
-  }
-
-  if (false && protocolosFiltrados.length === 0 && !cargando) {
-    return <p style={{ color: '#ccc' }}>No hay resultados para la búsqueda indicada.</p>
   }
 
   return (
@@ -120,7 +126,7 @@ function ProtocolosMensualesTabla({
                 No hay resultados para los filtros seleccionados.
               </td>
             </tr>
-          ) : protocolosFiltrados.map((registro) => {
+          ) : protocolosPagina.map((registro) => {
             const claveRegistro = `${registro.origen}-${registro.id}`
             const claveUnica = claveProtocoloUnico(registro.serie, registro.fecha_prueba_electrica)
             const estaDuplicado = !registro.esGarantia && claveUnica && conteoClaves[claveUnica] > 1
@@ -151,8 +157,27 @@ function ProtocolosMensualesTabla({
           })}
         </tbody>
       </table>
+      {protocolosFiltrados.length > tamanoPagina && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '14px 0 4px' }}>
+          <button type="button" onClick={() => setPagina(1)} disabled={paginaSegura === 1} style={botonPaginacion}>« Primera</button>
+          <button type="button" onClick={() => setPagina(Math.max(1, paginaSegura - 1))} disabled={paginaSegura === 1} style={botonPaginacion}>‹ Anterior</button>
+          <strong style={{ color: '#b8d4df' }}>Página {paginaSegura} de {totalPaginas} · {protocolosFiltrados.length} protocolos</strong>
+          <button type="button" onClick={() => setPagina(Math.min(totalPaginas, paginaSegura + 1))} disabled={paginaSegura === totalPaginas} style={botonPaginacion}>Siguiente ›</button>
+          <button type="button" onClick={() => setPagina(totalPaginas)} disabled={paginaSegura === totalPaginas} style={botonPaginacion}>Última »</button>
+        </div>
+      )}
     </div>
   )
+}
+
+const botonPaginacion = {
+  padding: '7px 11px',
+  borderRadius: '7px',
+  border: '1px solid #607d8b',
+  background: '#37474f',
+  color: 'white',
+  fontWeight: 700,
+  cursor: 'pointer',
 }
 
 export default ProtocolosMensualesTabla

@@ -1,3 +1,11 @@
+import { esEstadoGarantia, esEstadoPruebaElectrica } from '../utils/modulos'
+
+function esRegistroVisibleEnProtocolos(registro = {}, origen = '') {
+  if (origen === 'manual') return true
+  const estado = registro.estado || registro.protocolo_entrega?.estado
+  return esEstadoPruebaElectrica(estado) || esEstadoGarantia(estado)
+}
+
 export async function cargarProtocolosDiarios({
   supabase,
   fecha,
@@ -29,7 +37,10 @@ export async function cargarProtocolosDiarios({
   }
 
   return {
-    registros: [...(respuestaActivos.data || []), ...(respuestaHistorial.data || [])]
+    registros: [
+      ...(respuestaActivos.data || []).filter((item) => esRegistroVisibleEnProtocolos(item, 'actual')),
+      ...(respuestaHistorial.data || []).filter((item) => esRegistroVisibleEnProtocolos(item, 'historial')),
+    ]
       .sort((a, b) => String(a.serie || '').localeCompare(String(b.serie || ''))),
     error: null,
   }
@@ -144,10 +155,44 @@ export async function cargarRegistrosProtocolosPorRango({
   }
 
   return {
-    registrosActivos: respuestaActivos.data || [],
-    registrosHistorial: respuestaHistorial.data || [],
-    registrosManuales: tablaManualNoExiste ? [] : respuestaManuales.data || [],
+    registrosActivos: (respuestaActivos.data || []).filter((item) => esRegistroVisibleEnProtocolos(item, 'actual')),
+    registrosHistorial: (respuestaHistorial.data || []).filter((item) => esRegistroVisibleEnProtocolos(item, 'historial')),
+    registrosManuales: tablaManualNoExiste
+      ? []
+      : (respuestaManuales.data || []).filter((item) => esRegistroVisibleEnProtocolos(item, 'manual')),
     tablaManualNoExiste,
     error: null,
   }
+}
+
+export async function cargarRegistrosResumenGerencial({
+  supabase,
+  inicio,
+  fin,
+  respaldo,
+}) {
+  const { data, error } = await supabase.rpc('cargar_protocolos_resumen_gerencial', {
+    p_inicio: String(inicio || '').slice(0, 10),
+    p_fin: String(fin || '').slice(0, 10),
+  })
+
+  if (!error) {
+    const registros = Array.isArray(data?.registros) ? data.registros : []
+    return {
+      registrosActivos: registros.filter((item) => item.origen === 'actual' && esRegistroVisibleEnProtocolos(item, 'actual')),
+      registrosHistorial: registros.filter((item) => item.origen === 'historial' && esRegistroVisibleEnProtocolos(item, 'historial')),
+      registrosManuales: registros.filter((item) => item.origen === 'manual' && esRegistroVisibleEnProtocolos(item, 'manual')),
+      error: null,
+      optimizado: true,
+    }
+  }
+
+  const funcionNoInstalada = error.code === 'PGRST202'
+    || String(error.message || '').includes('cargar_protocolos_resumen_gerencial')
+  if (!funcionNoInstalada || typeof respaldo !== 'function') {
+    return { registrosActivos: [], registrosHistorial: [], registrosManuales: [], error, optimizado: false }
+  }
+
+  const resultadoRespaldo = await respaldo()
+  return { ...resultadoRespaldo, optimizado: false }
 }
