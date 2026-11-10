@@ -142,12 +142,19 @@ for delete
 to authenticated
 using (public.usuario_tiene_rol(array['admin']));
 
--- Los vales se consultan desde varias vistas de informes y notificaciones.
+-- Los roles de gestion consultan todos los vales. Un electrico solamente puede
+-- leer los pedidos asociados a su propio usuario.
 create policy vales_bodega_select_authenticated
 on public.vales_bodega
 for select
 to authenticated
-using (true);
+using (
+  public.usuario_tiene_rol(array['admin', 'operador', 'analista', 'bodega', 'visor'])
+  or (
+    public.usuario_tiene_rol(array['electrico'])
+    and solicitante_id = auth.uid()
+  )
+);
 
 create policy vales_bodega_insert_roles
 on public.vales_bodega
@@ -168,7 +175,18 @@ create policy vales_bodega_items_select_authenticated
 on public.vales_bodega_items
 for select
 to authenticated
-using (true);
+using (
+  public.usuario_tiene_rol(array['admin', 'operador', 'analista', 'bodega', 'visor'])
+  or (
+    public.usuario_tiene_rol(array['electrico'])
+    and exists (
+      select 1
+      from public.vales_bodega vale
+      where vale.id = vales_bodega_items.vale_id
+        and vale.solicitante_id = auth.uid()
+    )
+  )
+);
 
 -- Electricos pueden agregar el detalle al crear una solicitud abierta.
 -- Los pedidos cerrados solo pueden corregirse por admin.

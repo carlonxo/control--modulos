@@ -71,6 +71,7 @@ import {
   cargarItemsRetiradosBodegaPorSerie,
   cargarPedidosEntregadosBodegaPorRango,
   cargarResumenOperacionalMensual,
+  cargarMisPedidosBodega as cargarMisPedidosBodegaSupabase,
   cargarValeBodegaPorId as cargarValeBodegaPorIdSupabase,
   cargarValesBodegaDia as cargarValesBodegaDiaSupabase,
   guardarValeBodega as guardarValeBodegaSupabase,
@@ -929,6 +930,9 @@ const [mostrarPedidosBodegaHoy, setMostrarPedidosBodegaHoy] = useState(false)
 const [devolucionesBodegaHoy, setDevolucionesBodegaHoy] = useState([])
 const [mostrarDevolucionesBodegaHoy, setMostrarDevolucionesBodegaHoy] = useState(false)
 const [historialValesBodega, setHistorialValesBodega] = useState([])
+const [misPedidosBodega, setMisPedidosBodega] = useState([])
+const [cargandoMisPedidosBodega, setCargandoMisPedidosBodega] = useState(false)
+const [errorMisPedidosBodega, setErrorMisPedidosBodega] = useState('')
 const [mostrarHistorialValesBodega, setMostrarHistorialValesBodega] = useState(false)
 const [fechaHistorialValesBodega, setFechaHistorialValesBodega] = useState(fechaActualLocalInput())
 const [cargandoHistorialValesBodega, setCargandoHistorialValesBodega] = useState(false)
@@ -2946,6 +2950,28 @@ async function cargarAlertasBodega(fecha = fechaActualLocalInput()) {
   setAlertasBodega([...alertasVisibles, ...(errorTraspasos ? [] : traspasos || [])])
 }
 
+async function cargarMisPedidosBodega() {
+  if (perfil?.rol !== 'electrico' || !session?.user?.id) return []
+
+  setCargandoMisPedidosBodega(true)
+  setErrorMisPedidosBodega('')
+  const { pedidos, error } = await cargarMisPedidosBodegaSupabase({
+    supabase,
+    usuarioId: session.user.id,
+    limite: 100,
+  })
+  setCargandoMisPedidosBodega(false)
+
+  if (error) {
+    setMisPedidosBodega([])
+    setErrorMisPedidosBodega('No se pudieron consultar tus pedidos: ' + error.message)
+    return []
+  }
+
+  setMisPedidosBodega(pedidos)
+  return pedidos
+}
+
 async function cargarHistorialValesBodega(fecha = fechaHistorialValesBodega) {
   if (!fecha || !puedeVerBodega) return []
 
@@ -3834,7 +3860,7 @@ async function buscarMaterialesBodega(texto, soloConStock = false) {
 
 async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null, seccion = null } = {}) {
   if (!puedeVerBodega) return
-  const esSeccionAlternable = ['historial-vales', 'historial-correcciones', 'codigos-barra'].includes(seccion)
+  const esSeccionAlternable = ['historial-vales', 'historial-correcciones', 'codigos-barra', 'mis-pedidos'].includes(seccion)
   const seccionSiguiente = esSeccionAlternable && seccionBodegaInicial?.nombre === seccion
     ? ''
     : seccion
@@ -3855,6 +3881,7 @@ async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = nu
   await cargarInventariosBodega()
   await cargarAlertasBodega()
   await cargarRecepcionesBodega()
+  if (perfil?.rol === 'electrico') await cargarMisPedidosBodega()
 }
 
 function abrirSolicitudMaterialDesdeModulo() {
@@ -4407,8 +4434,12 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     String(item.id || item.nombre) === String(datosPedido?.retira)
   ))
 
-  pedido.retiraId = retiraSeleccionado?.id || null
-  pedido.retiraNombre = retiraSeleccionado?.nombre || String(datosPedido?.retira || '').trim()
+  pedido.retiraId = perfil?.rol === 'electrico'
+    ? session?.user?.id || null
+    : retiraSeleccionado?.id || null
+  pedido.retiraNombre = perfil?.rol === 'electrico'
+    ? perfil?.nombre || perfil?.email || session?.user?.email || ''
+    : retiraSeleccionado?.nombre || String(datosPedido?.retira || '').trim()
 
   const items = (materialesPedido || [])
     .map((item) => ({
@@ -4488,6 +4519,7 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
   if (mostrarBalanceMateriales) {
     await cargarBalanceMateriales(fechaBalanceMateriales, rangoBalanceMateriales)
   }
+  if (perfil?.rol === 'electrico') await cargarMisPedidosBodega()
   return true
 }
 
@@ -7068,6 +7100,15 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       onClick: () => abrirBodega({ abrirSolicitudMaterial: perfil?.rol === 'electrico' }),
     },
     {
+      id: 'bodega-mis-pedidos',
+      etiqueta: 'Mis pedidos',
+      icono: '\u25F7',
+      nivel: 1,
+      visible: perfil?.rol === 'electrico',
+      activo: seccionBodegaInicial?.nombre === 'mis-pedidos',
+      onClick: () => abrirBodega({ seccion: 'mis-pedidos' }),
+    },
+    {
       id: 'bodega-cargar-inventario',
       etiqueta: 'Cargar inventario',
       icono: '\u21E7',
@@ -9030,6 +9071,9 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     devolucionesBodegaHoy={devolucionesBodegaHoy}
     mostrarDevolucionesBodegaHoy={mostrarDevolucionesBodegaHoy}
     historialValesBodega={historialValesBodega}
+    misPedidosBodega={misPedidosBodega}
+    cargandoMisPedidosBodega={cargandoMisPedidosBodega}
+    errorMisPedidosBodega={errorMisPedidosBodega}
     mostrarHistorialValesBodega={mostrarHistorialValesBodega}
     fechaHistorialValesBodega={fechaHistorialValesBodega}
     cargandoHistorialValesBodega={cargandoHistorialValesBodega}
@@ -9048,6 +9092,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     solicitudMaterialInicial={solicitudMaterialBodegaInicial}
     seccionInicial={seccionBodegaInicial}
     soloSolicitarMaterial={perfil?.rol === 'electrico'}
+    usuarioActual={{ id: session?.user?.id, nombre: perfil?.nombre || perfil?.email || session?.user?.email || '' }}
     onCambiarBodegaActiva={cambiarBodegaActivaAdmin}
     onCambiarArchivo={setArchivoInventarioBodega}
     onLeerArchivo={leerInventarioBodega}
@@ -9086,6 +9131,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       cargarHistorialValesBodega(fecha)
     }}
     onActualizarHistorialValesBodega={() => cargarHistorialValesBodega(fechaHistorialValesBodega)}
+    onActualizarMisPedidosBodega={cargarMisPedidosBodega}
     onToggleRecepcionesBodega={alternarPanelRecepcionesBodega}
     onCambiarRangoRecepcionesBodega={cambiarRangoRecepcionesBodega}
     onCambiarFechaRecepcionesBodega={cambiarFechaRecepcionesBodega}

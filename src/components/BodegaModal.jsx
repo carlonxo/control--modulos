@@ -66,6 +66,9 @@ function BodegaModal({
   devolucionesBodegaHoy = [],
   mostrarDevolucionesBodegaHoy,
   historialValesBodega = [],
+  misPedidosBodega = [],
+  cargandoMisPedidosBodega = false,
+  errorMisPedidosBodega = '',
   mostrarHistorialValesBodega,
   fechaHistorialValesBodega = fechaActualInput(),
   cargandoHistorialValesBodega = false,
@@ -84,6 +87,7 @@ function BodegaModal({
   solicitudMaterialInicial = null,
   seccionInicial = null,
   soloSolicitarMaterial = false,
+  usuarioActual = null,
   onCambiarBodegaActiva,
   onCrearBodegaObra,
   onCambiarArchivo,
@@ -116,6 +120,7 @@ function BodegaModal({
   onToggleHistorialValesBodega,
   onCambiarFechaHistorialValesBodega,
   onActualizarHistorialValesBodega,
+  onActualizarMisPedidosBodega,
   onToggleRecepcionesBodega,
   onCambiarRangoRecepcionesBodega,
   onCambiarFechaRecepcionesBodega,
@@ -154,6 +159,8 @@ function BodegaModal({
   const [mostrarRecepcionarMaterial, setMostrarRecepcionarMaterial] = useState(false)
   const [mostrarCorreccionInventario, setMostrarCorreccionInventario] = useState(false)
   const [mostrarHistorialCorrecciones, setMostrarHistorialCorrecciones] = useState(false)
+  const [mostrarMisPedidos, setMostrarMisPedidos] = useState(false)
+  const [mostrarMisPedidosSoloHoy, setMostrarMisPedidosSoloHoy] = useState(false)
   const [itemCorreccionInventario, setItemCorreccionInventario] = useState(null)
   const [mostrarMermaInventario, setMostrarMermaInventario] = useState(false)
   const [mermaInventario, setMermaInventario] = useState({
@@ -202,6 +209,17 @@ function BodegaModal({
     const seccion = seccionInicial.nombre
     setMostrarCargaExcel(seccion === 'cargar-inventario')
     setMostrarCodigosBarra(seccion === 'codigos-barra')
+    const abrirMisPedidos = seccion === 'mis-pedidos'
+    setMostrarMisPedidos(abrirMisPedidos)
+    if (abrirMisPedidos) setMostrarMisPedidosSoloHoy(false)
+    if (abrirMisPedidos) {
+      setMostrarCrearPedido(false)
+      setMostrarCrearDevolucion(false)
+      setMostrarRecepcionarMaterial(false)
+      setMostrarIngresoProveedor(false)
+      setMostrarSalidaMaterial(false)
+      onActualizarMisPedidosBodega?.()
+    }
     const abrirHistorialCorrecciones = seccion === 'historial-correcciones'
     setMostrarHistorialCorrecciones(abrirHistorialCorrecciones)
     if (abrirHistorialCorrecciones) {
@@ -255,6 +273,9 @@ function BodegaModal({
   const traspasosPendientes = alertasBodega.filter((alerta) => alerta.tipo_ingreso === 'traspaso_bodega')
   const mostrarPedidosHoy = Boolean(puedeVerPedidosHoy)
   const puedeVerHistorialVales = Boolean(puedeAdministrar || modoSoloBodega || puedeVerPedidosHoy)
+  const fechaHoy = fechaActualInput()
+  const misPedidosHoy = misPedidosBodega.filter((pedido) => String(pedido.fecha || '').slice(0, 10) === fechaHoy)
+  const misPedidosVisibles = mostrarMisPedidosSoloHoy ? misPedidosHoy : misPedidosBodega
 
   useEffect(() => {
     actualizarPedidoBodegaRef.current = onActualizarPedidoBodega
@@ -950,6 +971,21 @@ function BodegaModal({
               <Tarjeta titulo="Materiales" valor={inventarioSeleccionado?.totalItems || 0} />
             </div>
 
+            {soloSolicitarMaterial && (
+              <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
+                <Tarjeta
+                  titulo="Mis pedidos hoy"
+                  valor={misPedidosHoy.length}
+                  onClick={() => {
+                    setMostrarMisPedidos(true)
+                    setMostrarMisPedidosSoloHoy(true)
+                    setMostrarCrearPedido(false)
+                    onActualizarMisPedidosBodega?.()
+                  }}
+                />
+              </div>
+            )}
+
             {mostrarPedidosHoy && (
               <div className="bodega-resumen-tarjeta" style={{ minWidth: '180px', maxWidth: '240px', flex: '1 1 180px' }}>
                 <Tarjeta
@@ -1204,6 +1240,17 @@ function BodegaModal({
             />
           )}
 
+          {soloSolicitarMaterial && mostrarMisPedidos && (
+            <PanelMisPedidosBodega
+              pedidos={misPedidosVisibles}
+              cargando={cargandoMisPedidosBodega}
+              error={errorMisPedidosBodega}
+              onActualizar={onActualizarMisPedidosBodega}
+              onSeleccionar={setAlertaBodegaSeleccionada}
+              titulo={mostrarMisPedidosSoloHoy ? 'Mis pedidos de hoy' : 'Mis pedidos'}
+            />
+          )}
+
           {mostrarPedidosHoy && mostrarDevolucionesBodegaHoy && (
             <PanelDevolucionesBodegaHoy
               devoluciones={devolucionesBodegaHoy}
@@ -1258,6 +1305,7 @@ function BodegaModal({
               pedido={pedidoMaterial}
               nombreBodega={nombreBodegaActiva}
               electricos={electricosDisponibles}
+              solicitanteFijo={soloSolicitarMaterial ? usuarioActual?.nombre : ''}
               materialesPedido={materialesPedido}
               materialesInventario={materialesInventario}
               guardando={guardandoPedido}
@@ -2030,6 +2078,86 @@ function CampanaBodega({
         </div>
       )}
     </>
+  )
+}
+
+function PanelMisPedidosBodega({ pedidos = [], cargando, error, onActualizar, onSeleccionar, titulo = 'Mis pedidos' }) {
+  const conteos = pedidos.reduce((totales, pedido) => {
+    const estado = String(pedido.estado_bodega || '').toLowerCase()
+    const clave = estado === 'solicitado'
+      ? 'aprobacion'
+      : estado === 'pendiente'
+        ? 'retiro'
+        : estado === 'entregado'
+          ? 'entregados'
+          : estado === 'denegado'
+            ? 'denegados'
+            : 'otros'
+    totales[clave] = Number(totales[clave] || 0) + 1
+    return totales
+  }, {})
+
+  return (
+    <div style={{ ...panelMovimientoStyle, marginTop: '-2px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
+        <div>
+          <h3 style={{ margin: 0 }}>{titulo}</h3>
+          <small style={{ color: '#aebdc5' }}>Sólo se muestran las solicitudes asociadas a tu usuario.</small>
+        </div>
+        <button type="button" onClick={onActualizar} disabled={cargando} style={botonAzul}>
+          {cargando ? 'Actualizando…' : 'Actualizar'}
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+        <EtiquetaEstadoResumen texto="Pendientes de aprobación" valor={conteos.aprobacion || 0} color="#90caf9" />
+        <EtiquetaEstadoResumen texto="Listos para retiro" valor={conteos.retiro || 0} color="#ffcc80" />
+        <EtiquetaEstadoResumen texto="Entregados" valor={conteos.entregados || 0} color="#81c784" />
+        {(conteos.denegados || 0) > 0 && <EtiquetaEstadoResumen texto="Denegados" valor={conteos.denegados} color="#ef9a9a" />}
+      </div>
+
+      {error ? (
+        <p style={{ color: '#ff8a80', margin: 0 }}>{error}</p>
+      ) : cargando && pedidos.length === 0 ? (
+        <p style={{ color: '#bbb', margin: 0 }}>Consultando tus pedidos…</p>
+      ) : pedidos.length === 0 ? (
+        <p style={{ color: '#bbb', margin: 0 }}>Aún no tienes pedidos registrados.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: '8px' }}>
+          {pedidos.map((pedido) => {
+            const estadoVisual = obtenerEstadoVisualPedidoBodega(pedido)
+            const unidades = (pedido.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
+            const detalle = [
+              pedido.fecha ? `Fecha: ${pedido.fecha}` : '',
+              pedido.serie ? `Serie: ${pedido.serie}` : '',
+              pedido.bodega ? formatearNombreBodega(pedido.bodega) : '',
+              `${(pedido.items || []).length} materiales`,
+              `${formatearNumero(unidades)} unidades`,
+            ].filter(Boolean).join(' | ')
+
+            return (
+              <button key={pedido.id} type="button" onClick={() => onSeleccionar?.(pedido)} style={filaPedidoHoyStyle}>
+                <span style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
+                  <strong>{pedido.serie ? `Pedido serie ${pedido.serie}` : 'Pedido de material'}</strong>
+                  <small style={{ color: '#bbb' }}>{detalle}</small>
+                </span>
+                <strong style={{ color: estadoVisual.color, border: `1px solid ${estadoVisual.borde}`, borderRadius: '999px', padding: '5px 10px', whiteSpace: 'nowrap', background: estadoVisual.fondo }}>
+                  {estadoVisual.etiqueta}
+                </strong>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EtiquetaEstadoResumen({ texto, valor, color }) {
+  return (
+    <span style={{ padding: '7px 10px', border: `1px solid ${color}55`, borderRadius: '8px', background: '#12242d', color }}>
+      <strong>{valor}</strong> {texto}
+    </span>
   )
 }
 
@@ -4115,6 +4243,7 @@ function PanelCrearPedido({
   pedido,
   nombreBodega,
   electricos,
+  solicitanteFijo = '',
   materialesPedido,
   materialesInventario,
   guardando,
@@ -4171,18 +4300,22 @@ function PanelCrearPedido({
         </label>
         <label style={labelStyle}>
           Retira
-          <select
-            value={pedido.retira}
-            onChange={(e) => onCambiarPedido('retira', e.target.value)}
-            style={inputStyle}
-          >
-            <option value="">Seleccionar eléctrico...</option>
-            {electricos.map((item) => (
-              <option key={item.id || item.nombre} value={item.id || item.nombre}>
-                {item.nombre}
-              </option>
-            ))}
-          </select>
+          {solicitanteFijo ? (
+            <input value={solicitanteFijo} disabled style={inputStyle} />
+          ) : (
+            <select
+              value={pedido.retira}
+              onChange={(e) => onCambiarPedido('retira', e.target.value)}
+              style={inputStyle}
+            >
+              <option value="">Seleccionar eléctrico...</option>
+              {electricos.map((item) => (
+                <option key={item.id || item.nombre} value={item.id || item.nombre}>
+                  {item.nombre}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
       </div>
 
@@ -4669,7 +4802,7 @@ function obtenerEstadoVisualPedidoBodega(pedido = {}) {
 
   if (estado === 'solicitado') {
     return {
-      etiqueta: 'Solicitado',
+      etiqueta: 'Pendiente de aprobación',
       color: '#90caf9',
       borde: '#1976d2',
       fondo: '#102b45',
@@ -4695,7 +4828,7 @@ function obtenerEstadoVisualPedidoBodega(pedido = {}) {
   }
 
   return {
-    etiqueta: 'Pendiente',
+    etiqueta: 'Listo para retiro',
     color: '#ffcc80',
     borde: '#f9a825',
     fondo: '#3a2b10',

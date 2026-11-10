@@ -187,9 +187,12 @@ export async function cargarRegistrosResumenGerencial({
     }
   }
 
-  const funcionNoInstalada = error.code === 'PGRST202'
-    || String(error.message || '').includes('cargar_protocolos_resumen_gerencial')
-  if (!funcionNoInstalada || typeof respaldo !== 'function') {
+  // La consulta directa también sirve como respaldo si la función optimizada
+  // quedó desactualizada respecto del esquema (por ejemplo, una columna movida
+  // dentro de protocolo_entrega). Sólo conservamos sin reemplazar los errores
+  // reales de autorización.
+  const errorAutorizacion = error.code === '42501'
+  if (errorAutorizacion || typeof respaldo !== 'function') {
     return { registrosActivos: [], registrosHistorial: [], registrosManuales: [], error, optimizado: false }
   }
 

@@ -131,7 +131,7 @@ begin
       p.tipo,
       p.proyecto,
       p.responsable,
-      p.estado,
+      coalesce(p.protocolo_entrega->>'estado', '')::text,
       null::timestamptz,
       p.fecha_prueba_electrica,
       null::timestamptz,

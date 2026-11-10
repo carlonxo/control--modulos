@@ -442,6 +442,41 @@ export async function cargarValeBodegaPorId({ supabase, id, conservarDetalleOrig
   }
 }
 
+export async function cargarMisPedidosBodega({
+  supabase,
+  usuarioId,
+  limite = 100,
+}) {
+  if (!usuarioId) return { pedidos: [], error: new Error('Falta el usuario para consultar sus pedidos') }
+
+  const { data: vales, error } = await supabase
+    .from('vales_bodega')
+    .select('id, fecha, serie, bodega, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
+    .eq('tipo_ingreso', 'pedido_app')
+    .eq('solicitante_id', usuarioId)
+    .order('created_at', { ascending: false })
+    .limit(limite)
+
+  if (error) return { pedidos: [], error }
+  if (!vales?.length) return { pedidos: [], error: null }
+
+  const { items, error: errorItems } = await cargarItemsPorVales({ supabase, vales })
+  if (errorItems) return { pedidos: [], error: errorItems }
+
+  const itemsPorVale = (items || []).reduce((mapa, item) => {
+    mapa[item.vale_id] = [...(mapa[item.vale_id] || []), item]
+    return mapa
+  }, {})
+
+  return {
+    pedidos: vales.map((vale) => ({
+      ...vale,
+      items: deduplicarItemsValeBodega(itemsPorVale[vale.id] || []),
+    })),
+    error: null,
+  }
+}
+
 export async function guardarValeBodega({
   supabase,
   fecha,

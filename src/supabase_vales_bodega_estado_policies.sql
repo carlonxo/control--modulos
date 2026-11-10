@@ -16,7 +16,13 @@ create policy vales_bodega_select_authenticated
 on public.vales_bodega
 for select
 to authenticated
-using (true);
+using (
+  public.usuario_tiene_rol(array['admin', 'operador', 'analista', 'bodega', 'visor'])
+  or (
+    public.usuario_tiene_rol(array['electrico'])
+    and solicitante_id = auth.uid()
+  )
+);
 
 drop policy if exists vales_bodega_update_estado_authenticated
 on public.vales_bodega;
