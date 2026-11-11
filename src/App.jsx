@@ -1735,16 +1735,84 @@ useEffect(() => {
     if (mostrarHistorialValesBodega) cargarHistorialValesBodega(fechaHistorialValesBodega)
   }
 
-  const intervalo = setInterval(() => {
+  const actualizarBodegaVisible = () => {
+    if (document.visibilityState === 'hidden') return
     cargarAlertasBodega()
     if (esRolBodega || mostrarBodega) {
       cargarRecepcionesBodega()
       cargarDespachosBodega()
     }
-  }, 60000)
+  }
 
-  return () => clearInterval(intervalo)
+  const intervalo = setInterval(actualizarBodegaVisible, 15000)
+  const actualizarAlVolver = () => {
+    if (document.visibilityState === 'visible') actualizarBodegaVisible()
+  }
+
+  window.addEventListener('focus', actualizarBodegaVisible)
+  document.addEventListener('visibilitychange', actualizarAlVolver)
+
+  return () => {
+    clearInterval(intervalo)
+    window.removeEventListener('focus', actualizarBodegaVisible)
+    document.removeEventListener('visibilitychange', actualizarAlVolver)
+  }
 }, [esRolBodega, puedeVerBodega, mostrarBodega, puedeRecibirAvisosBodega, bodegaActiva])
+
+useEffect(() => {
+  const debeEscucharPedidos = puedeVerBodega && (esRolBodega || mostrarBodega || puedeRecibirAvisosBodega)
+  if (!debeEscucharPedidos || !bodegaActiva) return
+
+  let temporizador = null
+  let segundaComprobacion = null
+
+  const actualizarPedidos = () => {
+    window.clearTimeout(temporizador)
+    window.clearTimeout(segundaComprobacion)
+    temporizador = window.setTimeout(() => {
+      cargarAlertasBodega()
+      if (mostrarHistorialValesBodega) cargarHistorialValesBodega(fechaHistorialValesBodega)
+    }, 250)
+
+    // La cabecera del pedido puede llegar unas décimas antes que sus materiales.
+    segundaComprobacion = window.setTimeout(() => {
+      cargarAlertasBodega()
+    }, 1200)
+  }
+
+  const canalPedidosBodega = supabase
+    .channel(`pedidos-bodega-${bodegaActiva}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'vales_bodega',
+        filter: `bodega=eq.${bodegaActiva}`,
+      },
+      actualizarPedidos
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'vales_bodega_items' },
+      actualizarPedidos
+    )
+    .subscribe()
+
+  return () => {
+    window.clearTimeout(temporizador)
+    window.clearTimeout(segundaComprobacion)
+    supabase.removeChannel(canalPedidosBodega)
+  }
+}, [
+  esRolBodega,
+  puedeVerBodega,
+  mostrarBodega,
+  puedeRecibirAvisosBodega,
+  bodegaActiva,
+  mostrarHistorialValesBodega,
+  fechaHistorialValesBodega,
+])
 
 if (!session) {
   return <Login supabase={supabase} />
