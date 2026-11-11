@@ -1479,7 +1479,6 @@ code {
   }
 
   .bodega-tabla-movimiento tbody,
-  .bodega-tabla-movimiento tr,
   .bodega-tabla-movimiento td {
     display: block;
     width: 100%;
@@ -1487,6 +1486,11 @@ code {
   }
 
   .bodega-tabla-movimiento tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 104px;
+    gap: 8px 10px;
+    width: 100%;
+    box-sizing: border-box;
     border: 1px solid #455a64;
     border-radius: 12px;
     background: #202a2f;
@@ -1495,22 +1499,52 @@ code {
   }
 
   .bodega-tabla-movimiento td {
+    width: auto;
+    min-width: 0;
     border: none !important;
-    padding: 7px 0 !important;
+    padding: 0 !important;
+  }
+
+  .bodega-tabla-movimiento td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .bodega-tabla-movimiento td:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .bodega-tabla-movimiento td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .bodega-tabla-movimiento td:nth-child(4) {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .bodega-tabla-movimiento td:nth-child(5) {
+    grid-column: 2;
+    grid-row: 3;
+    align-self: end;
   }
 
   .bodega-tabla-movimiento td::before {
     content: attr(data-label);
     display: block;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     color: #b0bec5;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 800;
+    line-height: 1.1;
+    text-transform: uppercase;
   }
 
   .bodega-tabla-movimiento td[data-label="Quitar"] {
     text-align: right !important;
-    padding-top: 2px !important;
+    padding: 0 !important;
   }
 
   .bodega-tabla-movimiento td[data-label="Quitar"]::before {
@@ -1518,8 +1552,25 @@ code {
   }
 
   .bodega-tabla-movimiento input {
-    min-height: 44px;
+    min-height: 38px;
+    padding: 7px 9px !important;
     font-size: 16px;
+  }
+
+  .bodega-tabla-movimiento td[data-label="Stock"] input {
+    min-height: 38px;
+    padding: 0 2px !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #b9f6ca !important;
+    font-size: 17px;
+  }
+
+  .bodega-tabla-movimiento td[data-label="Quitar"] button {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    padding: 0 !important;
   }
 
   .bodega-boton-secundario-movil,
