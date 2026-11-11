@@ -4254,6 +4254,11 @@ function PanelCrearPedido({
   onGuardar,
   onCerrar,
 }) {
+  const [anioPedido = '', mesPedido = '', diaPedido = ''] = String(pedido.fecha || '').split('-')
+  const fechaPedidoCompacta = diaPedido && mesPedido && anioPedido
+    ? `${diaPedido}-${mesPedido}-${anioPedido.slice(-2)}`
+    : pedido.fecha || '-'
+
   return (
     <div className="bodega-panel-crear-pedido" style={panelMovimientoStyle}>
       <div className="bodega-panel-header" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '10px' }}>
@@ -4263,32 +4268,47 @@ function PanelCrearPedido({
         </button>
       </div>
 
+      <div className="bodega-pedido-resumen-movil" aria-label="Datos generales del pedido">
+        <div>
+          <span>Fecha</span>
+          <strong>{fechaPedidoCompacta}</strong>
+        </div>
+        <div>
+          <span>Bodega</span>
+          <strong>{String(nombreBodega || '').replace(/^Bodega\s+/i, '') || '-'}</strong>
+        </div>
+      </div>
+
       <div className="bodega-grid-pedido" style={gridPedidoStyle}>
         <CampoTexto
+          className="bodega-pedido-campo-escritorio"
           label="Fecha"
           type="date"
           value={pedido.fecha}
           onChange={(valor) => onCambiarPedido('fecha', valor)}
         />
         <CampoTexto
+          className="bodega-pedido-serie"
           label="Serie"
           value={pedido.serie || ''}
           onChange={(valor) => onCambiarPedido('serie', valor)}
           placeholder="Ej: 2020xxxx"
         />
         <CampoTexto
+          className="bodega-pedido-tipo"
           label="Tipo módulo"
           value={pedido.tipoModulo}
           onChange={(valor) => onCambiarPedido('tipoModulo', valor)}
           placeholder="Tipo módulo"
         />
         <CampoTexto
+          className="bodega-pedido-proyecto"
           label="Proyecto"
           value={pedido.proyecto}
           onChange={(valor) => onCambiarPedido('proyecto', valor)}
           placeholder="Proyecto"
         />
-        <label style={labelStyle}>
+        <label className="bodega-pedido-campo-escritorio" style={labelStyle}>
           Bodega
           <select
             value={pedido.bodega}
@@ -4298,7 +4318,7 @@ function PanelCrearPedido({
             <option value={pedido.bodega}>{nombreBodega}</option>
           </select>
         </label>
-        <label style={labelStyle}>
+        <label className="bodega-pedido-retira" style={labelStyle}>
           Retira
           {solicitanteFijo ? (
             <input value={solicitanteFijo} disabled style={inputStyle} />
@@ -4540,9 +4560,9 @@ function PanelSalidaMaterial({
   )
 }
 
-function CampoTexto({ label, value, onChange, type = 'text', placeholder = '' }) {
+function CampoTexto({ className = '', label, value, onChange, type = 'text', placeholder = '' }) {
   return (
-    <label style={labelStyle}>
+    <label className={className} style={labelStyle}>
       {label}
       <input
         type={type}
