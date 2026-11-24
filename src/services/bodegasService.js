@@ -53,6 +53,67 @@ export async function crearBodegaObra({ supabase, nombre }) {
   }
 }
 
+export async function eliminarBodegaObra({ supabase, codigo }) {
+  const codigoLimpio = obtenerCodigoBodega(codigo)
+  if (!codigoLimpio || BODEGAS_BASE.some((bodega) => bodega.valor === codigoLimpio)) {
+    return { error: crearErrorBodega('Las bodegas permanentes no se pueden eliminar.', 'BODEGA_PERMANENTE') }
+  }
+
+  const { data: configuracion, error: errorConfiguracion } = await supabase
+    .from('bodegas_config')
+    .select('codigo, nombre, tipo, activa')
+    .eq('codigo', codigoLimpio)
+    .maybeSingle()
+
+  if (errorConfiguracion) return { error: errorConfiguracion }
+  if (!configuracion) return { error: crearErrorBodega('La bodega ya no existe.', 'BODEGA_NO_EXISTE') }
+  if (configuracion.tipo !== 'obra') {
+    return { error: crearErrorBodega('Solo se pueden eliminar bodegas de obra.', 'BODEGA_PERMANENTE') }
+  }
+
+  const referencias = [
+    ['perfiles', 'bodega_asignada', 'usuarios asignados'],
+    ['bodega_inventarios', 'bodega', 'inventarios'],
+    ['vales_bodega', 'bodega', 'pedidos o devoluciones'],
+    ['bodega_recepciones', 'bodega', 'recepciones'],
+    ['bodega_despachos', 'bodega', 'despachos'],
+    ['bodega_mermas', 'bodega', 'mermas'],
+  ]
+
+  for (const [tabla, columna, descripcion] of referencias) {
+    const { count, error } = await supabase
+      .from(tabla)
+      .select('*', { count: 'exact', head: true })
+      .eq(columna, codigoLimpio)
+
+    // Las instalaciones antiguas pueden no tener todavía alguna tabla auxiliar.
+    if (error?.code === '42P01') continue
+    if (error) return { error }
+    if (Number(count || 0) > 0) {
+      return {
+        error: crearErrorBodega(
+          `No se puede eliminar porque tiene ${descripcion}. Reasigna o retira esos registros primero.`,
+          'BODEGA_EN_USO'
+        ),
+      }
+    }
+  }
+
+  const { error } = await supabase
+    .from('bodegas_config')
+    .update({ activa: false, actualizado_en: new Date().toISOString() })
+    .eq('codigo', codigoLimpio)
+    .eq('tipo', 'obra')
+
+  return { error }
+}
+
+function crearErrorBodega(mensaje, codigo) {
+  const error = new Error(mensaje)
+  error.code = codigo
+  return error
+}
+
 function crearCodigoBodegaObra(nombre) {
   return String(nombre || '')
     .normalize('NFD')

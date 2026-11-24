@@ -36,7 +36,7 @@ import {
   obtenerNombreBodega,
   obtenerNombrePlanta,
 } from './utils/ubicaciones'
-import { cargarBodegasDisponibles, crearBodegaObra } from './services/bodegasService'
+import { cargarBodegasDisponibles, crearBodegaObra, eliminarBodegaObra } from './services/bodegasService'
 import {
   cargarRegistroAccionesDia,
   marcarRegistroAccionDeshecha,
@@ -391,9 +391,10 @@ const encabezadosProtocolosMensuales = [
   { clave: 'serie', lineas: ['Serie'] },
   { clave: 'fecha', lineas: ['Fecha'] },
   { clave: 'tipo', lineas: ['Tipo', 'Modulo'] },
-  { clave: 'mantencion', lineas: ['Valor', 'mantencion'] },
-  { clave: 'modificacion', lineas: ['Valor', 'modificacion'] },
-  { clave: 'total', lineas: ['Valor', 'total'] },
+  { clave: 'proyecto', lineas: ['Proyecto'], ancho: '24%' },
+  { clave: 'mantencion', lineas: ['Valor', 'mant'], ancho: '1%', align: 'center' },
+  { clave: 'modificacion', lineas: ['Valor', 'modif'], ancho: '1%', align: 'center' },
+  { clave: 'total', lineas: ['Valor', 'total'], align: 'center' },
   { clave: 'idOt', lineas: ['ID.', 'OT'] },
 ]
 
@@ -879,7 +880,7 @@ const [mostrarBalanceMateriales, setMostrarBalanceMateriales] = useState(false)
 const [mostrarBalanceMantencion, setMostrarBalanceMantencion] = useState(false)
 const [mostrarValesBodega, setMostrarValesBodega] = useState(false)
 const [mostrarBodega, setMostrarBodega] = useState(false)
-const [traspasoBodegaInicialId, setTraspasoBodegaInicialId] = useState('')
+const [alertaBodegaInicialId, setAlertaBodegaInicialId] = useState('')
 const [mostrarProyeccionMateriales, setMostrarProyeccionMateriales] = useState(false)
 const [pedidosProyeccionMateriales, setPedidosProyeccionMateriales] = useState([])
 const [resumenProyeccionMateriales, setResumenProyeccionMateriales] = useState([])
@@ -1109,6 +1110,26 @@ async function crearNuevaBodegaObra(nombre) {
   setBodegasDisponibles((actuales) => [...actuales.filter((item) => item.valor !== bodega.valor), bodega])
   mostrarNotificacion(`${bodega.etiqueta} creada. Ahora puedes cargarle un inventario y asignar usuarios.`)
   cambiarBodegaActivaAdmin(bodega.valor, true)
+  return true
+}
+
+async function eliminarBodegaObraActual(codigo) {
+  if (perfil?.rol !== 'admin') return false
+  const bodega = bodegasDisponibles.find((item) => item.valor === codigo)
+  if (!bodega || bodega.tipo !== 'obra') {
+    mostrarNotificacion('Solo se pueden eliminar bodegas de obra.')
+    return false
+  }
+
+  const { error } = await eliminarBodegaObra({ supabase, codigo })
+  if (error) {
+    mostrarNotificacion(error.message || 'No se pudo eliminar la bodega.')
+    return false
+  }
+
+  setBodegasDisponibles((actuales) => actuales.filter((item) => item.valor !== codigo))
+  mostrarNotificacion(`${bodega.etiqueta} fue eliminada del catálogo.`)
+  if (codigo === bodegaActiva) cambiarBodegaActivaAdmin(BODEGA_BAYONA)
   return true
 }
 
@@ -1546,8 +1567,9 @@ function limpiarBusquedaSerie() {
   setErrorBusquedaSerie('')
 }
 
-function cerrarVentanasEmergentes({ conservarModulo = false, forzarCerrarMateriales = false } = {}) {
+function cerrarVentanasEmergentes({ conservarModulo = false, conservarListadoProtocolos = false, forzarCerrarMateriales = false } = {}) {
   cerrarPanelesFlotantes()
+  if (!conservarListadoProtocolos) setMostrarProtocolosMensuales(false)
   const bloqueoCierreMateriales = mostrarEditorMateriales && hayMaterialesPendientes() && !forzarCerrarMateriales
   setMostrarResumenMateriales(false)
   setMostrarSolicitadoVsCobrado(false)
@@ -1624,8 +1646,7 @@ useEffect(() => {
     if (!destinoPush) return
 
     if (destinoPush === 'traspaso' && puedeVerBodega) {
-      setTraspasoBodegaInicialId(url.searchParams.get('traspaso') || '')
-      abrirBodega()
+      abrirBodega({ alertaId: url.searchParams.get('traspaso') || '' })
     } else if (destinoPush === 'material' && puedeVerBodega) {
       abrirBodega()
     } else if (destinoPush === 'prueba' || destinoPush === 'avisos') {
@@ -3926,7 +3947,7 @@ async function buscarMaterialesBodega(texto, soloConStock = false) {
   return items
 }
 
-async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null, seccion = null } = {}) {
+async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = null, seccion = null, alertaId = '' } = {}) {
   if (!puedeVerBodega) return
   const esSeccionAlternable = ['historial-vales', 'historial-correcciones', 'codigos-barra', 'mis-pedidos'].includes(seccion)
   const seccionSiguiente = esSeccionAlternable && seccionBodegaInicial?.nombre === seccion
@@ -3935,6 +3956,7 @@ async function abrirBodega({ abrirSolicitudMaterial = false, datosSolicitud = nu
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
   cerrarVentanasEmergentes()
   setMostrarMenuAcciones(false)
+  setAlertaBodegaInicialId(alertaId)
   setSeccionBodegaInicial(seccion === null ? null : { nombre: seccionSiguiente, id: Date.now() })
   if (abrirSolicitudMaterial) {
     setSolicitudMaterialBodegaInicial({
@@ -4498,7 +4520,8 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     bodega: bodegaActiva,
   }
 
-  const retiraSeleccionado = solicitantesValeBodega.find((item) => (
+  const retiraOtraPersona = perfil?.rol !== 'electrico' && datosPedido?.retira === '__otro__'
+  const retiraSeleccionado = !retiraOtraPersona && solicitantesValeBodega.find((item) => (
     String(item.id || item.nombre) === String(datosPedido?.retira)
   ))
 
@@ -4507,7 +4530,9 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
     : retiraSeleccionado?.id || null
   pedido.retiraNombre = perfil?.rol === 'electrico'
     ? perfil?.nombre || perfil?.email || session?.user?.email || ''
-    : retiraSeleccionado?.nombre || String(datosPedido?.retira || '').trim()
+    : retiraOtraPersona
+      ? String(datosPedido?.retiraOtro || '').trim()
+      : retiraSeleccionado?.nombre || String(datosPedido?.retira || '').trim()
 
   const items = (materialesPedido || [])
     .map((item) => ({
@@ -4523,7 +4548,9 @@ async function guardarPedidoBodega(datosPedido, materialesPedido) {
   }
 
   if (!pedido.retiraNombre) {
-    mostrarNotificacion('Debes seleccionar quien retira el material')
+    mostrarNotificacion(retiraOtraPersona
+      ? 'Escribe el nombre de la persona que retira el material'
+      : 'Debes seleccionar quién retira el material')
     return false
   }
 
@@ -5065,9 +5092,6 @@ async function aprobarSolicitudBodega(alerta) {
     return true
   }
 
-  const confirmado = window.confirm('¿Aprobar esta solicitud y enviarla a bodega para entrega?')
-  if (!confirmado) return false
-
   setEntregandoSolicitudBodega(true)
   const marcaAprobacion = `Revision: aprobado por ${perfil?.nombre || perfil?.email || session?.user?.email || 'usuario'}`
   const observacionActualizada = agregarMarcaRevisionVale(alerta.observacion, marcaAprobacion)
@@ -5076,15 +5100,17 @@ async function aprobarSolicitudBodega(alerta) {
     observacion: observacionActualizada,
   }
 
-  const { error } = await supabase
+  const { data: valeAprobado, error } = await supabase
     .from('vales_bodega')
     .update(datosAprobacion)
     .eq('id', alerta.id)
+    .select('id')
+    .maybeSingle()
 
   setEntregandoSolicitudBodega(false)
 
-  if (error) {
-    mostrarNotificacion('No se pudo aprobar la solicitud: ' + error.message)
+  if (error || !valeAprobado) {
+    mostrarNotificacion('No se pudo aprobar la solicitud: ' + (error?.message || 'Bodega no confirmó el cambio. Actualiza y vuelve a intentar.'))
     await cargarAlertasBodega()
     return false
   }
@@ -6652,7 +6678,7 @@ async function abrirProtocoloAnteriorGarantia({ serie, fechaReferencia }) {
 async function abrirProtocoloDesdeBusqueda(item) {
   if (!item?.id || !puedeUsarProtocoloPlanta) return
 
-  cerrarVentanasEmergentes({ conservarModulo: true })
+  cerrarVentanasEmergentes({ conservarModulo: true, conservarListadoProtocolos: true })
   setMostrarMenuModulo(false)
 
   if (item.esGarantia || esEstadoGarantia(item.estado || item.protocolo_entrega?.estado)) {
@@ -7294,6 +7320,17 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     },
   ]
 
+  const opcionesActivas = itemsMenuLateral.filter((item) =>
+    item.visible !== false && item.activo && !item.nivel && item.id !== 'inicio'
+  )
+  const esPanelTablero = (item) => item.id === 'indicadores' || item.id === 'horas-hombre'
+  const vistaActual = opcionesActivas.find((item) => item.id === 'bodega')
+    || opcionesActivas.find((item) => !esPanelTablero(item))
+    || opcionesActivas.find(esPanelTablero)
+  const tituloVistaActual = vistaActual?.id === 'bodega'
+    ? nombreBodegaActiva
+    : vistaActual?.etiqueta || 'Control modular'
+
   const actividadGlobalVisible = Boolean(
     cargandoMateriales ||
     cargandoSolicitadoVsCobrado ||
@@ -7352,7 +7389,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
           <div className="encabezado-marca">
             <strong>{nombrePlantaActiva}</strong>
             <span className="encabezado-separador" />
-            <span>{mostrarBodega || esRolBodega ? nombreBodegaActiva : 'Control modular'}</span>
+            <span className={vistaActual ? 'encabezado-vista-actual' : undefined}>{tituloVistaActual}</span>
           </div>
 
           <div className="encabezado-usuario-acciones">
@@ -7576,7 +7613,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                               type="button"
                               onClick={() => {
                                 setMostrarLlamadosPendientes(false)
-                                abrirBodega()
+                                abrirBodega({ alertaId: pedido.id })
                               }}
                               style={{
                                 width: '100%',
@@ -7595,7 +7632,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
                               <span style={{ display: 'block', marginTop: '2px', fontSize: '13px', color: '#ccc' }}>
                                 Serie {pedido.serie || '-'} · {(pedido.items || []).length} material(es)
                               </span>
-                              <small style={{ color: '#90caf9' }}>Presiona para revisar en Bodega</small>
+                              <small style={{ color: '#90caf9' }}>Ver detalle de la solicitud</small>
                             </button>
                           ))
                         )}
@@ -7611,11 +7648,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
         <MenuLateral
           abierto={mostrarMenuAcciones}
           items={itemsMenuLateral}
-          onToggle={() => {
-            const abrir = !mostrarMenuAcciones
-            cerrarVentanasEmergentes()
-            setMostrarMenuAcciones(abrir)
-          }}
+          onToggle={() => setMostrarMenuAcciones((actual) => !actual)}
           onCerrar={() => setMostrarMenuAcciones(false)}
         />
 
@@ -8930,6 +8963,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
 
 {mostrarProtocolosMensuales && puedeVerProtocolosMensualesPlanta && (
   <ProtocolosMensualesModal onClickFondo={cerrarPanelesFlotantes}>
+    <div className="protocolos-controles">
     <ProtocolosMensualesToolbar
       ingresos={ingresosProtocolosMensuales}
       formatearPrecio={formatearPrecioMaterial}
@@ -8951,6 +8985,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
       onCambiarBusqueda={setBusquedaProtocolosMensuales}
       onLimpiarBusqueda={() => setBusquedaProtocolosMensuales('')}
     />
+    </div>
 
     <ProtocolosMensualesTabla
       protocolos={protocolosMensuales}
@@ -9104,6 +9139,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     puedeSeleccionarBodega={perfil?.rol === 'admin'}
     bodegasDisponibles={bodegasDisponibles}
     onCrearBodegaObra={crearNuevaBodegaObra}
+    onEliminarBodegaObra={eliminarBodegaObraActual}
     archivo={archivoInventarioBodega}
     inventarios={inventariosBodega}
     solicitantes={solicitantesValeBodega}
@@ -9132,7 +9168,7 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     recepcionandoTraspasoBodega={recepcionandoTraspasoBodega}
     puedeExportarInventario={puedeExportarInventarioBodega}
     alertasBodega={alertasBodega}
-    alertaInicialId={traspasoBodegaInicialId}
+    alertaInicialId={alertaBodegaInicialId}
     mostrarAlertasBodega={mostrarAlertasBodega}
     pedidosBodegaHoy={pedidosBodegaHoy}
     mostrarPedidosBodegaHoy={mostrarPedidosBodegaHoy}
@@ -9213,10 +9249,13 @@ async function moverModulo(moduloId, lineaDestino, posicionDestino) {
     onGuardarCodigoBarraBodega={guardarCodigoBarraBodega}
     onEliminarCodigoBarraBodega={eliminarCodigoBarraBodega}
     onActualizarAlertasBodega={cargarAlertasBodega}
-    onConsumirAlertaInicial={() => setTraspasoBodegaInicialId('')}
+    onConsumirAlertaInicial={() => setAlertaBodegaInicialId('')}
     onActualizarPedidoBodega={async (id) => {
       const { vale, error } = await cargarValeBodegaPorIdSupabase({ supabase, id })
       if (error) console.error('No se pudo actualizar el pedido abierto', error)
+      if (vale?.tipo_ingreso === 'pedido_app' && !esSolicitudCerradaBodega(vale) && esSolicitudPendienteRevisionBodega(vale)) {
+        return { ...vale, estado_bodega: 'solicitado' }
+      }
       return vale
     }}
     onBuscarMateriales={buscarMaterialesBodega}

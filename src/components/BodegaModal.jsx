@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { etiquetaNumeroValeBodega } from '../utils/numeroValeBodega'
 
 let contadorFilasEdicionPedido = 0
 
@@ -90,6 +91,7 @@ function BodegaModal({
   usuarioActual = null,
   onCambiarBodegaActiva,
   onCrearBodegaObra,
+  onEliminarBodegaObra,
   onCambiarArchivo,
   onLeerArchivo,
   onGuardarPedido,
@@ -147,6 +149,7 @@ function BodegaModal({
   const [mostrarCrearBodegaObra, setMostrarCrearBodegaObra] = useState(false)
   const [nombreNuevaBodegaObra, setNombreNuevaBodegaObra] = useState('')
   const [creandoBodegaObra, setCreandoBodegaObra] = useState(false)
+  const [eliminandoBodegaObra, setEliminandoBodegaObra] = useState(false)
   const [resultadosBusquedaRemota, setResultadosBusquedaRemota] = useState([])
   const [textoBusquedaRemota, setTextoBusquedaRemota] = useState('')
   const [cargandoBusquedaRemota, setCargandoBusquedaRemota] = useState(false)
@@ -250,6 +253,7 @@ function BodegaModal({
     serie: solicitudMaterialInicial?.serie || '',
     bodega: bodegaActiva,
     retira: '',
+    retiraOtro: '',
   })
   const [devolucionMaterial, setDevolucionMaterial] = useState({
     fecha: fechaActualInput(),
@@ -436,6 +440,19 @@ function BodegaModal({
     setMostrarCrearBodegaObra(false)
   }
 
+  async function eliminarBodegaObraActual() {
+    const bodega = bodegasDisponibles.find((item) => item.valor === bodegaActiva)
+    if (!bodega || bodega.tipo !== 'obra' || eliminandoBodegaObra) return
+    const confirmada = window.confirm(
+      `¿Eliminar ${bodega.etiqueta}?\n\nSolo será posible si no tiene inventario, movimientos ni usuarios asignados.`
+    )
+    if (!confirmada) return
+
+    setEliminandoBodegaObra(true)
+    await onEliminarBodegaObra?.(bodega.valor)
+    setEliminandoBodegaObra(false)
+  }
+
   function cambiarFacturaIngreso(campo, valor) {
     setFacturaIngreso((actual) => ({ ...actual, [campo]: valor }))
   }
@@ -606,6 +623,7 @@ function BodegaModal({
       serie: '',
       bodega: bodegaActiva,
       retira: '',
+      retiraOtro: '',
     })
     setMaterialesPedido([{ ...filaMovimientoVacia }])
     setMostrarCrearPedido(false)
@@ -720,6 +738,16 @@ function BodegaModal({
               <button type="button" onClick={() => setMostrarCrearBodegaObra((actual) => !actual)} style={botonMiniAzul}>
                 + Bodega de obra
               </button>
+              {bodegasDisponibles.find((bodega) => bodega.valor === bodegaActiva)?.tipo === 'obra' && (
+                <button
+                  type="button"
+                  disabled={eliminandoBodegaObra}
+                  onClick={eliminarBodegaObraActual}
+                  style={{ ...botonRojo, padding: '8px 12px', opacity: eliminandoBodegaObra ? 0.65 : 1 }}
+                >
+                  {eliminandoBodegaObra ? 'Eliminando…' : 'Eliminar bodega'}
+                </button>
+              )}
             </div>
           )}
           {!modoSoloBodega && (
@@ -2128,6 +2156,7 @@ function PanelMisPedidosBodega({ pedidos = [], cargando, error, onActualizar, on
             const estadoVisual = obtenerEstadoVisualPedidoBodega(pedido)
             const unidades = (pedido.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
             const detalle = [
+              etiquetaNumeroValeBodega(pedido.numero_vale),
               pedido.fecha ? `Fecha: ${pedido.fecha}` : '',
               pedido.serie ? `Serie: ${pedido.serie}` : '',
               pedido.bodega ? formatearNombreBodega(pedido.bodega) : '',
@@ -2221,7 +2250,7 @@ function PanelPedidosBodegaHoy({ pedidos, onSeleccionar, onImprimir, onImprimirG
               >
                 <span style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
                   <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    Pedido | {solicitante}
+                    {['Pedido', etiquetaNumeroValeBodega(pedido.numero_vale), solicitante].filter(Boolean).join(' | ')}
                   </strong>
                   <small style={{ color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {detalle}
@@ -2269,7 +2298,7 @@ function PanelDevolucionesBodegaHoy({ devoluciones, onSeleccionar }) {
               >
                 <span style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
                   <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    Devolución | {usuario}
+                    {['Devolución', etiquetaNumeroValeBodega(devolucion.numero_vale), usuario].filter(Boolean).join(' | ')}
                   </strong>
                   <small style={{ color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {totalReferencias} materiales | {formatearNumero(totalUnidades)} unidades
@@ -2376,7 +2405,7 @@ function PanelHistorialValesBodega({
               >
                 <span style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
                   <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    Pedido | {solicitante}
+                    {['Pedido', etiquetaNumeroValeBodega(pedido.numero_vale), solicitante].filter(Boolean).join(' | ')}
                   </strong>
                   <small style={{ color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {detalle}
@@ -3207,6 +3236,7 @@ function DetalleSolicitudBodega({
   const [indiceCambioMaterial, setIndiceCambioMaterial] = useState(null)
   const [guardandoCambioMaterial, setGuardandoCambioMaterial] = useState(false)
   const [verificandoEntrega, setVerificandoEntrega] = useState(false)
+  const [confirmarAprobacion, setConfirmarAprobacion] = useState(false)
   const inputEscanerRef = useRef(null)
   const esPedido = alerta?.tipo_ingreso === 'pedido_app'
   const esDevolucion = alerta?.tipo_ingreso === 'devolucion_app'
@@ -3246,7 +3276,10 @@ function DetalleSolicitudBodega({
       cantidad: item.cantidad || '',
     })))
     setDatosValeEditados(obtenerDatosEditablesVale(alerta))
-    if (esOtroPedido) setEditandoDatosVale(false)
+    if (esOtroPedido) {
+      setEditandoDatosVale(false)
+      setConfirmarAprobacion(false)
+    }
     setCantidadesEscaneadas((actuales) => {
       const base = esOtroPedido ? leerEscaneosPedido(alerta?.id) : actuales
       const conciliadas = conciliarEscaneosPedido(base, itemsPedido, materialesInventario)
@@ -3565,7 +3598,9 @@ function DetalleSolicitudBodega({
       <div style={modalDetalleBodegaStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '12px' }}>
           <div>
-            <h3 style={{ margin: 0 }}>{obtenerEtiquetaAlertaBodega(alerta)} de bodega</h3>
+            <h3 style={{ margin: 0 }}>
+              {[`${obtenerEtiquetaAlertaBodega(alerta)} de bodega`, etiquetaNumeroValeBodega(alerta.numero_vale)].filter(Boolean).join(' · ')}
+            </h3>
             <p style={{ margin: '6px 0 0', color: '#ccc' }}>
               {alerta.solicitante_nombre || alerta.usuario_nombre || 'Sin usuario'} | {alerta.fecha || ''}
             </p>
@@ -3955,7 +3990,7 @@ function DetalleSolicitudBodega({
           <p style={{ color: '#bbb' }}>Esta solicitud no tiene materiales asociados.</p>
         )}
 
-        <div style={accionesPanelStyle}>
+        <div className={puedeRevisarSolicitud && !editando ? 'bodega-acciones-revision' : undefined} style={accionesPanelStyle}>
           {editando && (
             <>
               <button type="button" onClick={agregarItem} style={botonGris}>
@@ -3980,29 +4015,34 @@ function DetalleSolicitudBodega({
           )}
           {puedeRevisarSolicitud && !editando && (
             <>
+              {confirmarAprobacion && (
+                <p role="status" style={{ flexBasis: '100%', color: '#ddd' }}>
+                  ¿Enviar esta solicitud a Bodega para entrega?
+                </p>
+              )}
               <button
                 type="button"
                 disabled={entregando || denegado || guardandoCambioMaterial}
-                onClick={onDenegar}
+                onClick={confirmarAprobacion ? () => setConfirmarAprobacion(false) : onDenegar}
                 style={{
-                  ...botonRojo,
+                  ...(confirmarAprobacion ? botonGris : botonRojo),
                   opacity: entregando || denegado || guardandoCambioMaterial ? 0.7 : 1,
                   cursor: entregando || denegado || guardandoCambioMaterial ? 'not-allowed' : 'pointer',
                 }}
               >
-                {denegado ? 'Solicitud denegada' : 'Denegar solicitud'}
+                {confirmarAprobacion ? 'Cancelar' : 'Denegar solicitud'}
               </button>
               <button
                 type="button"
                 disabled={entregando || denegado || guardandoCambioMaterial}
-                onClick={onAprobar}
+                onClick={confirmarAprobacion ? onAprobar : () => setConfirmarAprobacion(true)}
                 style={{
                   ...botonVerde,
                   opacity: entregando || denegado || guardandoCambioMaterial ? 0.7 : 1,
                   cursor: entregando || denegado || guardandoCambioMaterial ? 'not-allowed' : 'pointer',
                 }}
               >
-                {entregando ? 'Aprobando...' : 'Aprobar pedido'}
+                {entregando ? 'Aprobando...' : confirmarAprobacion ? 'Confirmar aprobación' : 'Aprobar pedido'}
               </button>
             </>
           )}
@@ -4254,6 +4294,8 @@ function PanelCrearPedido({
   onGuardar,
   onCerrar,
 }) {
+  const idCampoRetira = useId()
+  const retiraOtraPersona = !solicitanteFijo && pedido.retira === '__otro__'
   const [anioPedido = '', mesPedido = '', diaPedido = ''] = String(pedido.fecha || '').split('-')
   const fechaPedidoCompacta = diaPedido && mesPedido && anioPedido
     ? `${diaPedido}-${mesPedido}-${anioPedido.slice(-2)}`
@@ -4318,12 +4360,34 @@ function PanelCrearPedido({
             <option value={pedido.bodega}>{nombreBodega}</option>
           </select>
         </label>
-        <label className="bodega-pedido-retira" style={labelStyle}>
-          Retira
+        <div className="bodega-pedido-retira" style={labelStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '6px' }}>
+            <label htmlFor={idCampoRetira}>Retira</label>
+            {retiraOtraPersona && (
+              <button
+                type="button"
+                onClick={() => onCambiarPedido('retira', '')}
+                style={{ background: 'transparent', border: 0, padding: 0, color: '#90caf9', textDecoration: 'underline', cursor: 'pointer' }}
+              >
+                Volver al listado
+              </button>
+            )}
+          </div>
           {solicitanteFijo ? (
-            <input value={solicitanteFijo} disabled style={inputStyle} />
+            <input id={idCampoRetira} value={solicitanteFijo} disabled style={inputStyle} />
+          ) : retiraOtraPersona ? (
+            <input
+              id={idCampoRetira}
+              value={pedido.retiraOtro || ''}
+              onChange={(e) => onCambiarPedido('retiraOtro', e.target.value)}
+              placeholder="Nombre y apellido"
+              required
+              autoFocus
+              style={inputStyle}
+            />
           ) : (
             <select
+              id={idCampoRetira}
               value={pedido.retira}
               onChange={(e) => onCambiarPedido('retira', e.target.value)}
               style={inputStyle}
@@ -4334,9 +4398,10 @@ function PanelCrearPedido({
                   {item.nombre}
                 </option>
               ))}
+              <option value="__otro__">Otro</option>
             </select>
           )}
-        </label>
+        </div>
       </div>
 
       <h4 style={{ margin: '14px 0 8px' }}>Material solicitado</h4>
@@ -4349,9 +4414,9 @@ function PanelCrearPedido({
         onQuitarMaterial={onQuitarMaterial}
       />
 
-      {electricos.length === 0 && (
+      {!solicitanteFijo && electricos.length === 0 && (
         <p style={{ color: '#ffcc80', margin: '8px 0 0', fontSize: '13px' }}>
-          No se encontraron eléctricos cargados para seleccionar.
+          No hay eléctricos en el listado. Puedes elegir «Otro» e ingresar el nombre.
         </p>
       )}
 

@@ -856,6 +856,21 @@ body {
     display: none;
   }
 
+  .encabezado-marca:has(.encabezado-vista-actual) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .encabezado-marca > .encabezado-vista-actual:last-child {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    line-height: 1.15;
+  }
+
   .encabezado-usuario-acciones {
     gap: 5px;
   }
@@ -1225,6 +1240,23 @@ h1 {
   display: none;
 }
 
+.protocolos-vista-completa {
+  padding: 24px;
+}
+
+.protocolos-controles {
+  position: sticky;
+  left: 0;
+}
+
+.protocolos-listado-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #333;
+  box-shadow: inset 0 -1px #555;
+}
+
 @media (min-width: 801px) {
   #root {
     width: 100%;
@@ -1366,6 +1398,24 @@ code {
 }
 
 @media (max-width: 640px) {
+  .bodega-acciones-revision {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    padding: 8px 0;
+    background: #202020;
+    border-top: 1px solid #555;
+  }
+
+  .bodega-acciones-revision button {
+    min-height: 44px;
+    flex: 1 1 auto;
+  }
+
+  .protocolos-vista-completa {
+    padding: 12px;
+  }
+
   .bodega-modal {
     padding: 12px !important;
   }

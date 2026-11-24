@@ -18,9 +18,25 @@ function ProtocolosMensualesToolbar({
 }) {
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-        <h2 style={{ margin: 0 }}>Protocolos</h2>
-        <div style={{ display: 'grid', gap: '8px', minWidth: '150px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '12px 16px',
+            borderRadius: '10px',
+            background: '#1b5e20',
+            border: '1px solid #66bb6a',
+            color: 'white',
+            fontWeight: 800,
+            fontSize: '18px',
+          }}
+        >
+          <span>{'\u{1F4B0}'} ingresos</span>
+          <span>{formatearPrecio(ingresos)}</span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginLeft: 'auto' }}>
           <button
             type="button"
             onClick={onCerrar}
@@ -54,25 +70,6 @@ function ProtocolosMensualesToolbar({
             </button>
           )}
         </div>
-      </div>
-
-      <div
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '12px 16px',
-          marginBottom: '16px',
-          borderRadius: '10px',
-          background: '#1b5e20',
-          border: '1px solid #66bb6a',
-          color: 'white',
-          fontWeight: 800,
-          fontSize: '18px',
-        }}
-      >
-        <span>{'\u{1F4B0}'} ingresos</span>
-        <span>{formatearPrecio(ingresos)}</span>
       </div>
 
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>

@@ -84,17 +84,20 @@ function ProtocolosMensualesFila({
           </div>
         )}
       </td>
-      <td style={{ padding: '8px', border: '1px solid #444' }}>
+      <td style={{ padding: '8px', border: '1px solid #444', whiteSpace: 'nowrap' }}>
         {registro.fecha_prueba_electrica ? formatearFecha(registro.fecha_prueba_electrica) : '-'}
       </td>
       <td style={{ padding: '8px', border: '1px solid #444' }}>{registro.tipo || '-'}</td>
-      <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>
+      <td style={{ padding: '8px', border: '1px solid #444', overflowWrap: 'anywhere' }}>
+        {String(registro.proyecto ?? '').trim() || '—'}
+      </td>
+      <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right', whiteSpace: 'nowrap' }}>
         <BotonValorCobro registro={registro} tipo="mantencion">
           {formatearPrecio(registro.valorMantencion)}
           {registro.tieneAjusteValorizacion ? ' *' : ''}
         </BotonValorCobro>
       </td>
-      <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>
+      <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right', whiteSpace: 'nowrap' }}>
         <BotonValorCobro registro={registro} tipo="modificacion">
           {formatearPrecio(registro.valorModificacion)}
           {registro.tieneAjusteValorizacion ? ' *' : ''}

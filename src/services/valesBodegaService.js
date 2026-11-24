@@ -313,17 +313,25 @@ async function cargarItemsPorVales({
   }
 }
 
+const columnasDetalleVale = 'id, fecha, serie, bodega, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at'
+
+async function consultarValeConCorrelativo(consultar) {
+  const resultado = await consultar(`${columnasDetalleVale}, numero_vale`)
+  if (resultado.error?.message?.includes('numero_vale')) return consultar(columnasDetalleVale)
+  return resultado
+}
+
 export async function cargarValesBodegaDia({
   supabase,
   fecha,
   bodega = 'bayona',
 }) {
-  let { data: vales, error: errorVales } = await supabase
+  let { data: vales, error: errorVales } = await consultarValeConCorrelativo((columnas) => supabase
     .from('vales_bodega')
-    .select('id, fecha, serie, bodega, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
+    .select(columnas)
     .eq('bodega', bodega)
     .eq('fecha', fecha)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false }))
 
   if (errorVales?.message?.includes('estado_bodega') || errorVales?.message?.includes('fecha_entrega_bodega') || errorVales?.message?.includes('entregado_por')) {
     ;({ data: vales, error: errorVales } = await supabase
@@ -419,11 +427,11 @@ export async function cargarValesBodegaDia({
 export async function cargarValeBodegaPorId({ supabase, id, conservarDetalleOriginal = false }) {
   if (!id) return { vale: null, error: new Error('Falta el pedido') }
 
-  const { data: vale, error: errorVale } = await supabase
+  const { data: vale, error: errorVale } = await consultarValeConCorrelativo((columnas) => supabase
     .from('vales_bodega')
-    .select('id, fecha, serie, bodega, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
+    .select(columnas)
     .eq('id', id)
-    .maybeSingle()
+    .maybeSingle())
 
   if (errorVale || !vale) return { vale: null, error: errorVale }
 
@@ -449,13 +457,13 @@ export async function cargarMisPedidosBodega({
 }) {
   if (!usuarioId) return { pedidos: [], error: new Error('Falta el usuario para consultar sus pedidos') }
 
-  const { data: vales, error } = await supabase
+  const { data: vales, error } = await consultarValeConCorrelativo((columnas) => supabase
     .from('vales_bodega')
-    .select('id, fecha, serie, bodega, archivo_nombre, usuario_nombre, solicitante_id, solicitante_nombre, tipo_ingreso, observacion, estado_bodega, fecha_entrega_bodega, entregado_por, created_at')
+    .select(columnas)
     .eq('tipo_ingreso', 'pedido_app')
     .eq('solicitante_id', usuarioId)
     .order('created_at', { ascending: false })
-    .limit(limite)
+    .limit(limite))
 
   if (error) return { pedidos: [], error }
   if (!vales?.length) return { pedidos: [], error: null }

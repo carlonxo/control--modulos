@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { etiquetaNumeroValeBodega } from '../utils/numeroValeBodega'
 
 function ValesBodegaModal({
   fecha,
@@ -185,7 +186,7 @@ function ValesBodegaModal({
                 {valesDia.map((vale) => {
                   const totalItems = (vale.items || []).reduce((total, item) => total + Number(item.cantidad || 0), 0)
                   const serieMostrada = vale.serie || extraerSerieDesdeObservacion(vale.observacion)
-                  const etiquetaVale = obtenerEtiquetaValeBodega(vale)
+                  const etiquetaVale = [obtenerEtiquetaValeBodega(vale), etiquetaNumeroValeBodega(vale.numero_vale)].filter(Boolean).join(' · ')
                   return (
                     <details key={vale.id} style={{ border: '1px solid #555', borderRadius: '8px', overflow: 'hidden' }}>
                       <summary style={{ padding: '9px 10px', background: '#333', cursor: 'pointer', fontWeight: 800 }}>

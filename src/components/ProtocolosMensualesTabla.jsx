@@ -46,7 +46,7 @@ function ProtocolosMensualesTabla({
   }
 
   return (
-    <div style={{ overflowX: 'auto', paddingLeft: puedeEliminarProtocolosMensuales ? '38px' : 0 }}>
+    <div className="protocolos-listado-scroll" style={{ paddingLeft: puedeEliminarProtocolosMensuales ? '38px' : 0 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '980px' }}>
         <thead>
           <tr style={{ background: '#333' }}>
@@ -56,6 +56,7 @@ function ProtocolosMensualesTabla({
                 style={{
                   padding: '8px 10px',
                   border: '1px solid #555',
+                  width: encabezado.ancho,
                   textAlign: encabezado.align || 'left',
                   lineHeight: 1.1,
                   whiteSpace: 'nowrap',
