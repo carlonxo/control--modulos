@@ -1203,15 +1203,17 @@ const ingresosProtocolosMensuales = protocolosMensuales.reduce(
   (total, registro) => total + Number(registro.valorTotal || 0),
   0
 )
+const busquedaProtocoloNormalizada = normalizarTexto(busquedaProtocolosMensuales)
 const protocolosMensualesFiltrados = protocolosMensuales.filter((registro) => {
-  const busqueda = normalizarTexto(busquedaProtocolosMensuales)
   const idOtLimpio = String(registro.idOt || '').trim()
   const idOtPendiente = !idOtLimpio || idOtLimpio === '-' || separarIdsOt(idOtLimpio).filter(Boolean).length === 0
   const tieneAlertaMensual = Boolean(String(registro.notaAlertaMensual || '').trim())
   if (mostrarSoloIdOtPendiente && !idOtPendiente) return false
   if (mostrarSoloConAlertaMensual && !tieneAlertaMensual) return false
-  if (!busqueda) return true
-  return normalizarTexto(registro.serie).includes(busqueda) || normalizarTexto(registro.idOt).includes(busqueda)
+  if (!busquedaProtocoloNormalizada) return true
+  return [registro.serie, registro.idOt, registro.proyecto].some((valor) =>
+    normalizarTexto(valor).includes(busquedaProtocoloNormalizada)
+  )
 })
 const conteoClavesProtocolos = protocolosMensuales.reduce((conteo, registro) => {
   if (registro.esGarantia) return conteo

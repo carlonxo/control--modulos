@@ -112,15 +112,17 @@ function ProtocolosMensualesToolbar({
         >
           {cargando ? 'Cargando...' : 'Actualizar'}
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: '100%' }}>
           <input
             type="search"
             value={busqueda}
             onChange={(e) => onCambiarBusqueda(e.target.value)}
-            placeholder="Buscar serie o ID OT"
+            placeholder="Buscar serie, ID OT o proyecto"
+            aria-label="Buscar por serie, ID OT o proyecto"
             style={{
               padding: '9px 10px',
-              minWidth: '210px',
+              width: '250px',
+              minWidth: 0,
               borderRadius: '6px',
               border: '1px solid #777',
               background: '#333',
